@@ -54,6 +54,7 @@ args = parser.parse_args()
 # Change there flags to control what happens.
 doLoad = not args.reset # Load checkpoint at the beginning
 doTest = args.sink # Only run test, no training
+dataPath = args.data_path or '/data/gc-data-prepped/'
 
 workers = 16
 epochs = 25
@@ -97,8 +98,8 @@ def main():
             print('Warning: Could not read checkpoint!')
 
     
-    dataTrain = ITrackerData(dataPath = args.data_path, split='train', imSize = imSize)
-    dataVal = ITrackerData(dataPath = args.data_path, split='test', imSize = imSize)
+    dataTrain = ITrackerData(dataPath, split='train', imSize = imSize)
+    dataVal = ITrackerData(dataPath, split='test', imSize = imSize)
    
     train_loader = torch.utils.data.DataLoader(
         dataTrain,
@@ -118,6 +119,7 @@ def main():
                                 weight_decay=weight_decay)
 
     # Quick test
+    doTest = True
     if doTest:
         validate(val_loader, model, criterion, epoch)
         return
@@ -253,7 +255,7 @@ def validate(val_loader, model, criterion, epoch):
 
     return lossesLin.avg
 
-CHECKPOINTS_PATH = '.'
+CHECKPOINTS_PATH = os.path.dirname(os.path.realpath(__file__))
 
 def load_checkpoint(filename='checkpoint.pth.tar'):
     filename = os.path.join(CHECKPOINTS_PATH, filename)
