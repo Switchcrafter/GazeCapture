@@ -147,6 +147,7 @@ class ITrackerData(data.Dataset):
         imEyeR = self.transformEyeR(imEyeR)
 
         gaze = np.array([self.metadata['labelDotXCam'][index], self.metadata['labelDotYCam'][index]], np.float32)
+        frame = np.array([self.metadata['labelRecNum'][index], self.metadata['frameIndex'][index]])
 
         faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][index,:])
 
@@ -155,7 +156,7 @@ class ITrackerData(data.Dataset):
         faceGrid = torch.FloatTensor(faceGrid)
         gaze = torch.FloatTensor(gaze)
 
-        return row, imFace, imEyeL, imEyeR, faceGrid, gaze
+        return row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame
     
         
     def __len__(self):
