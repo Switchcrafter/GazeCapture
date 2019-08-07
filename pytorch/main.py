@@ -1,4 +1,4 @@
-import math, shutil, os, time, argparse
+import math, shutil, os, time, argparse, json
 import numpy as np
 import scipy.io as sio
 
@@ -54,6 +54,7 @@ args = parser.parse_args()
 # Change there flags to control what happens.
 doLoad = not args.reset # Load checkpoint at the beginning
 doTest = args.sink # Only run test, no training
+dataPath = args.data_path or '/data/gc-data-prepped/'
 
 workers = 16
 epochs = 25
@@ -97,8 +98,8 @@ def main():
             print('Warning: Could not read checkpoint!')
 
     
-    dataTrain = ITrackerData(dataPath = args.data_path, split='train', imSize = imSize)
-    dataVal = ITrackerData(dataPath = args.data_path, split='test', imSize = imSize)
+    dataTrain = ITrackerData(dataPath, split='train', imSize = imSize)
+    dataVal = ITrackerData(dataPath, split='test', imSize = imSize)
    
     train_loader = torch.utils.data.DataLoader(
         dataTrain,
@@ -155,7 +156,7 @@ def train(train_loader, model, criterion,optimizer, epoch):
 
     end = time.time()
 
-    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze) in enumerate(train_loader):
+    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame) in enumerate(train_loader):
         
         # measure data loading time
         data_time.update(time.time() - end)
@@ -207,9 +208,9 @@ def validate(val_loader, model, criterion, epoch):
     model.eval()
     end = time.time()
 
+    results = []
 
-    oIndex = 0
-    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze) in enumerate(val_loader):
+    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame) in enumerate(val_loader):
         # measure data loading time
         data_time.update(time.time() - end)
         imFace = imFace.cuda(async=True)
@@ -228,6 +229,24 @@ def validate(val_loader, model, criterion, epoch):
         with torch.no_grad():
             output = model(imFace, imEyeL, imEyeR, faceGrid)
 
+        # Combine the tensor results together into a colated list so that we have the gazePoint and gazePrediction for each frame
+        f1 = frame.cpu().numpy().tolist()
+        g1 = gaze.cpu().numpy().tolist()
+        o1 = output.cpu().numpy().tolist()
+        r1 = [list(r) for r in zip(f1, g1, o1)]
+
+        def convertResult(result):
+            
+            r = {}
+
+            r['frame'] = result[0]
+            r['gazePoint'] = result[1]
+            r['gazePrediction'] = result[2]
+
+            return r
+
+        results += list(map(convertResult, r1))
+
         loss = criterion(output, gaze)
         
         lossLin = output - gaze
@@ -243,7 +262,6 @@ def validate(val_loader, model, criterion, epoch):
         batch_time.update(time.time() - end)
         end = time.time()
 
-
         print('Epoch (val): [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
@@ -251,9 +269,13 @@ def validate(val_loader, model, criterion, epoch):
                     epoch, i, len(val_loader), batch_time=batch_time,
                    loss=losses,lossLin=lossesLin))
 
+    resultsFileName = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'results.json')
+    with open(resultsFileName, 'w+') as outfile:
+        json.dump(results, outfile)
+
     return lossesLin.avg
 
-CHECKPOINTS_PATH = '.'
+CHECKPOINTS_PATH = os.path.dirname(os.path.realpath(__file__))
 
 def load_checkpoint(filename='checkpoint.pth.tar'):
     filename = os.path.join(CHECKPOINTS_PATH, filename)
@@ -264,14 +286,17 @@ def load_checkpoint(filename='checkpoint.pth.tar'):
     return state
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
-    if not os.path.isdir(CHECKPOINTS_PATH):
-        os.makedirs(CHECKPOINTS_PATH, 0o777)
-    bestFilename = os.path.join(CHECKPOINTS_PATH, 'best_' + filename)
+
     filename = os.path.join(CHECKPOINTS_PATH, filename)
     torch.save(state, filename)
+
+    bestFilename = os.path.join(CHECKPOINTS_PATH, 'best_' + filename)
+    resultsFilename = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'results.json')
+    bestResultsFilename = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'best_results.json')
+
     if is_best:
         shutil.copyfile(filename, bestFilename)
-
+        shutil.copyfile(resultsFilename, bestResultsFilename)
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
