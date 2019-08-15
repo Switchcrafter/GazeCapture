@@ -47,17 +47,21 @@ def str2bool(v):
 
 parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
 parser.add_argument('--data_path', help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.")
+parser.add_argument('--output_path', help="Path to checkpoint", default=os.path.dirname(os.path.realpath(__file__)))
 parser.add_argument('--sink', type=str2bool, nargs='?', const=True, default=False, help="Just sink and terminate.")
 parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=False, help="Start from scratch (do not load).")
+parser.add_argument('--epochs', type=int, default=25)
+parser.add_argument('--workers', type=int, default=16)
 args = parser.parse_args()
 
 # Change there flags to control what happens.
 doLoad = not args.reset # Load checkpoint at the beginning
 doTest = args.sink # Only run test, no training
 dataPath = args.data_path or '/data/gc-data-prepped/'
+CHECKPOINTS_PATH = args.output_path
 
-workers = 16
-epochs = 25
+workers = args.workers
+epochs = args.epochs
 batch_size = torch.cuda.device_count()*100 # Change if out of cuda memory
 
 base_lr = 0.0001
@@ -75,6 +79,8 @@ count = 0
 
 def main():
     global args, best_prec1, weight_decay, momentum
+
+    print('DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
 
     model = ITrackerModel()
     model = torch.nn.DataParallel(model)
@@ -269,13 +275,11 @@ def validate(val_loader, model, criterion, epoch):
                     epoch, i, len(val_loader), batch_time=batch_time,
                    loss=losses,lossLin=lossesLin))
 
-    resultsFileName = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'results.json')
+    resultsFileName = os.path.join(CHECKPOINTS_PATH, 'results.json')
     with open(resultsFileName, 'w+') as outfile:
         json.dump(results, outfile)
 
     return lossesLin.avg
-
-CHECKPOINTS_PATH = os.path.dirname(os.path.realpath(__file__))
 
 def load_checkpoint(filename='checkpoint.pth.tar'):
     filename = os.path.join(CHECKPOINTS_PATH, filename)
@@ -287,15 +291,15 @@ def load_checkpoint(filename='checkpoint.pth.tar'):
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
 
-    filename = os.path.join(CHECKPOINTS_PATH, filename)
-    torch.save(state, filename)
+    checkpointFilename = os.path.join(CHECKPOINTS_PATH, filename)
+    torch.save(state, checkpointFilename)
+    resultsFilename = os.path.join(CHECKPOINTS_PATH, 'results.json')
 
     bestFilename = os.path.join(CHECKPOINTS_PATH, 'best_' + filename)
-    resultsFilename = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'results.json')
-    bestResultsFilename = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'best_results.json')
+    bestResultsFilename = os.path.join(CHECKPOINTS_PATH, 'best_results.json')
 
     if is_best:
-        shutil.copyfile(filename, bestFilename)
+        shutil.copyfile(checkpointFilename, bestFilename)
         shutil.copyfile(resultsFilename, bestResultsFilename)
 
 class AverageMeter(object):
