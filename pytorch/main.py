@@ -46,7 +46,7 @@ def str2bool(v):
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
 parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
-parser.add_argument('--data_path', help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.")
+parser.add_argument('--data_path', help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.", default='/data/gc-data-prepped/')
 parser.add_argument('--output_path', help="Path to checkpoint", default=os.path.dirname(os.path.realpath(__file__)))
 parser.add_argument('--sink', type=str2bool, nargs='?', const=True, default=False, help="Just sink and terminate.")
 parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=False, help="Start from scratch (do not load).")
@@ -57,8 +57,8 @@ args = parser.parse_args()
 # Change there flags to control what happens.
 doLoad = not args.reset # Load checkpoint at the beginning
 doTest = args.sink # Only run test, no training
-dataPath = args.data_path or '/data/gc-data-prepped/'
-CHECKPOINTS_PATH = args.output_path
+dataPath = args.data_path
+checkpointsPath = args.output_path
 
 workers = args.workers
 epochs = args.epochs
@@ -81,6 +81,18 @@ def main():
     global args, best_prec1, weight_decay, momentum
 
     print('DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
+    print('args.epochs      = %d' % args.epochs)
+    print('args.reset       = %d' % args.reset)
+    print('args.workers     = %d' % args.workers)
+    print('args.data_path   = %s' % args.data_path)
+    print('args.output_path = %s' % args.output_path)
+    print('')
+    print('doLoad           = %d' % doLoad)
+    print('doTest           = %d' % doTest)
+    print('dataPath         = %s' % dataPath)
+    print('checkpointsPath  = %s' % checkpointsPath)
+    print('workers          = %d' % workers)
+    print('epochs           = %d' % epochs)
 
     model = ITrackerModel()
     model = torch.nn.DataParallel(model)
@@ -102,6 +114,8 @@ def main():
             best_prec1 = saved['best_prec1']
         else:
             print('Warning: Could not read checkpoint!')
+
+    print('epoch = %d' % (epoch))
 
     
     dataTrain = ITrackerData(dataPath, split='train', imSize = imSize)
@@ -126,13 +140,16 @@ def main():
 
     # Quick test
     if doTest:
+        print('doTest - Validating only')
         validate(val_loader, model, criterion, epoch)
         return
 
     for epoch in range(0, epoch):
+        print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
         adjust_learning_rate(optimizer, epoch)
         
     for epoch in range(epoch, epochs):
+        print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
         adjust_learning_rate(optimizer, epoch)
 
         # train for one epoch
@@ -149,6 +166,8 @@ def main():
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
         }, is_best)
+
+        print('Epoch %05d with loss %.5f' % (saved['epoch'], saved['best_prec1']))
 
 
 def train(train_loader, model, criterion,optimizer, epoch):
@@ -196,12 +215,12 @@ def train(train_loader, model, criterion,optimizer, epoch):
 
         count=count+1
 
-        print('Epoch (train): [{0}][{1}/{2}]\t'
+        print('\rEpoch (train): [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(
                    epoch, i, len(train_loader), batch_time=batch_time,
-                   data_time=data_time, loss=losses))
+                   data_time=data_time, loss=losses), end="")
 
 def validate(val_loader, model, criterion, epoch):
     global count_test
@@ -275,14 +294,14 @@ def validate(val_loader, model, criterion, epoch):
                     epoch, i, len(val_loader), batch_time=batch_time,
                    loss=losses,lossLin=lossesLin))
 
-    resultsFileName = os.path.join(CHECKPOINTS_PATH, 'results.json')
+    resultsFileName = os.path.join(checkpointsPath, 'results.json')
     with open(resultsFileName, 'w+') as outfile:
         json.dump(results, outfile)
 
     return lossesLin.avg
 
 def load_checkpoint(filename='checkpoint.pth.tar'):
-    filename = os.path.join(CHECKPOINTS_PATH, filename)
+    filename = os.path.join(checkpointsPath, filename)
     print(filename)
     if not os.path.isfile(filename):
         return None
@@ -291,12 +310,12 @@ def load_checkpoint(filename='checkpoint.pth.tar'):
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
 
-    checkpointFilename = os.path.join(CHECKPOINTS_PATH, filename)
+    checkpointFilename = os.path.join(checkpointsPath, filename)
     torch.save(state, checkpointFilename)
-    resultsFilename = os.path.join(CHECKPOINTS_PATH, 'results.json')
+    resultsFilename = os.path.join(checkpointsPath, 'results.json')
 
-    bestFilename = os.path.join(CHECKPOINTS_PATH, 'best_' + filename)
-    bestResultsFilename = os.path.join(CHECKPOINTS_PATH, 'best_results.json')
+    bestFilename = os.path.join(checkpointsPath, 'best_' + filename)
+    bestResultsFilename = os.path.join(checkpointsPath, 'best_results.json')
 
     if is_best:
         shutil.copyfile(checkpointFilename, bestFilename)
