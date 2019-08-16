@@ -15,6 +15,8 @@ import torchvision.models as models
 from ITrackerData import ITrackerData
 from ITrackerModel import ITrackerModel
 
+from datetime import datetime
+
 '''
 Train/test code for iTracker.
 
@@ -146,17 +148,25 @@ def main():
 
     for epoch in range(0, epoch):
         print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
+        start_time = datetime.now()
         adjust_learning_rate(optimizer, epoch)
-        
+        time_elapsed = datetime.now() - start_time
+        print('Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
+
     for epoch in range(epoch, epochs):
         print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
+        start_time = datetime.now()
         adjust_learning_rate(optimizer, epoch)
 
         # train for one epoch
+        print('\nTraining Started')
         train(train_loader, model, criterion, optimizer, epoch)
+        print('\nTraining Completed')
 
         # evaluate on validation set
+        print('\nValidation Started')
         prec1 = validate(val_loader, model, criterion, epoch)
+        print('\nValidation Completed')
 
         # remember best prec@1 and save checkpoint
         is_best = prec1 < best_prec1
@@ -167,7 +177,9 @@ def main():
             'best_prec1': best_prec1,
         }, is_best)
 
-        print('Epoch %05d with loss %.5f' % (saved['epoch'], saved['best_prec1']))
+        print('Epoch %05d with loss %.5f' % (epoch, best_prec1))
+        time_elapsed = datetime.now() - start_time
+        print('Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
 
 def train(train_loader, model, criterion,optimizer, epoch):
@@ -287,12 +299,12 @@ def validate(val_loader, model, criterion, epoch):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        print('Epoch (val): [{0}][{1}/{2}]\t'
+        print('\rEpoch (val): [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Error L2 {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
                     epoch, i, len(val_loader), batch_time=batch_time,
-                   loss=losses,lossLin=lossesLin))
+                   loss=losses,lossLin=lossesLin), end="")
 
     resultsFileName = os.path.join(checkpointsPath, 'results.json')
     with open(resultsFileName, 'w+') as outfile:
