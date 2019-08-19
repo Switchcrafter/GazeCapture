@@ -46,7 +46,7 @@ def str2bool(v):
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
 parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
-parser.add_argument('--data_path', help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.")
+parser.add_argument('--data_path', help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.", default='/data/gc-data-prepped/')
 parser.add_argument('--output_path', help="Path to checkpoint", default=os.path.dirname(os.path.realpath(__file__)))
 parser.add_argument('--sink', type=str2bool, nargs='?', const=True, default=False, help="Just sink and terminate.")
 parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=False, help="Start from scratch (do not load).")
@@ -56,7 +56,7 @@ args = parser.parse_args()
 # Change there flags to control what happens.
 doLoad = not args.reset # Load checkpoint at the beginning
 doTest = args.sink # Only run test, no training
-dataPath = args.data_path or '/data/gc-data-prepped/'
+dataPath = args.data_path
 CHECKPOINTS_PATH = args.output_path
 
 workers = 16
