@@ -15,6 +15,8 @@ import torchvision.models as models
 from ITrackerData import ITrackerData
 from ITrackerModel import ITrackerModel
 
+from datetime import datetime
+
 '''
 Train/test code for iTracker.
 
@@ -51,6 +53,7 @@ parser.add_argument('--output_path', help="Path to checkpoint", default=os.path.
 parser.add_argument('--sink', type=str2bool, nargs='?', const=True, default=False, help="Just sink and terminate.")
 parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=False, help="Start from scratch (do not load).")
 parser.add_argument('--epochs', type=int, default=25)
+parser.add_argument('--workers', type=int, default=16)
 parser.add_argument('--dataset-size', type=int, defualt=0)
 args = parser.parse_args()
 
@@ -58,9 +61,9 @@ args = parser.parse_args()
 doLoad = not args.reset # Load checkpoint at the beginning
 doTest = args.sink # Only run test, no training
 dataPath = args.data_path
-CHECKPOINTS_PATH = args.output_path
+checkpointsPath = args.output_path
 
-workers = 16
+workers = args.workers
 epochs = args.epochs
 batch_size = torch.cuda.device_count()*100 # Change if out of cuda memory
 
@@ -81,6 +84,18 @@ def main():
     global args, best_prec1, weight_decay, momentum
 
     print('DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
+    print('args.epochs      = %d' % args.epochs)
+    print('args.reset       = %d' % args.reset)
+    print('args.workers     = %d' % args.workers)
+    print('args.data_path   = %s' % args.data_path)
+    print('args.output_path = %s' % args.output_path)
+    print('')
+    print('doLoad           = %d' % doLoad)
+    print('doTest           = %d' % doTest)
+    print('dataPath         = %s' % dataPath)
+    print('checkpointsPath  = %s' % checkpointsPath)
+    print('workers          = %d' % workers)
+    print('epochs           = %d' % epochs)
 
     model = ITrackerModel()
     model = torch.nn.DataParallel(model)
@@ -103,6 +118,9 @@ def main():
         else:
             print('Warning: Could not read checkpoint!')
 
+    print('epoch = %d' % (epoch))
+
+    totalstart_time = datetime.now()
     
     dataTrain = ITrackerData(dataPath, split='train', imSize = imSize)
     dataVal = ITrackerData(dataPath, split='test', imSize = imSize)
@@ -126,30 +144,48 @@ def main():
 
     # Quick test
     if doTest:
+        print('doTest - Validating only')
+        print('\nValidation Started')
         validate(val_loader, model, criterion, epoch)
-        return
+        print('\nValidation Completed')
+    else:
+        for epoch in range(0, epoch):
+            print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
+            start_time = datetime.now()
+            adjust_learning_rate(optimizer, epoch)
+            time_elapsed = datetime.now() - start_time
+            print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
-    for epoch in range(0, epoch):
-        adjust_learning_rate(optimizer, epoch)
-        
-    for epoch in range(epoch, epochs):
-        adjust_learning_rate(optimizer, epoch)
+        for epoch in range(epoch, epochs):
+            print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
+            start_time = datetime.now()
+            adjust_learning_rate(optimizer, epoch)
 
-        # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch)
+            # train for one epoch
+            print('\nTraining Started')
+            train(train_loader, model, criterion, optimizer, epoch)
+            print('\nTraining Completed')
 
-        # evaluate on validation set
-        prec1 = validate(val_loader, model, criterion, epoch)
+            # evaluate on validation set
+            print('\nValidation Started')
+            prec1 = validate(val_loader, model, criterion, epoch)
+            print('\nValidation Completed')
 
-        # remember best prec@1 and save checkpoint
-        is_best = prec1 < best_prec1
-        best_prec1 = min(prec1, best_prec1)
-        save_checkpoint({
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'best_prec1': best_prec1,
-        }, is_best)
+            # remember best prec@1 and save checkpoint
+            is_best = prec1 < best_prec1
+            best_prec1 = min(prec1, best_prec1)
+            save_checkpoint({
+               'epoch': epoch + 1,
+               'state_dict': model.state_dict(),
+               'best_prec1': best_prec1,
+                }, is_best)
 
+            print('Epoch %05d with loss %.5f' % (epoch, best_prec1))
+            time_elapsed = datetime.now() - start_time
+            print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
+
+    totaltime_elapsed = datetime.now() - totalstart_time
+    print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
 
 def train(train_loader, model, criterion,optimizer, epoch):
     global count
@@ -167,11 +203,11 @@ def train(train_loader, model, criterion,optimizer, epoch):
         
         # measure data loading time
         data_time.update(time.time() - end)
-        imFace = imFace.cuda(async=True)
-        imEyeL = imEyeL.cuda(async=True)
-        imEyeR = imEyeR.cuda(async=True)
-        faceGrid = faceGrid.cuda(async=True)
-        gaze = gaze.cuda(async=True)
+        imFace = imFace.cuda()
+        imEyeL = imEyeL.cuda()
+        imEyeR = imEyeR.cuda()
+        faceGrid = faceGrid.cuda()
+        gaze = gaze.cuda()
         
         imFace = torch.autograd.Variable(imFace, requires_grad = True)
         imEyeL = torch.autograd.Variable(imEyeL, requires_grad = True)
@@ -197,12 +233,12 @@ def train(train_loader, model, criterion,optimizer, epoch):
 
         count=count+1
 
-        print('Epoch (train): [{0}][{1}/{2}]\t'
+        print('\rEpoch (train): [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(
                    epoch, i, len(train_loader), batch_time=batch_time,
-                   data_time=data_time, loss=losses))
+                   data_time=data_time, loss=losses), end="")
         if dataset_size > 0 && dataset_size < i:
             return
 
@@ -222,11 +258,11 @@ def validate(val_loader, model, criterion, epoch):
     for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame) in enumerate(val_loader):
         # measure data loading time
         data_time.update(time.time() - end)
-        imFace = imFace.cuda(async=True)
-        imEyeL = imEyeL.cuda(async=True)
-        imEyeR = imEyeR.cuda(async=True)
-        faceGrid = faceGrid.cuda(async=True)
-        gaze = gaze.cuda(async=True)
+        imFace = imFace.cuda()
+        imEyeL = imEyeL.cuda()
+        imEyeR = imEyeR.cuda()
+        faceGrid = faceGrid.cuda()
+        gaze = gaze.cuda()
         
         imFace = torch.autograd.Variable(imFace, requires_grad = False)
         imEyeL = torch.autograd.Variable(imEyeL, requires_grad = False)
@@ -271,21 +307,21 @@ def validate(val_loader, model, criterion, epoch):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        print('Epoch (val): [{0}][{1}/{2}]\t'
+        print('\rEpoch (val): [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Error L2 {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
                     epoch, i, len(val_loader), batch_time=batch_time,
-                   loss=losses,lossLin=lossesLin))
+                   loss=losses,lossLin=lossesLin), end="")
 
-    resultsFileName = os.path.join(CHECKPOINTS_PATH, 'results.json')
+    resultsFileName = os.path.join(checkpointsPath, 'results.json')
     with open(resultsFileName, 'w+') as outfile:
         json.dump(results, outfile)
 
     return lossesLin.avg
 
 def load_checkpoint(filename='checkpoint.pth.tar'):
-    filename = os.path.join(CHECKPOINTS_PATH, filename)
+    filename = os.path.join(checkpointsPath, filename)
     print(filename)
     if not os.path.isfile(filename):
         return None
@@ -294,12 +330,12 @@ def load_checkpoint(filename='checkpoint.pth.tar'):
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
 
-    checkpointFilename = os.path.join(CHECKPOINTS_PATH, filename)
+    checkpointFilename = os.path.join(checkpointsPath, filename)
     torch.save(state, checkpointFilename)
-    resultsFilename = os.path.join(CHECKPOINTS_PATH, 'results.json')
+    resultsFilename = os.path.join(checkpointsPath, 'results.json')
 
-    bestFilename = os.path.join(CHECKPOINTS_PATH, 'best_' + filename)
-    bestResultsFilename = os.path.join(CHECKPOINTS_PATH, 'best_results.json')
+    bestFilename = os.path.join(checkpointsPath, 'best_' + filename)
+    bestResultsFilename = os.path.join(checkpointsPath, 'best_results.json')
 
     if is_best:
         shutil.copyfile(checkpointFilename, bestFilename)
@@ -332,4 +368,6 @@ def adjust_learning_rate(optimizer, epoch):
 
 if __name__ == "__main__":
     main()
+    print('')
     print('DONE')
+    print('')
