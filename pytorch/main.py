@@ -54,7 +54,7 @@ parser.add_argument('--sink', type=str2bool, nargs='?', const=True, default=Fals
 parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=False, help="Start from scratch (do not load).")
 parser.add_argument('--epochs', type=int, default=25)
 parser.add_argument('--workers', type=int, default=16)
-parser.add_argument('--dataset-size', type=int, defualt=0)
+parser.add_argument('--dataset-size', type=int, default=0)
 args = parser.parse_args()
 
 # Change there flags to control what happens.
@@ -233,17 +233,18 @@ def train(train_loader, model, criterion,optimizer, epoch):
 
         count=count+1
 
-        print('\rEpoch (train): [{0}][{1}/{2}]\t'
+        print('Epoch (train): [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(
                    epoch, i, len(train_loader), batch_time=batch_time,
-                   data_time=data_time, loss=losses), end="")
-        if dataset_size > 0 && dataset_size < i:
-            return
+                   data_time=data_time, loss=losses))
+        if dataset_size > 0 and dataset_size < i + 1:
+            break
 
 def validate(val_loader, model, criterion, epoch):
     global count_test
+    global dataset_size
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -307,12 +308,14 @@ def validate(val_loader, model, criterion, epoch):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        print('\rEpoch (val): [{0}][{1}/{2}]\t'
+        print('Epoch (val): [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Error L2 {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
                     epoch, i, len(val_loader), batch_time=batch_time,
-                   loss=losses,lossLin=lossesLin), end="")
+                   loss=losses,lossLin=lossesLin))
+        if dataset_size > 0 and dataset_size < i + 1:
+            break
 
     resultsFileName = os.path.join(checkpointsPath, 'results.json')
     with open(resultsFileName, 'w+') as outfile:
