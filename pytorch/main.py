@@ -119,6 +119,7 @@ def main():
 
     print('epoch = %d' % (epoch))
 
+    totalstart_time = datetime.now()
     
     dataTrain = ITrackerData(dataPath, split='train', imSize = imSize)
     dataVal = ITrackerData(dataPath, split='test', imSize = imSize)
@@ -143,44 +144,47 @@ def main():
     # Quick test
     if doTest:
         print('doTest - Validating only')
-        validate(val_loader, model, criterion, epoch)
-        return
-
-    for epoch in range(0, epoch):
-        print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
-        start_time = datetime.now()
-        adjust_learning_rate(optimizer, epoch)
-        time_elapsed = datetime.now() - start_time
-        print('Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-
-    for epoch in range(epoch, epochs):
-        print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
-        start_time = datetime.now()
-        adjust_learning_rate(optimizer, epoch)
-
-        # train for one epoch
-        print('\nTraining Started')
-        train(train_loader, model, criterion, optimizer, epoch)
-        print('\nTraining Completed')
-
-        # evaluate on validation set
         print('\nValidation Started')
-        prec1 = validate(val_loader, model, criterion, epoch)
+        validate(val_loader, model, criterion, epoch)
         print('\nValidation Completed')
+    else:
+        for epoch in range(0, epoch):
+            print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
+            start_time = datetime.now()
+            adjust_learning_rate(optimizer, epoch)
+            time_elapsed = datetime.now() - start_time
+            print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
-        # remember best prec@1 and save checkpoint
-        is_best = prec1 < best_prec1
-        best_prec1 = min(prec1, best_prec1)
-        save_checkpoint({
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'best_prec1': best_prec1,
-        }, is_best)
+        for epoch in range(epoch, epochs):
+            print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
+            start_time = datetime.now()
+            adjust_learning_rate(optimizer, epoch)
 
-        print('Epoch %05d with loss %.5f' % (epoch, best_prec1))
-        time_elapsed = datetime.now() - start_time
-        print('Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
+            # train for one epoch
+            print('\nTraining Started')
+            train(train_loader, model, criterion, optimizer, epoch)
+            print('\nTraining Completed')
 
+            # evaluate on validation set
+            print('\nValidation Started')
+            prec1 = validate(val_loader, model, criterion, epoch)
+            print('\nValidation Completed')
+
+            # remember best prec@1 and save checkpoint
+            is_best = prec1 < best_prec1
+            best_prec1 = min(prec1, best_prec1)
+            save_checkpoint({
+               'epoch': epoch + 1,
+               'state_dict': model.state_dict(),
+               'best_prec1': best_prec1,
+                }, is_best)
+
+            print('Epoch %05d with loss %.5f' % (epoch, best_prec1))
+            time_elapsed = datetime.now() - start_time
+            print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
+
+    totaltime_elapsed = datetime.now() - totalstart_time
+    print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
 
 def train(train_loader, model, criterion,optimizer, epoch):
     global count
@@ -360,4 +364,6 @@ def adjust_learning_rate(optimizer, epoch):
 
 if __name__ == "__main__":
     main()
+    print('')
     print('DONE')
+    print('')
