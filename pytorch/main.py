@@ -51,6 +51,7 @@ parser.add_argument('--output_path', help="Path to checkpoint", default=os.path.
 parser.add_argument('--sink', type=str2bool, nargs='?', const=True, default=False, help="Just sink and terminate.")
 parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=False, help="Start from scratch (do not load).")
 parser.add_argument('--epochs', type=int, default=25)
+parser.add_argument('--dataset-size', type=int, defualt=0)
 args = parser.parse_args()
 
 # Change there flags to control what happens.
@@ -74,7 +75,7 @@ lr = base_lr
 count_test = 0
 count = 0
 
-
+dataset_size = args.dataset_size
 
 def main():
     global args, best_prec1, weight_decay, momentum
@@ -152,6 +153,7 @@ def main():
 
 def train(train_loader, model, criterion,optimizer, epoch):
     global count
+    global dataset_size
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -201,6 +203,8 @@ def train(train_loader, model, criterion,optimizer, epoch):
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(
                    epoch, i, len(train_loader), batch_time=batch_time,
                    data_time=data_time, loss=losses))
+        if dataset_size > 0 && dataset_size < i:
+            return
 
 def validate(val_loader, model, criterion, epoch):
     global count_test

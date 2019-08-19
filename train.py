@@ -26,6 +26,8 @@ parser.add_argument('--name', type=str)
 parser.add_argument('--test', action='store_true')
 parser.add_argument('--cluster-name', type=str, required=True)
 parser.add_argument('--show-output', action='store_true', default=False)
+parser.add_argument('--dataset-size', type=int)
+parser.add_argument('--epochs', type=int)
 
 args = parser.parse_args()
 
@@ -59,6 +61,12 @@ script_params = {
 
 if args.test:
     script_params['--epochs'] = 1
+
+if args.epochs:
+    script_params['--epochs'] = args.epochs
+
+if args.dataset_size:
+    script_params['--dataset-size'] = args.dataset_size
 
 cluster = ComputeTarget(workspace=ws, name=args.cluster_name)
 run_config.target = cluster
