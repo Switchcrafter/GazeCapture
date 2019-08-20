@@ -81,6 +81,7 @@ src = PyTorch(source_directory=project_dir,
               compute_target=cluster,
               entry_script='main.py',
               use_gpu=True,
+              shm_size='8g',
               pip_packages=['numpy==1.17.0', 'Pillow==6.1.0', 'scipy==1.3.0'])
 
 run = experiment.submit(src)
