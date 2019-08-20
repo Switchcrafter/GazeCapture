@@ -15,7 +15,8 @@ import torchvision.models as models
 from ITrackerData import ITrackerData
 from ITrackerModel import ITrackerModel
 
-from datetime import datetime
+from datetime import datetime # for timing
+import sys # for command line argument dumping
 
 '''
 Train/test code for iTracker.
@@ -83,6 +84,9 @@ dataset_size = args.dataset_size
 def main():
     global args, best_prec1, weight_decay, momentum
 
+    print('Number of arguments:', len(sys.argv), 'arguments.')
+    print('Argument List:', str(sys.argv))
+    print('')
     print('DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
     print('args.epochs      = %d' % args.epochs)
     print('args.reset       = %d' % args.reset)
