@@ -25,11 +25,13 @@ parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
 parser.add_argument('--name', type=str)
 parser.add_argument('--test', action='store_true')
 parser.add_argument('--cluster-name', type=str, required=True)
+parser.add_argument('--shared-memory-size', type=str)
 parser.add_argument('--show-output', action='store_true', default=False)
 parser.add_argument('--dataset-size', type=int)
 parser.add_argument('--epochs', type=int)
 parser.add_argument('--reset', action='store_true')
 parser.add_argument('--sink', action='store_true')
+
 
 args = parser.parse_args()
 
@@ -76,6 +78,10 @@ if args.reset:
 if args.sink:
     script_params['--sink'] = ''
 
+shared_memory_size = '8g'
+if args.shared_memory_size:
+    shared_memory_size = args.shared_memory_size
+
 cluster = ComputeTarget(workspace=ws, name=args.cluster_name)
 run_config.target = cluster
 
@@ -89,8 +95,10 @@ src = PyTorch(source_directory=project_dir,
               compute_target=cluster,
               entry_script='main.py',
               use_gpu=True,
-              shm_size='8g',
+              shm_size=shared_memory_size,
               pip_packages=['numpy==1.17.0', 'Pillow==6.1.0', 'scipy==1.3.0'])
 
 run = experiment.submit(src)
-run.wait_for_completion(args.show_output)
+if args.show_output:
+    run.wait_for_completion(args.show_output)
+
