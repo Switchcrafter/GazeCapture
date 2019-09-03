@@ -18,6 +18,11 @@ from ITrackerModel import ITrackerModel
 from datetime import datetime # for timing
 import sys # for command line argument dumping
 
+try:
+    from azureml.core.run import Run
+except ImportError:
+    Run = None
+
 '''
 Train/test code for iTracker.
 
@@ -47,6 +52,9 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
+if Run:
+    run = Run.get_context()
 
 parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
 parser.add_argument('--data_path', help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.", default='/data/gc-data-prepped/')
@@ -178,6 +186,11 @@ def main():
             # remember best prec@1 and save checkpoint
             is_best = prec1 < best_prec1
             best_prec1 = min(prec1, best_prec1)
+
+            if Run:
+                run.log('precision', prec1)
+                run.log('best precision', best_prec1)
+
             save_checkpoint({
                'epoch': epoch + 1,
                'state_dict': model.state_dict(),
