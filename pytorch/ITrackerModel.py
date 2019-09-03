@@ -44,23 +44,23 @@ class ItrackerImageModel(nn.Module):
     def __init__(self):
         super(ItrackerImageModel, self).__init__()
         self.features = nn.Sequential(
-            nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=0),
+            nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=0),              # CONV-1
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
             nn.MaxPool2d(kernel_size=3, stride=2),
             nn.CrossMapLRN2d(size=5, alpha=0.0001, beta=0.75, k=1.0),
 
-            nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2, groups=2),
+            nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2, groups=2),   # CONV-2
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
             nn.MaxPool2d(kernel_size=3, stride=2),
             nn.CrossMapLRN2d(size=5, alpha=0.0001, beta=0.75, k=1.0),
 
-            nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1),            # CONV-3
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
 
-            nn.Conv2d(384, 64, kernel_size=1, stride=1, padding=0),
+            nn.Conv2d(384, 64, kernel_size=1, stride=1, padding=0),             # CONV-4
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
 
@@ -77,11 +77,11 @@ class FaceImageModel(nn.Module):
         super(FaceImageModel, self).__init__()
         self.conv = ItrackerImageModel()
         self.fc = nn.Sequential(
-            nn.Linear(12*12*64, 128),
+            nn.Linear(12*12*64, 128),                                           # FC-F1
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
 
-            nn.Linear(128, 64),
+            nn.Linear(128, 64),                                                 # FC-F2
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
             )
@@ -96,11 +96,11 @@ class FaceGridModel(nn.Module):
     def __init__(self, gridSize = 25):
         super(FaceGridModel, self).__init__()
         self.fc = nn.Sequential(
-            nn.Linear(gridSize * gridSize, 256),
+            nn.Linear(gridSize * gridSize, 256),                                # FC-FG1
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
 
-            nn.Linear(256, 128),
+            nn.Linear(256, 128),                                                # FC-FG2
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
             )
@@ -122,17 +122,17 @@ class ITrackerModel(nn.Module):
         self.gridModel = FaceGridModel()
         # Joining both eyes
         self.eyesFC = nn.Sequential(
-            nn.Linear(2*12*12*64, 128),
+            nn.Linear(2*12*12*64, 128),                                         # FC-E1
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
             )
         # Joining everything
         self.fc = nn.Sequential(
-            nn.Linear(128+64+128, 128),
+            nn.Linear(128+64+128, 128),                                         # FC1
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
 
-            nn.Linear(128, 2),
+            nn.Linear(128, 2),                                                  # FC2
             )
 
     def forward(self, faces, eyesLeft, eyesRight, faceGrids):
