@@ -64,6 +64,7 @@ parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=Fal
 parser.add_argument('--epochs', type=int, default=25)
 parser.add_argument('--workers', type=int, default=16)
 parser.add_argument('--dataset-size', type=int, default=0)
+parser.add_argument('--ONNX', type=str2bool, nargs='?', const=True, default=False)
 args = parser.parse_args()
 
 # Change there flags to control what happens.
@@ -71,6 +72,8 @@ doLoad = not args.reset # Load checkpoint at the beginning
 doTest = args.sink # Only run test, no training
 dataPath = args.data_path
 checkpointsPath = args.output_path
+outputONNX = args.ONNX
+
 
 workers = args.workers
 epochs = args.epochs
@@ -97,10 +100,12 @@ def main():
     print('')
     print('DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
     print('args.epochs      = %d' % args.epochs)
-    print('args.reset       = %d' % args.reset)
+    print('args.reset       = %s' % args.reset)
+    print('args.sink        = %s' % args.sink)
     print('args.workers     = %d' % args.workers)
     print('args.data_path   = %s' % args.data_path)
     print('args.output_path = %s' % args.output_path)
+    print('args.ONNX        = %s' % args.ONNX)
     print('')
     print('doLoad           = %d' % doLoad)
     print('doTest           = %d' % doTest)
@@ -108,12 +113,14 @@ def main():
     print('checkpointsPath  = %s' % checkpointsPath)
     print('workers          = %d' % workers)
     print('epochs           = %d' % epochs)
+    print('outputONNX       = %d' % outputONNX)
+
 
     model = ITrackerModel()
     model = torch.nn.DataParallel(model)
     model.cuda()
     imSize=(224,224)
-    cudnn.benchmark = True   
+    cudnn.benchmark = True
 
     epoch = 0
     if doLoad:
@@ -160,6 +167,8 @@ def main():
         print('\nValidation Started')
         validate(val_loader, model, criterion, epoch)
         print('\nValidation Completed')
+    elif outputONNX:
+        exportONNX(val_loader, model)
     else:
         for epoch in range(0, epoch):
             print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
@@ -339,6 +348,25 @@ def validate(val_loader, model, criterion, epoch):
         json.dump(results, outfile)
 
     return lossesLin.avg
+
+def exportONNX(val_loader, model):
+    global count_test
+    global dataset_size
+
+    # switch to evaluate mode
+    model.eval()
+
+    imFace = torch.autograd.Variable(torch.randn(12*12*64, 128), requires_grad = False)
+    imEyeL = torch.autograd.Variable(torch.randn(3, 224, 224), requires_grad = False)
+    imEyeR = torch.autograd.Variable(torch.randn(3, 224, 224), requires_grad = False)
+    faceGrid = torch.autograd.Variable(torch.randn(25, 25), requires_grad = False)
+
+    dummy_in = [imFace, imEyeL, imEyeR, faceGrid] #replace actual data loading with torch.randn(10, 3, 224, 224)
+
+    in_names = [ "imFace", "imEyeL", "imEyeR", "faceGrid" ]
+    out_names = [ "X", "Y" ]
+
+    torch.onnx.export(model, dummy_in, "itracker.onnx", input_names=in_names, output_names=out_names, opset_version=7, verbose=True)
 
 def load_checkpoint(filename='checkpoint.pth.tar'):
     filename = os.path.join(checkpointsPath, filename)
