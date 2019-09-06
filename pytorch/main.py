@@ -356,17 +356,29 @@ def exportONNX(val_loader, model):
     # switch to evaluate mode
     model.eval()
 
-    imFace = torch.autograd.Variable(torch.randn(12*12*64, 128), requires_grad = False)
-    imEyeL = torch.autograd.Variable(torch.randn(3, 224, 224), requires_grad = False)
-    imEyeR = torch.autograd.Variable(torch.randn(3, 224, 224), requires_grad = False)
-    faceGrid = torch.autograd.Variable(torch.randn(25, 25), requires_grad = False)
+    batch_size = 1
+    color_depth = 3 # 3 bytes for RGB color space
+    dim_width = 224
+    dim_height = 224
+    face_grid_size = 25 * 25
 
-    dummy_in = [imFace, imEyeL, imEyeR, faceGrid] #replace actual data loading with torch.randn(10, 3, 224, 224)
+    imFace = torch.randn(batch_size, color_depth, dim_width, dim_height).cuda()
+    imEyeL = torch.randn(batch_size, color_depth, dim_width, dim_height).cuda()
+    imEyeR = torch.randn(batch_size, color_depth, dim_width, dim_height).cuda()
+    faceGrid = torch.randn(batch_size, face_grid_size).cuda()
 
-    in_names = [ "imFace", "imEyeL", "imEyeR", "faceGrid" ]
-    out_names = [ "X", "Y" ]
+    dummy_in = (imFace, imEyeL, imEyeR, faceGrid)
 
-    torch.onnx.export(model, dummy_in, "itracker.onnx", input_names=in_names, output_names=out_names, opset_version=7, verbose=True)
+    in_names = ["faces", "eyesLeft", "eyesRight", "faceGrids"]
+    out_names = ["x"]
+
+    torch.onnx.export(model.module,
+                      dummy_in,
+                      "itracker.onnx",
+                      input_names=in_names,
+                      output_names=out_names,
+                      opset_version=7,
+                      verbose=True)
 
 def load_checkpoint(filename='checkpoint.pth.tar'):
     filename = os.path.join(checkpointsPath, filename)
