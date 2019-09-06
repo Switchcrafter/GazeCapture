@@ -48,13 +48,13 @@ class ItrackerImageModel(nn.Module):
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
             nn.MaxPool2d(kernel_size=3, stride=2),
-            nn.CrossMapLRN2d(size=5, alpha=0.0001, beta=0.75, k=1.0),
+            nn.LocalResponseNorm(size=5, alpha=0.0001, beta=0.75, k=1.0),       # should be CrossMapLRN2d, but swapping for LocalResponseNorm for ONNX export
 
             nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2, groups=2),   # CONV-2
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
             nn.MaxPool2d(kernel_size=3, stride=2),
-            nn.CrossMapLRN2d(size=5, alpha=0.0001, beta=0.75, k=1.0),
+            nn.LocalResponseNorm(size=5, alpha=0.0001, beta=0.75, k=1.0),       # should be CrossMapLRN2d, but swapping for LocalResponseNorm for ONNX export
 
             nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1),            # CONV-3
             nn.ReLU(inplace=True),
