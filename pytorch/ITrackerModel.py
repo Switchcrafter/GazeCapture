@@ -46,24 +46,23 @@ class ItrackerImageModel(nn.Module):
         self.features = nn.Sequential(
             nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=0),              # CONV-1
             nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
+            nn.Dropout(0.1),
             nn.MaxPool2d(kernel_size=3, stride=2),
             nn.LocalResponseNorm(size=5, alpha=0.0001, beta=0.75, k=1.0),       # should be CrossMapLRN2d, but swapping for LocalResponseNorm for ONNX export
 
             nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2, groups=2),   # CONV-2
             nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
+            nn.Dropout(0.1),
             nn.MaxPool2d(kernel_size=3, stride=2),
             nn.LocalResponseNorm(size=5, alpha=0.0001, beta=0.75, k=1.0),       # should be CrossMapLRN2d, but swapping for LocalResponseNorm for ONNX export
 
             nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1),            # CONV-3
             nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
+            nn.Dropout(0.1),
 
             nn.Conv2d(384, 64, kernel_size=1, stride=1, padding=0),             # CONV-4
             nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
-
+            nn.Dropout(0.1),
         )
 
     def forward(self, x):
@@ -79,11 +78,11 @@ class FaceImageModel(nn.Module):
         self.fc = nn.Sequential(
             nn.Linear(12*12*64, 128),                                           # FC-F1
             nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
+            nn.Dropout(0.1),
 
             nn.Linear(128, 64),                                                 # FC-F2
             nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
+            nn.Dropout(0.1),
             )
 
     def forward(self, x):
@@ -98,11 +97,11 @@ class FaceGridModel(nn.Module):
         self.fc = nn.Sequential(
             nn.Linear(gridSize * gridSize, 256),                                # FC-FG1
             nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
+            nn.Dropout(0.1),
 
             nn.Linear(256, 128),                                                # FC-FG2
             nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
+            nn.Dropout(0.1),
             )
 
     def forward(self, x):
@@ -124,7 +123,7 @@ class ITrackerModel(nn.Module):
         self.eyesFC = nn.Sequential(
             nn.Linear(2*12*12*64, 128),                                         # FC-E1
             nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
+            nn.Dropout(0.1),
             )
         # Joining everything
         self.fc = nn.Sequential(

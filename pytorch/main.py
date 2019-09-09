@@ -196,9 +196,12 @@ def main():
             is_best = prec1 < best_prec1
             best_prec1 = min(prec1, best_prec1)
 
+            time_elapsed = datetime.now() - start_time
+
             if Run:
                 run.log('precision', prec1)
                 run.log('best precision', best_prec1)
+                run.log('epoch time', time_elapsed)
 
             save_checkpoint({
                'epoch': epoch + 1,
@@ -207,7 +210,7 @@ def main():
                 }, is_best)
 
             print('Epoch %05d with loss %.5f' % (epoch, best_prec1))
-            time_elapsed = datetime.now() - start_time
+            
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
     totaltime_elapsed = datetime.now() - totalstart_time
