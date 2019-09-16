@@ -37,6 +37,8 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 
 '''
 
+OUTPUT_PATH = os.path.dirname(os.path.realpath(__file__))
+
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
@@ -275,10 +277,8 @@ def validate(val_loader, model, criterion, epoch):
 
     return lossesLin.avg
 
-CHECKPOINTS_PATH = os.path.dirname(os.path.realpath(__file__))
-
 def load_checkpoint(filename='checkpoint.pth.tar'):
-    filename = os.path.join(CHECKPOINTS_PATH, filename)
+    filename = os.path.join(OUTPUT_PATH, filename)
     print(filename)
     if not os.path.isfile(filename):
         return None
@@ -287,15 +287,15 @@ def load_checkpoint(filename='checkpoint.pth.tar'):
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
 
-    filename = os.path.join(CHECKPOINTS_PATH, filename)
+    bestCheckpointFilePath = os.path.join(OUTPUT_PATH, 'best_' + filename)
+    checkpointFilePath = os.path.join(OUTPUT_PATH, filename)
     torch.save(state, filename)
 
-    bestFilename = os.path.join(CHECKPOINTS_PATH, 'best_' + filename)
-    resultsFilename = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'results.json')
-    bestResultsFilename = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'best_results.json')
+    resultsFilename = os.path.join(OUTPUT_PATH, 'results.json')
+    bestResultsFilename = os.path.join(OUTPUT_PATH, 'best_results.json')
 
     if is_best:
-        shutil.copyfile(filename, bestFilename)
+        shutil.copyfile(checkpointFilePath, bestCheckpointFilePath)
         shutil.copyfile(resultsFilename, bestResultsFilename)
 
 class AverageMeter(object):
