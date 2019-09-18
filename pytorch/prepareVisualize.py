@@ -1,16 +1,10 @@
-# Read ~/gc-data/{sampleId}/screen.json[frameId] H, W, Orientation
-# Read ~/gc-data/{sampleId}/frames/{frameId}/jpg width height
-# Read ~/gc-data/{sampleId}/dotInfo.json[frameId] XCam YCam
-
-# Generate ~/gc-data-prepped/{sampleId}/frames/{frameId}.input.json if it doesn't exist
-
 import os
 import sys
 import json
 import time
 from PIL import Image
 from PIL import ImageDraw
-
+from cam2screen import cam2screen
 
 if len(sys.argv) > 1:
     dataPath = sys.argv[1]
@@ -70,12 +64,15 @@ with os.scandir(dataPath) as sampleDirEntries:
             gazeSamplesCount += 1
             sampleId = sampleDirEntry.name
             sampleIndex = int(sampleId)
+
             framesPath = os.path.join(sampleDirEntry.path, "frames")
 
             screenJson = open(f'{sampleDirEntry.path}/screen.json')
             screen = json.load(screenJson)
             dotInfoJson = open(f'{sampleDirEntry.path}/dotInfo.json')
             dotInfo = json.load(dotInfoJson)
+            infoJson = open(f'{sampleDirEntry.path}/info.json')
+            info = json.load(infoJson)
 
             with os.scandir(framesPath) as framesDirEntries:
 
@@ -111,6 +108,8 @@ with os.scandir(dataPath) as sampleDirEntries:
                             "orientation": screen["Orientation"][frameIndex]
                         },
                         "gazePoint": {
+                            "xpts": dotInfo["XPts"][frameIndex],
+                            "ypts": dotInfo["YPts"][frameIndex],
                             "xcam": dotInfo["XCam"][frameIndex],
                             "ycam": dotInfo["YCam"][frameIndex]
                         }
@@ -118,51 +117,59 @@ with os.scandir(dataPath) as sampleDirEntries:
 
                     frameInputJson = json.dumps(frameInput)
 
-                    xScale = frameInput["image"]["width"] / frameInput["screen"]["width"]
-                    yScale = frameInput["image"]["height"] / frameInput["screen"]["height"]
-                    cameraXPoint = frameInput["screen"]["width"] / 2 # only for frameInput.screen.orientation == 1, 2, 0 for orientation == 3, width for orientation == 4
-                    cameraYPoint = 0 # for frameInput.screen.orientation == 1,frameInput.screen.height for orientation == 2, height / 2 for orientation == 3, 4
+                    # Skip frames that aren't portrait
+                    if frameInput['screen']['orientation'] != 1:
+                        continue
 
-                    gazeTargetXScreenPixel = xScale * (cameraXPoint + framePrediction["gazePointCamera"][0])
-                    gazeTargetYScreenPixel = yScale * (cameraYPoint + framePrediction["gazePointCamera"][1])
-                    gazePredictionXScreenPixel = xScale * (cameraXPoint + framePrediction["gazePredictionCamera"][0])
-                    gazePredictionYScreenPixel = yScale * (cameraYPoint + framePrediction["gazePredictionCamera"][1])
-
-                    frameOutput = {
-                        "gazeTarget" : {
-                            "x": gazeTargetXScreenPixel,
-                            "y": gazeTargetYScreenPixel
-                        },
-                        "gazePrediction" : {
-                            "x": gazePredictionXScreenPixel,
-                            "y": gazePredictionYScreenPixel
-                        }
-                    }
-
-                    print(f"Raw  {sampleId} {frameId} {xScale:.2f} {yScale:.2f} {framePrediction['gazePointCamera'][0]:.2f} {framePrediction['gazePointCamera'][1]:.2f} {framePrediction['gazePredictionCamera'][0]:.2f} {framePrediction['gazePredictionCamera'][1]:.2f}")
-                    # print(f"Calc {gazeTargetXScreenPixel:.2f} {gazeTargetYScreenPixel:.2f} {gazePredictionXScreenPixel:.2f} {gazePredictionYScreenPixel:.2f}")
+                    xScaleScreenToImage = frameInput["image"]["width"] / frameInput["screen"]["width"]
+                    yScaleScreenToImage = frameInput["image"]["height"] / frameInput["screen"]["height"]
 
                     # print(frameInputJson)
                     # print(framePredictionJson)
                     # print(frameOutput)
 
+                    gazeTargetScreenPixelTuple = cam2screen(framePrediction["gazePointCamera"][0], framePrediction["gazePointCamera"][1], frameInput['screen']['orientation'], info['DeviceName'], frameInput["screen"]["width"], frameInput["screen"]["height"])
+                    # Skip datasets for which we don't have device information yet
+                    if gazeTargetScreenPixelTuple is None:
+                        continue
+
+                    (gazeTargetScreenPixelXFromCamera, gazeTargetScreenPixelYFromCamera) = gazeTargetScreenPixelTuple
+                    (gazePredictionScreenPixelXFromCamera, gazePredictionScreenPixelYFromCamera) = cam2screen(framePrediction["gazePredictionCamera"][0], framePrediction["gazePredictionCamera"][1], frameInput['screen']['orientation'], info['DeviceName'], frameInput["screen"]["width"], frameInput["screen"]["height"])
+
+                    # Invert the X Axis (camera vs screen), don't need to do this for screen prediction
+                    gazeTargetXScreenPixel = frameInput["screen"]["width"] - frameInput["gazePoint"]["xpts"]
+                    gazeTargetScreenPixelXFromCamera = frameInput["screen"]["width"] - gazeTargetScreenPixelXFromCamera
+                    gazePredictionScreenPixelXFromCamera = frameInput["screen"]["width"] - gazePredictionScreenPixelXFromCamera
+
+                    gazeTargetYScreenPixel = frameInput["gazePoint"]["ypts"]
+
+                    # Scale the data to fit on the camera image rather than the screen, don't need to do this for screen prediction
+                    gazeTargetImagePixelX = gazeTargetXScreenPixel * xScaleScreenToImage
+                    gazeTargetImagePixelY = gazeTargetYScreenPixel * yScaleScreenToImage
+                    gazeTargetImagePixelXFromCamera = gazeTargetScreenPixelXFromCamera * xScaleScreenToImage
+                    gazeTargetImagePixelYFromCamera = gazeTargetScreenPixelYFromCamera * yScaleScreenToImage
+                    gazePredictionImagePixelXFromCamera = gazePredictionScreenPixelXFromCamera * xScaleScreenToImage
+                    gazePredictionImagePixelYFromCamera = gazePredictionScreenPixelYFromCamera * yScaleScreenToImage
+
                     draw = ImageDraw.Draw(frameImage)
 
-                    draw.line( (gazeTargetXScreenPixel, gazeTargetYScreenPixel-25) + (gazeTargetXScreenPixel, gazeTargetYScreenPixel+25), fill=(64, 192, 64), width=2)
-                    draw.line( (gazeTargetXScreenPixel-25, gazeTargetYScreenPixel) + (gazeTargetXScreenPixel+25, gazeTargetYScreenPixel), fill=(64, 192, 64), width=2)
+                    draw.line( (gazeTargetImagePixelX, gazeTargetImagePixelY-25) + (gazeTargetImagePixelX, gazeTargetImagePixelY+25), fill=(0, 160, 0), width=5)
+                    draw.line( (gazeTargetImagePixelX-25, gazeTargetImagePixelY) + (gazeTargetImagePixelX+25, gazeTargetImagePixelY), fill=(0, 160, 0), width=5)
 
-                    draw.arc( (gazePredictionXScreenPixel-25, gazePredictionYScreenPixel-25) + (gazePredictionXScreenPixel+25, gazePredictionYScreenPixel+25), 0, 360, fill=(00, 128, 00), width=3)
-                    draw.arc( (gazePredictionXScreenPixel-3, gazePredictionYScreenPixel-3) + (gazePredictionXScreenPixel+3, gazePredictionYScreenPixel+3), 0, 360, fill=(00, 128, 00), width=2)
+                    # This confirms that our camera space to point space conversion is working, because the two crosses (green from points and red from camera space) overlay
+                    draw.line( (gazeTargetImagePixelXFromCamera, gazeTargetImagePixelYFromCamera-25) + (gazeTargetImagePixelXFromCamera, gazeTargetImagePixelYFromCamera+25), fill=(160, 0, 0), width=3)
+                    draw.line( (gazeTargetImagePixelXFromCamera-25, gazeTargetImagePixelYFromCamera) + (gazeTargetImagePixelXFromCamera+25, gazeTargetImagePixelYFromCamera), fill=(160, 0, 0), width=3)
 
-                    filename = f"/data/gc-output/deepthink/2019-01-01.00/{sampleId}/{frameId}_overlay.jpg"
+                    draw.arc( (gazePredictionImagePixelXFromCamera-25, gazePredictionImagePixelYFromCamera-25) + (gazePredictionImagePixelXFromCamera+25, gazePredictionImagePixelYFromCamera+25), 0, 360, fill=(00, 128, 00), width=3)
+                    draw.arc( (gazePredictionImagePixelXFromCamera-3, gazePredictionImagePixelYFromCamera-3) + (gazePredictionImagePixelXFromCamera+3, gazePredictionImagePixelYFromCamera+3), 0, 360, fill=(00, 128, 00), width=2)
 
-                    # directory = os.path.dirname(filename)
-                    # if not os.path.exists(directory):
-                    #     os.makedirs(directory)
+                    filename = f"/data/gc-output/deepthink/2019-01-01.01/{sampleId}/{frameId}_overlay.jpg"
 
-                    # frameImage.save(filename)
+                    directory = os.path.dirname(filename)
+                    if not os.path.exists(directory):
+                        os.makedirs(directory)
 
-
+                    frameImage.save(filename)
 
 print(f"Total Samples: {gazeSamplesCount}")
 print(f"Samples with Predictions: {gazeSamplesWithPredictionsCount}")
