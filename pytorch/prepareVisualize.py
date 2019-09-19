@@ -41,7 +41,6 @@ resultsJson = open(resultsPath)
 results = json.load(resultsJson)
 
 # Parse the results into an array of [sampleId, frameId] containing (gazePoint: (x, y), gazePrediction: (x, y))
-print("Parsing Results")
 gazeSamples = {}
 for result in results:
     gazeSample = gazeSamples.pop(result['frame'][0], {})
@@ -52,8 +51,6 @@ for result in results:
 gazeSamplesWithPredictionsCount = len(gazeSamples)
 gazeSamplesFrameCount = list(map(lambda _: len(_.keys()), gazeSamples.values()))
 averageGazeSamplesFrameCount = sum(gazeSamplesFrameCount) / len(gazeSamplesFrameCount)
-
-print("Parsing Results Finished")
 
 with os.scandir(dataPath) as sampleDirEntries:
 
@@ -117,13 +114,10 @@ with os.scandir(dataPath) as sampleDirEntries:
 
                     frameInputJson = json.dumps(frameInput)
 
-                    # Skip frames that aren't portrait
-                    if frameInput['screen']['orientation'] != 1:
-                        continue
-
                     xScaleScreenToImage = frameInput["image"]["width"] / frameInput["screen"]["width"]
                     yScaleScreenToImage = frameInput["image"]["height"] / frameInput["screen"]["height"]
 
+                    # TODO: Save these intermediate data structures
                     # print(frameInputJson)
                     # print(framePredictionJson)
                     # print(frameOutput)
@@ -131,6 +125,7 @@ with os.scandir(dataPath) as sampleDirEntries:
                     gazeTargetScreenPixelTuple = cam2screen(framePrediction["gazePointCamera"][0], framePrediction["gazePointCamera"][1], frameInput['screen']['orientation'], info['DeviceName'], frameInput["screen"]["width"], frameInput["screen"]["height"])
                     # Skip datasets for which we don't have device information yet
                     if gazeTargetScreenPixelTuple is None:
+                        print("None!")
                         continue
 
                     (gazeTargetScreenPixelXFromCamera, gazeTargetScreenPixelYFromCamera) = gazeTargetScreenPixelTuple
