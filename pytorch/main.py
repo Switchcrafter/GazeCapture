@@ -45,6 +45,8 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 
 '''
 
+OUTPUT_PATH = os.path.dirname(os.path.realpath(__file__))
+
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
