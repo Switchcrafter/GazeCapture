@@ -61,6 +61,7 @@ if Run:
 parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
 parser.add_argument('--data_path', help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.", default='/data/gc-data-prepped/')
 parser.add_argument('--output_path', help="Path to checkpoint", default=os.path.dirname(os.path.realpath(__file__)))
+parser.add_argument('--save_checkpoints', type=str2bool, nargs='?', const=True, default=False, help="Save each of the checkpoints as the run progresses.")
 parser.add_argument('--sink', type=str2bool, nargs='?', const=True, default=False, help="Just sink and terminate.")
 parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=False, help="Start from scratch (do not load).")
 parser.add_argument('--epochs', type=int, default=25)
@@ -75,7 +76,7 @@ doTest = args.sink # Only run test, no training
 dataPath = args.data_path
 checkpointsPath = args.output_path
 outputONNX = args.ONNX
-
+saveCheckpoints = args.save_checkpoints
 
 workers = args.workers
 epochs = args.epochs
@@ -101,21 +102,23 @@ def main():
     print('Argument List:', str(sys.argv))
     print('')
     print('DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
-    print('args.epochs      = %d' % args.epochs)
-    print('args.reset       = %s' % args.reset)
-    print('args.sink        = %s' % args.sink)
-    print('args.workers     = %d' % args.workers)
-    print('args.data_path   = %s' % args.data_path)
-    print('args.output_path = %s' % args.output_path)
-    print('args.ONNX        = %s' % args.ONNX)
+    print('args.epochs           = %s' % args.epochs)
+    print('args.reset            = %s' % args.reset)
+    print('args.sink             = %s' % args.sink)
+    print('args.workers          = %s' % args.workers)
+    print('args.data_path        = %s' % args.data_path)
+    print('args.output_path      = %s' % args.output_path)
+    print('args.save_checkpoints = %s' % args.save_checkpoints)
+    print('args.ONNX             = %s' % args.ONNX)
     print('')
-    print('doLoad           = %d' % doLoad)
-    print('doTest           = %d' % doTest)
-    print('dataPath         = %s' % dataPath)
-    print('checkpointsPath  = %s' % checkpointsPath)
-    print('workers          = %d' % workers)
-    print('epochs           = %d' % epochs)
-    print('outputONNX       = %d' % outputONNX)
+    print('doLoad                = %d' % doLoad)
+    print('doTest                = %d' % doTest)
+    print('dataPath              = %s' % dataPath)
+    print('checkpointsPath       = %s' % checkpointsPath)
+    print('saveCheckpoints       = %d' % saveCheckpoints)
+    print('workers               = %d' % workers)
+    print('epochs                = %d' % epochs)
+    print('outputONNX            = %d' % outputONNX)
 
 
     model = ITrackerModel()
@@ -394,10 +397,14 @@ def load_checkpoint(filename='checkpoint.pth.tar'):
     return state
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
-
-    checkpointFilename = os.path.join(checkpointsPath, filename)
-    torch.save(state, checkpointFilename)
     resultsFilename = os.path.join(checkpointsPath, 'results.json')
+    checkpointFilename = os.path.join(checkpointsPath, filename)
+
+    torch.save(state, checkpointFilename)
+    
+    if saveCheckpoints:
+        shutil.copyfile(checkpointFilename, os.path.join(checkpointsPath, 'checkpoint' + str(state['epoch']) + '.pth.tar'))
+        shutil.copyfile(resultsFilename, os.path.join(checkpointsPath, 'results' + str(state['epoch']) + '.json'))
 
     bestFilename = os.path.join(checkpointsPath, 'best_' + filename)
     bestResultsFilename = os.path.join(checkpointsPath, 'best_results.json')
