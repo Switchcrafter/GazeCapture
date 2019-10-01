@@ -68,7 +68,15 @@ parser.add_argument('--epochs', type=int, default=25)
 parser.add_argument('--workers', type=int, default=16)
 parser.add_argument('--dataset-size', type=int, default=0)
 parser.add_argument('--ONNX', type=str2bool, nargs='?', const=True, default=False)
+parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 args = parser.parse_args()
+args.device = None
+usingCuda = False
+if not args.disable_cuda and torch.cuda.is_available():
+    args.device = torch.device('cuda')
+    usingCuda = True    
+else:
+    args.device = torch.device('cpu')
 
 # Change there flags to control what happens.
 doLoad = not args.reset # Load checkpoint at the beginning
@@ -80,7 +88,11 @@ saveCheckpoints = args.save_checkpoints
 
 workers = args.workers
 epochs = args.epochs
-batch_size = torch.cuda.device_count()*100 # Change if out of cuda memory
+
+if usingCuda and torch.cuda.device_count() > 0:
+    batch_size = torch.cuda.device_count()*100 # Change if out of cuda memory
+else:
+    batch_size = 100
 
 base_lr = 0.0001
 momentum = 0.9
@@ -98,10 +110,11 @@ dataset_size = args.dataset_size
 def main():
     global args, best_prec1, weight_decay, momentum
 
+    print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
+    print('')
     print('Number of arguments:', len(sys.argv), 'arguments.')
     print('Argument List:', str(sys.argv))
     print('')
-    print('DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
     print('args.epochs           = %s' % args.epochs)
     print('args.reset            = %s' % args.reset)
     print('args.sink             = %s' % args.sink)
@@ -110,6 +123,7 @@ def main():
     print('args.output_path      = %s' % args.output_path)
     print('args.save_checkpoints = %s' % args.save_checkpoints)
     print('args.ONNX             = %s' % args.ONNX)
+    print('args.disable_cuda     = %d' % args.disable_cuda)
     print('')
     print('doLoad                = %d' % doLoad)
     print('doTest                = %d' % doTest)
@@ -120,10 +134,13 @@ def main():
     print('epochs                = %d' % epochs)
     print('outputONNX            = %d' % outputONNX)
 
-
     model = ITrackerModel()
-    model = torch.nn.DataParallel(model)
-    model.cuda()
+    
+    if usingCuda:
+        model = torch.nn.DataParallel(model)
+    
+    model.to(device=args.device)
+
     imSize=(224,224)
     cudnn.benchmark = True
 
@@ -160,7 +177,7 @@ def main():
         num_workers=workers, pin_memory=True)
 
 
-    criterion = nn.MSELoss().cuda()
+    criterion = nn.MSELoss().to(device=args.device)
 
     optimizer = torch.optim.SGD(model.parameters(), lr,
                                 momentum=momentum,
@@ -237,11 +254,11 @@ def train(train_loader, model, criterion,optimizer, epoch):
         
         # measure data loading time
         data_time.update(time.time() - end)
-        imFace = imFace.cuda()
-        imEyeL = imEyeL.cuda()
-        imEyeR = imEyeR.cuda()
-        faceGrid = faceGrid.cuda()
-        gaze = gaze.cuda()
+        imFace = imFace.to(device=args.device)
+        imEyeL = imEyeL.to(device=args.device)
+        imEyeR = imEyeR.to(device=args.device)
+        faceGrid = faceGrid.to(device=args.device)
+        gaze = gaze.to(device=args.device)
         
         imFace = torch.autograd.Variable(imFace, requires_grad = True)
         imEyeL = torch.autograd.Variable(imEyeL, requires_grad = True)
@@ -293,11 +310,11 @@ def validate(val_loader, model, criterion, epoch):
     for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame) in enumerate(val_loader):
         # measure data loading time
         data_time.update(time.time() - end)
-        imFace = imFace.cuda()
-        imEyeL = imEyeL.cuda()
-        imEyeR = imEyeR.cuda()
-        faceGrid = faceGrid.cuda()
-        gaze = gaze.cuda()
+        imFace = imFace.to(device=args.device)
+        imEyeL = imEyeL.to(device=args.device)
+        imEyeR = imEyeR.to(device=args.device)
+        faceGrid = faceGrid.to(device=args.device)
+        gaze = gaze.to(device=args.device)
         
         imFace = torch.autograd.Variable(imFace, requires_grad = False)
         imEyeL = torch.autograd.Variable(imEyeL, requires_grad = False)
@@ -370,10 +387,10 @@ def exportONNX(val_loader, model):
     dim_height = 224
     face_grid_size = 25 * 25
 
-    imFace = torch.randn(batch_size, color_depth, dim_width, dim_height).cuda()
-    imEyeL = torch.randn(batch_size, color_depth, dim_width, dim_height).cuda()
-    imEyeR = torch.randn(batch_size, color_depth, dim_width, dim_height).cuda()
-    faceGrid = torch.randn(batch_size, face_grid_size).cuda()
+    imFace = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=args.device)
+    imEyeL = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=args.device)
+    imEyeR = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=args.device)
+    faceGrid = torch.randn(batch_size, face_grid_size).to(device=args.device)
 
     dummy_in = (imFace, imEyeL, imEyeR, faceGrid)
 
