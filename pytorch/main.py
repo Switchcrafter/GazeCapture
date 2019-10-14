@@ -423,7 +423,7 @@ def load_checkpoint(filename='checkpoint.pth.tar'):
     print(filename)
     if not os.path.isfile(filename):
         return None
-    state = torch.load(filename)
+    state = torch.load(filename, map_location=torch.device(args.device))
     return state
 
 
