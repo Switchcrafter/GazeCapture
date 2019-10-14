@@ -12,6 +12,8 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 
+from collections import OrderedDict
+
 from ITrackerData import ITrackerData
 from ITrackerModel import ITrackerModel
 
@@ -137,12 +139,10 @@ def main():
     print('epochs                = %d' % epochs)
     print('exportONNX            = %d' % exportONNX)
 
-    model = ITrackerModel()
-    
+    model = ITrackerModel().to(device=args.device)
+
     if usingCuda:
-        model = torch.nn.DataParallel(model)
-    
-    model.to(device=args.device)
+        model = torch.nn.DataParallel(model).to(device=args.device)
 
     imSize = (224, 224)
     cudnn.benchmark = True
@@ -153,10 +153,16 @@ def main():
         if saved:
             print('Loading checkpoint for epoch %05d with loss %.5f (which is the mean squared error not the actual linear error)...' % (saved['epoch'], saved['best_prec1']))
             state = saved['state_dict']
-            try:
-                model.module.load_state_dict(state)
-            except:
-                model.load_state_dict(state)
+
+            if not usingCuda:
+                # when using Cuda for training we use DataParallel. When using DataParallel, there is a
+                # 'module.' added to the namespace of the item in the dictionary.
+                # remove 'module.' from the front of the name to make it compatible with cpu only
+                state = OrderedDict()
+                for key, value in saved['state_dict'].items():
+                    state[key[7:]] = value.to(device=args.device)
+
+            model.load_state_dict(state)
             epoch = saved['epoch']
             best_prec1 = saved['best_prec1']
         else:
@@ -423,7 +429,7 @@ def load_checkpoint(filename='checkpoint.pth.tar'):
     print(filename)
     if not os.path.isfile(filename):
         return None
-    state = torch.load(filename)
+    state = torch.load(filename, map_location=args.device)
     return state
 
 
