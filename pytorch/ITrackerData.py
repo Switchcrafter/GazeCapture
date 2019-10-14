@@ -60,9 +60,8 @@ class SubtractMean(object):
         """       
         return tensor.sub(self.meanImg)
 
-
 class ITrackerData(data.Dataset):
-    def __init__(self, dataPath, split = 'train', imSize=(224,224), gridSize=(25, 25)):
+    def __init__(self, dataPath, split='train', imSize=(224, 224), gridSize=(25, 25)):
 
         self.dataPath = dataPath
         self.imSize = imSize
@@ -70,7 +69,7 @@ class ITrackerData(data.Dataset):
 
         print('Loading iTracker dataset...')
         metaFile = os.path.join(dataPath, 'metadata.mat')
-        #metaFile = 'metadata.mat'
+
         if metaFile is None or not os.path.isfile(metaFile):
             raise RuntimeError('There is no such file %s! Provide a valid dataset path.' % metaFile)
         self.metadata = loadMetadata(metaFile)
@@ -97,13 +96,14 @@ class ITrackerData(data.Dataset):
             SubtractMean(meanImg=self.eyeRightMean),
         ])
 
-
         if split == 'test':
             mask = self.metadata['labelTest']
         elif split == 'val':
             mask = self.metadata['labelVal']
-        else:
+        elif split == 'train':
             mask = self.metadata['labelTrain']
+        else:
+            raise Exception('split should be test, val or train. The value of split was: {}'.format(split))
 
         self.indices = np.argwhere(mask)[:,0]
         print('Loaded iTracker dataset split "%s" with %d records...' % (split, len(self.indices)))
@@ -117,10 +117,9 @@ class ITrackerData(data.Dataset):
 
         return im
 
-
     def makeGrid(self, params):
         gridLen = self.gridSize[0] * self.gridSize[1]
-        grid = np.zeros([gridLen,], np.float32)
+        grid = np.zeros([gridLen, ], np.float32)
         
         indsY = np.array([i // self.gridSize[0] for i in range(gridLen)])
         indsX = np.array([i % self.gridSize[0] for i in range(gridLen)])
@@ -149,7 +148,7 @@ class ITrackerData(data.Dataset):
         gaze = np.array([self.metadata['labelDotXCam'][index], self.metadata['labelDotYCam'][index]], np.float32)
         frame = np.array([self.metadata['labelRecNum'][index], self.metadata['frameIndex'][index]])
 
-        faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][index,:])
+        faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][index, :])
 
         # to tensor
         row = torch.LongTensor([int(index)])
@@ -157,7 +156,6 @@ class ITrackerData(data.Dataset):
         gaze = torch.FloatTensor(gaze)
 
         return row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame
-    
         
     def __len__(self):
         return len(self.indices)

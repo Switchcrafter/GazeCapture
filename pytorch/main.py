@@ -47,6 +47,7 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 
 OUTPUT_PATH = os.path.dirname(os.path.realpath(__file__))
 
+
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
@@ -54,6 +55,7 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
 
 if Run:
     run = Run.get_context()
@@ -66,8 +68,8 @@ parser.add_argument('--sink', type=str2bool, nargs='?', const=True, default=Fals
 parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=False, help="Start from scratch (do not load).")
 parser.add_argument('--epochs', type=int, default=25)
 parser.add_argument('--workers', type=int, default=16)
-parser.add_argument('--dataset-size', type=int, default=0)
-parser.add_argument('--ONNX', type=str2bool, nargs='?', const=True, default=False)
+parser.add_argument('--dataset_size', type=int, default=0)
+parser.add_argument('--exportONNX', type=str2bool, nargs='?', const=True, default=False)
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 args = parser.parse_args()
 args.device = None
@@ -83,7 +85,7 @@ doLoad = not args.reset # Load checkpoint at the beginning
 doTest = args.sink # Only run test, no training
 dataPath = args.data_path
 checkpointsPath = args.output_path
-outputONNX = args.ONNX
+exportONNX = args.exportONNX
 saveCheckpoints = args.save_checkpoints
 
 workers = args.workers
@@ -94,7 +96,7 @@ if usingCuda and torch.cuda.device_count() > 0:
 else:
     batch_size = 100
 
-base_lr = 0.0001
+base_lr = 0.001
 momentum = 0.9
 weight_decay = 1e-4
 print_freq = 10
@@ -106,6 +108,7 @@ count_test = 0
 count = 0
 
 dataset_size = args.dataset_size
+
 
 def main():
     global args, best_prec1, weight_decay, momentum
@@ -122,7 +125,7 @@ def main():
     print('args.data_path        = %s' % args.data_path)
     print('args.output_path      = %s' % args.output_path)
     print('args.save_checkpoints = %s' % args.save_checkpoints)
-    print('args.ONNX             = %s' % args.ONNX)
+    print('args.exportONNX       = %s' % args.exportONNX)
     print('args.disable_cuda     = %d' % args.disable_cuda)
     print('')
     print('doLoad                = %d' % doLoad)
@@ -132,7 +135,7 @@ def main():
     print('saveCheckpoints       = %d' % saveCheckpoints)
     print('workers               = %d' % workers)
     print('epochs                = %d' % epochs)
-    print('outputONNX            = %d' % outputONNX)
+    print('exportONNX            = %d' % exportONNX)
 
     model = ITrackerModel()
     
@@ -141,7 +144,7 @@ def main():
     
     model.to(device=args.device)
 
-    imSize=(224,224)
+    imSize = (224, 224)
     cudnn.benchmark = True
 
     epoch = 0
@@ -159,23 +162,28 @@ def main():
         else:
             print('Warning: Could not read checkpoint!')
 
-    print('epoch = %d' % (epoch))
+    print('epoch = %d' % epoch)
 
     totalstart_time = datetime.now()
     
-    dataTrain = ITrackerData(dataPath, split='train', imSize = imSize)
-    dataVal = ITrackerData(dataPath, split='test', imSize = imSize)
+    dataTrain = ITrackerData(dataPath, split='train', imSize=imSize)
+    dataTest = ITrackerData(dataPath, split='test', imSize=imSize)
+    dataVal = ITrackerData(dataPath, split='val', imSize=imSize)
    
     train_loader = torch.utils.data.DataLoader(
         dataTrain,
         batch_size=batch_size, shuffle=True,
         num_workers=workers, pin_memory=True)
 
+    test_loader = torch.utils.data.DataLoader(
+        dataTest,
+        batch_size=batch_size, shuffle=False,
+        num_workers=workers, pin_memory=True)
+
     val_loader = torch.utils.data.DataLoader(
         dataVal,
         batch_size=batch_size, shuffle=False,
         num_workers=workers, pin_memory=True)
-
 
     criterion = nn.MSELoss().to(device=args.device)
 
@@ -189,9 +197,10 @@ def main():
         print('\nValidation Started')
         validate(val_loader, model, criterion, epoch)
         print('\nValidation Completed')
-    elif outputONNX:
-        exportONNX(val_loader, model)
+    elif exportONNX:
+        exportONNXmodel(val_loader, model)
     else:
+        # epoch will be non-zero if a checkpoint was loaded
         for epoch in range(0, epoch):
             print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
             start_time = datetime.now()
@@ -211,7 +220,7 @@ def main():
 
             # evaluate on validation set
             print('\nValidation Started')
-            prec1 = validate(val_loader, model, criterion, epoch)
+            prec1 = validate(test_loader, model, criterion, epoch)
             print('\nValidation Completed')
 
             # remember best prec@1 and save checkpoint
@@ -237,6 +246,7 @@ def main():
 
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
+
 
 def train(train_loader, model, criterion,optimizer, epoch):
     global count
@@ -292,6 +302,7 @@ def train(train_loader, model, criterion,optimizer, epoch):
                    data_time=data_time, loss=losses))
         if dataset_size > 0 and dataset_size < i + 1:
             break
+
 
 def validate(val_loader, model, criterion, epoch):
     global count_test
@@ -374,7 +385,8 @@ def validate(val_loader, model, criterion, epoch):
 
     return lossesLin.avg
 
-def exportONNX(val_loader, model):
+
+def exportONNXmodel(val_loader, model):
     global count_test
     global dataset_size
 
@@ -387,10 +399,10 @@ def exportONNX(val_loader, model):
     dim_height = 224
     face_grid_size = 25 * 25
 
-    imFace = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=args.device)
-    imEyeL = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=args.device)
-    imEyeR = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=args.device)
-    faceGrid = torch.randn(batch_size, face_grid_size).to(device=args.device)
+    imFace = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=args.device).float()
+    imEyeL = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=args.device).float()
+    imEyeR = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=args.device).float()
+    faceGrid = torch.randn(batch_size, face_grid_size).to(device=args.device).float()
 
     dummy_in = (imFace, imEyeL, imEyeR, faceGrid)
 
@@ -405,6 +417,7 @@ def exportONNX(val_loader, model):
                       opset_version=7,
                       verbose=True)
 
+
 def load_checkpoint(filename='checkpoint.pth.tar'):
     filename = os.path.join(checkpointsPath, filename)
     print(filename)
@@ -412,6 +425,7 @@ def load_checkpoint(filename='checkpoint.pth.tar'):
         return None
     state = torch.load(filename)
     return state
+
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     resultsFilename = os.path.join(checkpointsPath, 'results.json')
@@ -429,6 +443,7 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     if is_best:
         shutil.copyfile(checkpointFilename, bestFilename)
         shutil.copyfile(resultsFilename, bestResultsFilename)
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
