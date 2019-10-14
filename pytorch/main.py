@@ -147,7 +147,7 @@ def main():
     imSize = (224, 224)
     cudnn.benchmark = True
 
-    epoch = 0
+    epoch = 1
     if doLoad:
         saved = load_checkpoint()
         if saved:
@@ -201,7 +201,7 @@ def main():
         exportONNXmodel(val_loader, model)
     else:
         # epoch will be non-zero if a checkpoint was loaded
-        for epoch in range(0, epoch):
+        for epoch in range(1, epoch):
             print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
             start_time = datetime.now()
             adjust_learning_rate(optimizer, epoch)
@@ -235,7 +235,7 @@ def main():
                 run.log('epoch time', time_elapsed)
 
             save_checkpoint({
-               'epoch': epoch + 1,
+               'epoch': epoch,
                'state_dict': model.state_dict(),
                'best_prec1': best_prec1,
                 }, is_best)
