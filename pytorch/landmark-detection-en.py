@@ -3,13 +3,76 @@ import numpy as np
 import imutils
 import dlib
 import cv2
- 
+
+import torch
+import torch.utils.data as data
+import scipy.io as sio
+from PIL import Image
+import os
+import os.path
+import torchvision.transforms as transforms
+from collections import OrderedDict
+
+from ITrackerModel import ITrackerModel
+from ITrackerData import SubtractMean
+
+
+def loadMetadata(filename, silent=False):
+    try:
+        # http://stackoverflow.com/questions/6273634/access-array-contents-from-a-mat-file-loaded-using-scipy-io-loadmat-python
+        if not silent:
+            print('\tReading metadata from %s...' % filename)
+        metadata = sio.loadmat(filename, squeeze_me=True, struct_as_record=False)
+    except:
+        print('\tFailed to read the meta file "%s"!' % filename)
+        return None
+    return metadata
+
+
+imSize = (224, 224)
+gridSize = (25, 25)
+MEAN_PATH = '.'
+
+faceMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_face_224.mat'))['image_mean']
+eyeLeftMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_left_224.mat'))['image_mean']
+eyeRightMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_right_224.mat'))['image_mean']
+
+transformFace = transforms.Compose([
+    transforms.Resize(imSize),
+    transforms.ToTensor(),
+    SubtractMean(meanImg=faceMean),
+])
+transformEyeL = transforms.Compose([
+    transforms.Resize(imSize),
+    transforms.ToTensor(),
+    SubtractMean(meanImg=eyeLeftMean),
+])
+transformEyeR = transforms.Compose([
+    transforms.Resize(imSize),
+    transforms.ToTensor(),
+    SubtractMean(meanImg=eyeRightMean),
+])
+
+model = ITrackerModel().to(device='cpu')
+saved = torch.load('checkpoint.pth.tar', map_location='cpu')
+state = saved['state_dict']
+
+# when using Cuda for training we use DataParallel. When using DataParallel, there is a
+# 'module.' added to the namespace of the item in the dictionary.
+# remove 'module.' from the front of the name to make it compatible with cpu only
+state = OrderedDict()
+for key, value in saved['state_dict'].items():
+    state[key[7:]] = value.to(device='cpu')
+
+model.load_state_dict(state)
+model.eval()
+
 p = "shape_predictor_68_face_landmarks.dat"
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor(p)
 
 cap = cv2.VideoCapture(0)
- 
+
 while True:
     _, image = cap.read()
 
@@ -42,12 +105,12 @@ while True:
 
             (x, y, w, h) = cv2.boundingRect(npshape[leftEyeLandmarksStart:leftEyeLandmarksEnd])
             leftEyeImage = image.copy()
-            leftEyeImage = leftEyeImage[y-15:y + h + 15, x-5:x + w+5]
+            leftEyeImage = leftEyeImage[y - 15:y + h + 15, x - 5:x + w + 5]
             leftEyeImage = imutils.resize(leftEyeImage, width=61, inter=cv2.INTER_CUBIC)
 
             (x, y, w, h) = cv2.boundingRect(npshape[rightEyeLandmarksStart:rightEyeLandmarksEnd])
             rightEyeImage = image.copy()
-            rightEyeImage = rightEyeImage[y-15:y + h + 15, x-5:x + w+5]
+            rightEyeImage = rightEyeImage[y - 15:y + h + 15, x - 5:x + w + 5]
             rightEyeImage = imutils.resize(rightEyeImage, width=61, inter=cv2.INTER_CUBIC)
 
             if rect.tl_corner().x < 0 or rect.tl_corner().y < 0:
@@ -64,11 +127,13 @@ while True:
             faceGridW = int((rect.br_corner().x / imageWidth) * 25) - faceGridX
             faceGridH = int((rect.br_corner().y / imageHeight) * 25) - faceGridY
 
+            faceGridImage = np.zeros((25, 25, 1), dtype=np.uint8)
             faceGrid = np.zeros((25, 25, 1), dtype=np.uint8)
-            faceGrid.fill(255)
+            faceGridImage.fill(255)
             for m in range(faceGridW):
                 for n in range(faceGridH):
-                    faceGrid[faceGridY + n, faceGridX + m] = 0
+                    faceGridImage[faceGridY + n, faceGridX + m] = 0
+                    faceGrid[faceGridY + n, faceGridX + m] = 1
 
             # Draw on our image, all the found coordinate points (x,y)
             for (x, y) in npshape:
@@ -82,8 +147,26 @@ while True:
         cv2.imshow("face", faceImage)
         cv2.imshow("rightEye", rightEyeImage)
         cv2.imshow("leftEye", leftEyeImage)
-        cv2.imshow("faceGrid", faceGrid)
-    
+        cv2.imshow("faceGrid", faceGridImage)
+
+        imFace = Image.fromarray(faceImage, 'RGB')
+        imEyeL = Image.fromarray(leftEyeImage, 'RGB')
+        imEyeR = Image.fromarray(rightEyeImage, 'RGB')
+
+        imFace = transformFace(imFace)
+        imEyeL = transformEyeL(imEyeL)
+        imEyeR = transformEyeR(imEyeR)
+        faceGrid = torch.FloatTensor(faceGrid)
+
+        imFace = torch.autograd.Variable(imFace, requires_grad=False)
+        imEyeL = torch.autograd.Variable(imEyeL, requires_grad=False)
+        imEyeR = torch.autograd.Variable(imEyeR, requires_grad=False)
+        faceGrid = torch.autograd.Variable(faceGrid, requires_grad=False)
+
+        # compute output
+        with torch.no_grad():
+            output = model(imFace, imEyeL, imEyeR, faceGrid)
+
     k = cv2.waitKey(5) & 0xFF
     if k == 27:
         break
