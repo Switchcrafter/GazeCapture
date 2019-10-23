@@ -17,8 +17,8 @@ from collections import OrderedDict
 from ITrackerData import ITrackerData
 from ITrackerModel import ITrackerModel
 
-from datetime import datetime # for timing
-import sys # for command line argument dumping
+from datetime import datetime  # for timing
+import sys  # for command line argument dumping
 
 try:
     from azureml.core.run import Run
@@ -63,11 +63,15 @@ if Run:
     run = Run.get_context()
 
 parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
-parser.add_argument('--data_path', help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.", default='/data/gc-data-prepped/')
+parser.add_argument('--data_path',
+                    help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.",
+                    default='/data/gc-data-prepped/')
 parser.add_argument('--output_path', help="Path to checkpoint", default=os.path.dirname(os.path.realpath(__file__)))
-parser.add_argument('--save_checkpoints', type=str2bool, nargs='?', const=True, default=False, help="Save each of the checkpoints as the run progresses.")
+parser.add_argument('--save_checkpoints', type=str2bool, nargs='?', const=True, default=False,
+                    help="Save each of the checkpoints as the run progresses.")
 parser.add_argument('--sink', type=str2bool, nargs='?', const=True, default=False, help="Just sink and terminate.")
-parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=False, help="Start from scratch (do not load).")
+parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=False,
+                    help="Start from scratch (do not load).")
 parser.add_argument('--epochs', type=int, default=25)
 parser.add_argument('--workers', type=int, default=16)
 parser.add_argument('--dataset_size', type=int, default=0)
@@ -78,13 +82,13 @@ args.device = None
 usingCuda = False
 if not args.disable_cuda and torch.cuda.is_available():
     args.device = torch.device('cuda')
-    usingCuda = True    
+    usingCuda = True
 else:
     args.device = torch.device('cpu')
 
 # Change there flags to control what happens.
-doLoad = not args.reset # Load checkpoint at the beginning
-doTest = args.sink # Only run test, no training
+doLoad = not args.reset  # Load checkpoint at the beginning
+doTest = args.sink  # Only run test, no training
 dataPath = args.data_path
 checkpointsPath = args.output_path
 exportONNX = args.exportONNX
@@ -94,7 +98,7 @@ workers = args.workers
 epochs = args.epochs
 
 if usingCuda and torch.cuda.device_count() > 0:
-    batch_size = torch.cuda.device_count()*100 # Change if out of cuda memory
+    batch_size = torch.cuda.device_count() * 100  # Change if out of cuda memory
 else:
     batch_size = 100
 
@@ -151,7 +155,9 @@ def main():
     if doLoad:
         saved = load_checkpoint()
         if saved:
-            print('Loading checkpoint for epoch %05d with loss %.5f (which is the mean squared error not the actual linear error)...' % (saved['epoch'], saved['best_prec1']))
+            print(
+                'Loading checkpoint for epoch %05d with loss %.5f (which is the mean squared error not the actual linear error)...' % (
+                    saved['epoch'], saved['best_prec1']))
             state = saved['state_dict']
 
             if not usingCuda:
@@ -171,11 +177,11 @@ def main():
     print('epoch = %d' % epoch)
 
     totalstart_time = datetime.now()
-    
+
     dataTrain = ITrackerData(dataPath, split='train', imSize=imSize)
     dataTest = ITrackerData(dataPath, split='test', imSize=imSize)
     dataVal = ITrackerData(dataPath, split='val', imSize=imSize)
-   
+
     train_loader = torch.utils.data.DataLoader(
         dataTrain,
         batch_size=batch_size, shuffle=True,
@@ -204,7 +210,7 @@ def main():
         validate(val_loader, model, criterion, epoch)
         print('\nValidation Completed')
     elif exportONNX:
-        exportONNXmodel(val_loader, model)
+        export_onnx_model(val_loader, model)
     else:
         # epoch will be non-zero if a checkpoint was loaded
         for epoch in range(1, epoch):
@@ -241,20 +247,20 @@ def main():
                 run.log('epoch time', time_elapsed)
 
             save_checkpoint({
-               'epoch': epoch,
-               'state_dict': model.state_dict(),
-               'best_prec1': best_prec1,
-                }, is_best)
+                'epoch': epoch,
+                'state_dict': model.state_dict(),
+                'best_prec1': best_prec1,
+            }, is_best)
 
             print('Epoch %05d with loss %.5f' % (epoch, best_prec1))
-            
+
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
 
 
-def train(train_loader, model, criterion,optimizer, epoch):
+def train(train_loader, model, criterion, optimizer, epoch):
     global count
     global dataset_size
     batch_time = AverageMeter()
@@ -267,7 +273,7 @@ def train(train_loader, model, criterion,optimizer, epoch):
     end = time.time()
 
     for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame) in enumerate(train_loader):
-        
+
         # measure data loading time
         data_time.update(time.time() - end)
         imFace = imFace.to(device=args.device)
@@ -275,18 +281,18 @@ def train(train_loader, model, criterion,optimizer, epoch):
         imEyeR = imEyeR.to(device=args.device)
         faceGrid = faceGrid.to(device=args.device)
         gaze = gaze.to(device=args.device)
-        
-        imFace = torch.autograd.Variable(imFace, requires_grad = True)
-        imEyeL = torch.autograd.Variable(imEyeL, requires_grad = True)
-        imEyeR = torch.autograd.Variable(imEyeR, requires_grad = True)
-        faceGrid = torch.autograd.Variable(faceGrid, requires_grad = True)
-        gaze = torch.autograd.Variable(gaze, requires_grad = False)
+
+        imFace = torch.autograd.Variable(imFace, requires_grad=True)
+        imEyeL = torch.autograd.Variable(imEyeL, requires_grad=True)
+        imEyeR = torch.autograd.Variable(imEyeR, requires_grad=True)
+        faceGrid = torch.autograd.Variable(faceGrid, requires_grad=True)
+        gaze = torch.autograd.Variable(gaze, requires_grad=False)
 
         # compute output
         output = model(imFace, imEyeL, imEyeR, faceGrid)
 
         loss = criterion(output, gaze)
-        
+
         losses.update(loss.data.item(), imFace.size(0))
 
         # compute gradient and do SGD step
@@ -298,15 +304,15 @@ def train(train_loader, model, criterion,optimizer, epoch):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        count=count+1
+        count = count + 1
 
         print('Epoch (train): [{0}][{1}/{2}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(
-                   epoch, i, len(train_loader), batch_time=batch_time,
-                   data_time=data_time, loss=losses))
-        if dataset_size > 0 and dataset_size < i + 1:
+              'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+              'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
+              'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(
+                epoch, i, len(train_loader), batch_time=batch_time,
+                data_time=data_time, loss=losses))
+        if 0 < dataset_size < i + 1:
             break
 
 
@@ -332,12 +338,12 @@ def validate(val_loader, model, criterion, epoch):
         imEyeR = imEyeR.to(device=args.device)
         faceGrid = faceGrid.to(device=args.device)
         gaze = gaze.to(device=args.device)
-        
-        imFace = torch.autograd.Variable(imFace, requires_grad = False)
-        imEyeL = torch.autograd.Variable(imEyeL, requires_grad = False)
-        imEyeR = torch.autograd.Variable(imEyeR, requires_grad = False)
-        faceGrid = torch.autograd.Variable(faceGrid, requires_grad = False)
-        gaze = torch.autograd.Variable(gaze, requires_grad = False)
+
+        imFace = torch.autograd.Variable(imFace, requires_grad=False)
+        imEyeL = torch.autograd.Variable(imEyeL, requires_grad=False)
+        imEyeR = torch.autograd.Variable(imEyeR, requires_grad=False)
+        faceGrid = torch.autograd.Variable(faceGrid, requires_grad=False)
+        gaze = torch.autograd.Variable(gaze, requires_grad=False)
 
         # compute output
         with torch.no_grad():
@@ -350,39 +356,35 @@ def validate(val_loader, model, criterion, epoch):
         r1 = [list(r) for r in zip(f1, g1, o1)]
 
         def convertResult(result):
-            
-            r = {}
 
-            r['frame'] = result[0]
-            r['gazePoint'] = result[1]
-            r['gazePrediction'] = result[2]
+            r = {'frame': result[0], 'gazePoint': result[1], 'gazePrediction': result[2]}
 
             return r
 
         results += list(map(convertResult, r1))
 
         loss = criterion(output, gaze)
-        
+
         lossLin = output - gaze
-        lossLin = torch.mul(lossLin,lossLin)
-        lossLin = torch.sum(lossLin,1)
+        lossLin = torch.mul(lossLin, lossLin)
+        lossLin = torch.sum(lossLin, 1)
         lossLin = torch.mean(torch.sqrt(lossLin))
 
         losses.update(loss.data.item(), imFace.size(0))
         lossesLin.update(lossLin.item(), imFace.size(0))
-     
+
         # compute gradient and do SGD step
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
 
         print('Epoch (val): [{0}][{1}/{2}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Error L2 {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
-                    epoch, i, len(val_loader), batch_time=batch_time,
-                   loss=losses,lossLin=lossesLin))
-        if dataset_size > 0 and dataset_size < i + 1:
+              'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+              'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+              'Error L2 {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
+                epoch, i, len(val_loader), batch_time=batch_time,
+                loss=losses, lossLin=lossesLin))
+        if 0 < dataset_size < i + 1:
             break
 
     resultsFileName = os.path.join(checkpointsPath, 'results.json')
@@ -392,7 +394,7 @@ def validate(val_loader, model, criterion, epoch):
     return lossesLin.avg
 
 
-def exportONNXmodel(val_loader, model):
+def export_onnx_model(val_loader, model):
     global count_test
     global dataset_size
 
@@ -400,7 +402,7 @@ def exportONNXmodel(val_loader, model):
     model.eval()
 
     batch_size = 1
-    color_depth = 3 # 3 bytes for RGB color space
+    color_depth = 3  # 3 bytes for RGB color space
     dim_width = 224
     dim_height = 224
     face_grid_size = 25 * 25
@@ -438,9 +440,10 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     checkpointFilename = os.path.join(checkpointsPath, filename)
 
     torch.save(state, checkpointFilename)
-    
+
     if saveCheckpoints:
-        shutil.copyfile(checkpointFilename, os.path.join(checkpointsPath, 'checkpoint' + str(state['epoch']) + '.pth.tar'))
+        shutil.copyfile(checkpointFilename,
+                        os.path.join(checkpointsPath, 'checkpoint' + str(state['epoch']) + '.pth.tar'))
         shutil.copyfile(resultsFilename, os.path.join(checkpointsPath, 'results' + str(state['epoch']) + '.json'))
 
     bestFilename = os.path.join(checkpointsPath, 'best_' + filename)
@@ -453,6 +456,7 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
+
     def __init__(self):
         self.reset()
 
