@@ -1,41 +1,26 @@
-from imutils import face_utils
-import numpy as np
-import imutils
-import dlib
-import cv2
-
-import torch
-import torch.utils.data as data
-import scipy.io as sio
-from PIL import Image
-import os
 import os.path
-import torchvision.transforms as transforms
 from collections import OrderedDict
 
-from ITrackerModel import ITrackerModel
+import cv2
+import dlib
+import imutils
+import numpy as np
+import scipy.io as sio
+import torch
+import torchvision.transforms as transforms
+from PIL import Image
+from imutils import face_utils
+
 from ITrackerData import SubtractMean
-
-
-def loadMetadata(filename, silent=False):
-    try:
-        # http://stackoverflow.com/questions/6273634/access-array-contents-from-a-mat-file-loaded-using-scipy-io-loadmat-python
-        if not silent:
-            print('\tReading metadata from %s...' % filename)
-        metadata = sio.loadmat(filename, squeeze_me=True, struct_as_record=False)
-    except:
-        print('\tFailed to read the meta file "%s"!' % filename)
-        return None
-    return metadata
-
+from ITrackerModel import ITrackerModel
 
 imSize = (224, 224)
 gridSize = (25, 25)
 MEAN_PATH = '.'
 
-faceMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_face_224.mat'))['image_mean']
-eyeLeftMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_left_224.mat'))['image_mean']
-eyeRightMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_right_224.mat'))['image_mean']
+faceMean = sio.loadmat(os.path.join(MEAN_PATH, 'mean_face_224.mat'), squeeze_me=True, struct_as_record=False)['image_mean']
+eyeLeftMean = sio.loadmat(os.path.join(MEAN_PATH, 'mean_left_224.mat'), squeeze_me=True, struct_as_record=False)['image_mean']
+eyeRightMean = sio.loadmat(os.path.join(MEAN_PATH, 'mean_right_224.mat'), squeeze_me=True, struct_as_record=False)['image_mean']
 
 transformFace = transforms.Compose([
     transforms.Resize(imSize),
@@ -97,7 +82,7 @@ while True:
         (x, y, w, h) = cv2.boundingRect(npshape)
 
         if x >= 0 and y >= 0 and x + w <= image.shape[1] and y + h <= image.shape[0]:
-            print('Face (%4d, %4d, %4d, %4d)' % (x, y, w, h))
+            # print('Face (%4d, %4d, %4d, %4d)' % (x, y, w, h))
             isValid = True
             faceImage = image.copy()
             faceImage = faceImage[y:y + h, x:x + w]
@@ -158,6 +143,12 @@ while True:
         imEyeR = transformEyeR(imEyeR)
         faceGrid = torch.FloatTensor(faceGrid)
 
+        # convert the 3 dimensional array into a 4 dimensional array, making it a batch size of 1
+        imFace.unsqueeze_(0)
+        imEyeL.unsqueeze_(0)
+        imEyeR.unsqueeze_(0)
+        faceGrid.unsqueeze_(0)
+
         imFace = torch.autograd.Variable(imFace, requires_grad=False)
         imEyeL = torch.autograd.Variable(imEyeL, requires_grad=False)
         imEyeR = torch.autograd.Variable(imEyeR, requires_grad=False)
@@ -166,6 +157,7 @@ while True:
         # compute output
         with torch.no_grad():
             output = model(imFace, imEyeL, imEyeR, faceGrid)
+            print(output)
 
     k = cv2.waitKey(5) & 0xFF
     if k == 27:
