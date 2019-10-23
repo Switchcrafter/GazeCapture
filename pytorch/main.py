@@ -1,24 +1,21 @@
-import math, shutil, os, time, argparse, json
-import numpy as np
-import scipy.io as sio
+import argparse
+import json
+import os
+import shutil
+import sys  # for command line argument dumping
+import time
+from collections import OrderedDict
+from datetime import datetime  # for timing
 
 import torch
+import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.nn.parallel
-import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
-import torchvision.transforms as transforms
-import torchvision.datasets as datasets
-import torchvision.models as models
-
-from collections import OrderedDict
 
 from ITrackerData import ITrackerData
 from ITrackerModel import ITrackerModel
-
-from datetime import datetime  # for timing
-import sys  # for command line argument dumping
 
 try:
     from azureml.core.run import Run
@@ -69,7 +66,9 @@ parser.add_argument('--data_path',
 parser.add_argument('--output_path', help="Path to checkpoint", default=os.path.dirname(os.path.realpath(__file__)))
 parser.add_argument('--save_checkpoints', type=str2bool, nargs='?', const=True, default=False,
                     help="Save each of the checkpoints as the run progresses.")
-parser.add_argument('--sink', type=str2bool, nargs='?', const=True, default=False, help="Just sink and terminate.")
+parser.add_argument('--test', type=str2bool, nargs='?', const=True, default=False, help="Just test and terminate.")
+parser.add_argument('--validate', type=str2bool, nargs='?', const=True, default=False,
+                    help="Just validate and terminate.")
 parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=False,
                     help="Start from scratch (do not load).")
 parser.add_argument('--epochs', type=int, default=25)
@@ -88,7 +87,8 @@ else:
 
 # Change there flags to control what happens.
 doLoad = not args.reset  # Load checkpoint at the beginning
-doTest = args.sink  # Only run test, no training
+doTest = args.test  # Only run test, no training
+doValidate = args.validate  # Only run validation, no training
 dataPath = args.data_path
 checkpointsPath = args.output_path
 exportONNX = args.exportONNX
@@ -100,7 +100,7 @@ epochs = args.epochs
 if usingCuda and torch.cuda.device_count() > 0:
     batch_size = torch.cuda.device_count() * 100  # Change if out of cuda memory
 else:
-    batch_size = 100
+    batch_size = 5
 
 base_lr = 0.001
 momentum = 0.9
@@ -126,7 +126,8 @@ def main():
     print('')
     print('args.epochs           = %s' % args.epochs)
     print('args.reset            = %s' % args.reset)
-    print('args.sink             = %s' % args.sink)
+    print('args.test             = %s' % args.test)
+    print('args.validate         = %s' % args.validate)
     print('args.workers          = %s' % args.workers)
     print('args.data_path        = %s' % args.data_path)
     print('args.output_path      = %s' % args.output_path)
@@ -136,6 +137,7 @@ def main():
     print('')
     print('doLoad                = %d' % doLoad)
     print('doTest                = %d' % doTest)
+    print('doValidate            = %d' % doValidate)
     print('dataPath              = %s' % dataPath)
     print('checkpointsPath       = %s' % checkpointsPath)
     print('saveCheckpoints       = %d' % saveCheckpoints)
@@ -149,7 +151,7 @@ def main():
         model = torch.nn.DataParallel(model).to(device=args.device)
 
     imSize = (224, 224)
-    cudnn.benchmark = True
+    cudnn.benchmark = False
 
     epoch = 1
     if doLoad:
@@ -178,22 +180,22 @@ def main():
 
     totalstart_time = datetime.now()
 
-    dataTrain = ITrackerData(dataPath, split='train', imSize=imSize)
-    dataTest = ITrackerData(dataPath, split='test', imSize=imSize)
-    dataVal = ITrackerData(dataPath, split='val', imSize=imSize)
+    data_train = ITrackerData(dataPath, split='train', imSize=imSize)
+    data_test = ITrackerData(dataPath, split='test', imSize=imSize)
+    data_val = ITrackerData(dataPath, split='val', imSize=imSize)
 
     train_loader = torch.utils.data.DataLoader(
-        dataTrain,
+        data_train,
         batch_size=batch_size, shuffle=True,
         num_workers=workers, pin_memory=True)
 
     test_loader = torch.utils.data.DataLoader(
-        dataTest,
+        data_test,
         batch_size=batch_size, shuffle=False,
         num_workers=workers, pin_memory=True)
 
     val_loader = torch.utils.data.DataLoader(
-        dataVal,
+        data_val,
         batch_size=batch_size, shuffle=False,
         num_workers=workers, pin_memory=True)
 
@@ -205,7 +207,12 @@ def main():
 
     # Quick test
     if doTest:
-        print('doTest - Validating only')
+        print('doTest - Running validation on Test data only')
+        print('\nValidation Started')
+        validate(test_loader, model, criterion, epoch)
+        print('\nValidation Completed')
+    elif doValidate:
+        print('doTest - Running validation on Test data only')
         print('\nValidation Started')
         validate(val_loader, model, criterion, epoch)
         print('\nValidation Completed')
@@ -356,6 +363,7 @@ def validate(val_loader, model, criterion, epoch):
         r1 = [list(r) for r in zip(f1, g1, o1)]
 
         def convertResult(result):
+            
 
             r = {'frame': result[0], 'gazePoint': result[1], 'gazePrediction': result[2]}
 
