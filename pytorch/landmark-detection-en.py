@@ -1,5 +1,6 @@
 import os.path
 from collections import OrderedDict
+from datetime import datetime  # for timing
 
 import cv2
 import dlib
@@ -156,8 +157,15 @@ while True:
 
         # compute output
         with torch.no_grad():
+            start_time = datetime.now()
+
             output = model(imFace, imEyeL, imEyeR, faceGrid)
-            print(output)
+            gazePredictionNp = output.numpy()[0]
+
+            print(gazePredictionNp)
+
+            time_elapsed = datetime.now() - start_time
+            print('Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
     k = cv2.waitKey(5) & 0xFF
     if k == 27:
