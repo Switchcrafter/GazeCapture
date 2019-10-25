@@ -162,10 +162,8 @@ while True:
             output = model(imFace, imEyeL, imEyeR, faceGrid)
             gazePredictionNp = output.numpy()[0]
 
-            print(gazePredictionNp)
-
             time_elapsed = datetime.now() - start_time
-            print('Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
+            print('GazePrediction - {} - time elapsed {}'.format(gazePredictionNp, time_elapsed))
 
     k = cv2.waitKey(5) & 0xFF
     if k == 27:
