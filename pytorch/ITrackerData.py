@@ -61,7 +61,7 @@ class SubtractMean(object):
         return tensor.sub(self.meanImg)
 
 class ITrackerData(data.Dataset):
-    def __init__(self, dataPath, split='train', imSize=(224, 224), gridSize=(25, 25)):
+    def __init__(self, dataPath, split='train', imSize=(224, 224), gridSize=(25, 25), silent = False):
 
         self.dataPath = dataPath
         self.imSize = imSize
@@ -72,13 +72,13 @@ class ITrackerData(data.Dataset):
 
         if metaFile is None or not os.path.isfile(metaFile):
             raise RuntimeError('There is no such file %s! Provide a valid dataset path.' % metaFile)
-        self.metadata = loadMetadata(metaFile)
+        self.metadata = loadMetadata(metaFile, silent)
         if self.metadata is None:
             raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % metaFile)
 
-        self.faceMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_face_224.mat'))['image_mean']
-        self.eyeLeftMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_left_224.mat'))['image_mean']
-        self.eyeRightMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_right_224.mat'))['image_mean']
+        self.faceMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_face_224.mat'), silent)['image_mean']
+        self.eyeLeftMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_left_224.mat'), silent)['image_mean']
+        self.eyeRightMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_right_224.mat'), silent)['image_mean']
         
         self.transformFace = transforms.Compose([
             transforms.Resize(self.imSize),
