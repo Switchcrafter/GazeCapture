@@ -6,7 +6,6 @@ import os.path
 import torchvision.transforms as transforms
 import torch
 import numpy as np
-import re
 
 '''
 Data loader for the iTracker.
@@ -33,6 +32,7 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 
 MEAN_PATH = os.path.dirname(os.path.realpath(__file__))
 
+
 def loadMetadata(filename, silent = False):
     try:
         # http://stackoverflow.com/questions/6273634/access-array-contents-from-a-mat-file-loaded-using-scipy-io-loadmat-python
@@ -44,12 +44,13 @@ def loadMetadata(filename, silent = False):
         return None
     return metadata
 
+
 class SubtractMean(object):
     """Normalize an tensor image with mean.
     """
 
-    def __init__(self, meanImg):
-        self.meanImg = transforms.ToTensor()(meanImg / 255)
+    def __init__(self, mean_image):
+        self.meanImg = transforms.ToTensor()(mean_image / 255)
 
     def __call__(self, tensor):
         """
@@ -60,41 +61,58 @@ class SubtractMean(object):
         """       
         return tensor.sub(self.meanImg)
 
+
+class NormalizeImage:
+    def __init__(self, image_size=(224, 224)):
+        self.image_size = image_size
+
+        self.mean_face = loadMetadata(os.path.join(MEAN_PATH, 'mean_face_224.mat'))['image_mean']
+        self.mean_left = loadMetadata(os.path.join(MEAN_PATH, 'mean_left_224.mat'))['image_mean']
+        self.mean_right = loadMetadata(os.path.join(MEAN_PATH, 'mean_right_224.mat'))['image_mean']
+
+        self.transform_face = transforms.Compose([
+            transforms.Resize(self.image_size),
+            transforms.ToTensor(),
+            SubtractMean(mean_image=self.mean_face),
+        ])
+        self.transform_eye_left = transforms.Compose([
+            transforms.Resize(self.image_size),
+            transforms.ToTensor(),
+            SubtractMean(mean_image=self.mean_left),
+        ])
+        self.transform_eye_right = transforms.Compose([
+            transforms.Resize(self.image_size),
+            transforms.ToTensor(),
+            SubtractMean(mean_image=self.mean_right),
+        ])
+
+    def face(self, image):
+        return self.transform_face(image)
+
+    def eye_left(self, image):
+        return self.transform_eye_left(image)
+
+    def eye_right(self, image):
+        return self.transform_eye_right(image)
+
+
 class ITrackerData(data.Dataset):
-    def __init__(self, dataPath, split='train', imSize=(224, 224), gridSize=(25, 25)):
+    def __init__(self, dataPath, split='train', image_size=(224, 224), grid_size=(25, 25)):
 
         self.dataPath = dataPath
-        self.imSize = imSize
-        self.gridSize = gridSize
+        self.image_size = image_size
+        self.grid_size = grid_size
 
         print('Loading iTracker dataset...')
-        metaFile = os.path.join(dataPath, 'metadata.mat')
+        metadata_file = os.path.join(dataPath, 'metadata.mat')
 
-        if metaFile is None or not os.path.isfile(metaFile):
-            raise RuntimeError('There is no such file %s! Provide a valid dataset path.' % metaFile)
-        self.metadata = loadMetadata(metaFile)
+        if metadata_file is None or not os.path.isfile(metadata_file):
+            raise RuntimeError('There is no such file %s! Provide a valid dataset path.' % metadata_file)
+        self.metadata = loadMetadata(metadata_file)
         if self.metadata is None:
-            raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % metaFile)
+            raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % metadata_file)
 
-        self.faceMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_face_224.mat'))['image_mean']
-        self.eyeLeftMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_left_224.mat'))['image_mean']
-        self.eyeRightMean = loadMetadata(os.path.join(MEAN_PATH, 'mean_right_224.mat'))['image_mean']
-        
-        self.transformFace = transforms.Compose([
-            transforms.Resize(self.imSize),
-            transforms.ToTensor(),
-            SubtractMean(meanImg=self.faceMean),
-        ])
-        self.transformEyeL = transforms.Compose([
-            transforms.Resize(self.imSize),
-            transforms.ToTensor(),
-            SubtractMean(meanImg=self.eyeLeftMean),
-        ])
-        self.transformEyeR = transforms.Compose([
-            transforms.Resize(self.imSize),
-            transforms.ToTensor(),
-            SubtractMean(meanImg=self.eyeRightMean),
-        ])
+        self.normalize_image = NormalizeImage(image_size=self.image_size)
 
         if split == 'test':
             mask = self.metadata['labelTest']
@@ -113,7 +131,7 @@ class ITrackerData(data.Dataset):
             im = Image.open(path).convert('RGB')
         except OSError:
             raise RuntimeError('Could not read image: ' + path)
-            #im = Image.new("RGB", self.imSize, "white")
+            # im = Image.new("RGB", self.imSize, "white")
 
         return im
 
@@ -133,17 +151,23 @@ class ITrackerData(data.Dataset):
     def __getitem__(self, index):
         index = self.indices[index]
 
-        imFacePath = os.path.join(self.dataPath, '%05d/appleFace/%05d.jpg' % (self.metadata['labelRecNum'][index], self.metadata['frameIndex'][index]))
-        imEyeLPath = os.path.join(self.dataPath, '%05d/appleLeftEye/%05d.jpg' % (self.metadata['labelRecNum'][index], self.metadata['frameIndex'][index]))
-        imEyeRPath = os.path.join(self.dataPath, '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][index], self.metadata['frameIndex'][index]))
+        imFacePath = os.path.join(self.dataPath,
+                                  '%05d/appleFace/%05d.jpg' % (self.metadata['labelRecNum'][index],
+                                                               self.metadata['frameIndex'][index]))
+        imEyeLPath = os.path.join(self.dataPath,
+                                  '%05d/appleLeftEye/%05d.jpg' % (self.metadata['labelRecNum'][index],
+                                                                  self.metadata['frameIndex'][index]))
+        imEyeRPath = os.path.join(self.dataPath,
+                                  '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][index],
+                                                                   self.metadata['frameIndex'][index]))
 
         imFace = self.loadImage(imFacePath)
         imEyeL = self.loadImage(imEyeLPath)
         imEyeR = self.loadImage(imEyeRPath)
 
-        imFace = self.transformFace(imFace)
-        imEyeL = self.transformEyeL(imEyeL)
-        imEyeR = self.transformEyeR(imEyeR)
+        imFace = self.normalize_image.face(image=imFace)
+        imEyeL = self.normalize_image.eye_left(image=imEyeL)
+        imEyeR = self.normalize_image.eye_right(image=imEyeR)
 
         gaze = np.array([self.metadata['labelDotXCam'][index], self.metadata['labelDotYCam'][index]], np.float32)
         frame = np.array([self.metadata['labelRecNum'][index], self.metadata['frameIndex'][index]])

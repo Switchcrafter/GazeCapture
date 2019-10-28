@@ -162,13 +162,7 @@ def main():
                     saved['epoch'], saved['best_prec1']))
             state = saved['state_dict']
 
-            if not usingCuda:
-                # when using Cuda for training we use DataParallel. When using DataParallel, there is a
-                # 'module.' added to the namespace of the item in the dictionary.
-                # remove 'module.' from the front of the name to make it compatible with cpu only
-                state = OrderedDict()
-                for key, value in saved['state_dict'].items():
-                    state[key[7:]] = value.to(device=args.device)
+            state = remove_module_from_state(state)
 
             model.load_state_dict(state)
             epoch = saved['epoch']
@@ -356,18 +350,15 @@ def validate(val_loader, model, criterion, epoch):
         with torch.no_grad():
             output = model(imFace, imEyeL, imEyeR, faceGrid)
 
-        # Combine the tensor results together into a colated list so that we have the gazePoint and gazePrediction for each frame
+        # Combine the tensor results together into a colated list so that we have the gazePoint and gazePrediction
+        # for each frame
         f1 = frame.cpu().numpy().tolist()
         g1 = gaze.cpu().numpy().tolist()
         o1 = output.cpu().numpy().tolist()
         r1 = [list(r) for r in zip(f1, g1, o1)]
 
         def convertResult(result):
-            
-
-            r = {'frame': result[0], 'gazePoint': result[1], 'gazePrediction': result[2]}
-
-            return r
+            return {'frame': result[0], 'gazePoint': result[1], 'gazePrediction': result[2]}
 
         results += list(map(convertResult, r1))
 
@@ -460,6 +451,18 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     if is_best:
         shutil.copyfile(checkpointFilename, bestFilename)
         shutil.copyfile(resultsFilename, bestResultsFilename)
+
+
+def remove_module_from_state(saved_state):
+    # when using Cuda for training we use DataParallel. When using DataParallel, there is a
+    # 'module.' added to the namespace of the item in the dictionary.
+    # remove 'module.' from the front of the name to make it compatible with cpu only
+    state = OrderedDict()
+
+    for key, value in saved_state['state_dict'].items():
+        state[key[7:]] = value.to(device='cpu')
+
+    return state
 
 
 class AverageMeter(object):
