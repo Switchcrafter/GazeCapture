@@ -241,13 +241,13 @@ def main():
         start_time = datetime.now()
         precision = test(test_loader, model, criterion, epoch=0)
         time_elapsed = datetime.now() - start_time
-        print('Testing loss %.5f' % (precision))
+        print('Testing loss %.5f' % precision)
         print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif doValidate:
         start_time = datetime.now()
         precision = validate(val_loader, model, criterion, epoch=0)
         time_elapsed = datetime.now() - start_time
-        print('Validation loss %.5f' % (precision))
+        print('Validation loss %.5f' % precision)
         print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif exportONNX:
         export_onnx_model(val_loader, model)

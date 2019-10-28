@@ -1,9 +1,10 @@
+import json
 import os
 import sys
-import json
-import time
+
 from PIL import Image
 from PIL import ImageDraw
+
 from cam2screen import cam2screen
 
 if len(sys.argv) > 1:
@@ -122,14 +123,14 @@ with os.scandir(dataPath) as sampleDirEntries:
                     # print(framePredictionJson)
                     # print(frameOutput)
 
-                    gazeTargetScreenPixelTuple = cam2screen(framePrediction["gazePointCamera"][0], framePrediction["gazePointCamera"][1], frameInput['screen']['orientation'], info['DeviceName'], frameInput["screen"]["width"], frameInput["screen"]["height"])
+                    gazeTargetScreenPixelTuple = cam2screen(framePrediction["gazePointCamera"][0], framePrediction["gazePointCamera"][1], frameInput['screen']['orientation'], frameInput["screen"]["width"], frameInput["screen"]["height"], deviceName=info['DeviceName'])
                     # Skip datasets for which we don't have device information yet
                     if gazeTargetScreenPixelTuple is None:
                         print("None!")
                         continue
 
                     (gazeTargetScreenPixelXFromCamera, gazeTargetScreenPixelYFromCamera) = gazeTargetScreenPixelTuple
-                    (gazePredictionScreenPixelXFromCamera, gazePredictionScreenPixelYFromCamera) = cam2screen(framePrediction["gazePredictionCamera"][0], framePrediction["gazePredictionCamera"][1], frameInput['screen']['orientation'], info['DeviceName'], frameInput["screen"]["width"], frameInput["screen"]["height"])
+                    (gazePredictionScreenPixelXFromCamera, gazePredictionScreenPixelYFromCamera) = cam2screen(framePrediction["gazePredictionCamera"][0], framePrediction["gazePredictionCamera"][1], frameInput['screen']['orientation'], frameInput["screen"]["width"], frameInput["screen"]["height"], deviceName=info['DeviceName'])
 
                     # Invert the X Axis (camera vs screen), don't need to do this for screen prediction
                     gazeTargetXScreenPixel = frameInput["screen"]["width"] - frameInput["gazePoint"]["xpts"]

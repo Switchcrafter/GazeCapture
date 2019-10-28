@@ -3,40 +3,73 @@ import os
 
 file_dir_path = os.path.dirname(os.path.realpath(__file__))
 
-devicesJson = open(os.path.join(file_dir_path, 'apple_device_data.json'))
+devicesJson = open(os.path.join(file_dir_path, 'device_metrics.json'))
 devices = json.load(devicesJson)
 
-def cam2screen(xDisplacementFromCameraInCm, yDisplacementFromCameraInCm, orientation, deviceName, widthScreenInPoints, heightScreenInPoints):
 
-    # Need to pass in widthScreenInPoints and heightScreenInPoints because it can vary for the same deviceName due to zoom
+def cam2screen(xDisplacementFromCameraInCm,
+               yDisplacementFromCameraInCm,
+               orientation,
+               widthScreenInPoints,
+               heightScreenInPoints,
+               deviceName = "",
+               xCameraToScreenDisplacementInCm = None,
+               yCameraToScreenDisplacementInCm = None,
+               widthScreenInCm = None,
+               heightScreenInCm = None
+               ):
+
+    # Need to pass in widthScreenInPoints and heightScreenInPoints because it can vary for
+    # the same deviceName due to zoom
     # xDisplacementFromCameraInCm, yDisplacementFromCameraInCm are "prediction space" coordinates
 
     deviceMetrics = getDeviceMetrics(deviceName)
 
-    if deviceMetrics is None:
+    if deviceName is not None:
+        xCameraToScreenDisplacementInCm = deviceMetrics["xCameraToScreenDisplacementInCm"]
+        yCameraToScreenDisplacementInCm = deviceMetrics["yCameraToScreenDisplacementInCm"]
+        widthScreenInCm = deviceMetrics["widthScreenInCm"]
+        heightScreenInCm = deviceMetrics["heightScreenInCm"]
+
+    if xCameraToScreenDisplacementInCm is None or \
+            yCameraToScreenDisplacementInCm is None or \
+            widthScreenInCm is None or \
+            heightScreenInCm is None:
         return None
 
     # Camera Offset and Screen Orientation compensation
-    if orientation == 1: # Portrait
-        xScreenInCm = xDisplacementFromCameraInCm + deviceMetrics["xCameraToScreenDisplacementInCm"]
-        yScreenInCm = -yDisplacementFromCameraInCm - deviceMetrics["yCameraToScreenDisplacementInCm"]
-        xScreenInPoints = xScreenInCm / deviceMetrics["widthScreenInCm"] * widthScreenInPoints
-        yScreenInPoints = yScreenInCm / deviceMetrics["heightScreenInCm"] * heightScreenInPoints
-    elif orientation == 2: # Portrait Inverted
-        xScreenInCm = xDisplacementFromCameraInCm - deviceMetrics["xCameraToScreenDisplacementInCm"] + deviceMetrics["widthScreenInCm"]
-        yScreenInCm = -yDisplacementFromCameraInCm + deviceMetrics["yCameraToScreenDisplacementInCm"] + deviceMetrics["heightScreenInCm"]
-        xScreenInPoints = xScreenInCm / deviceMetrics["widthScreenInCm"] * widthScreenInPoints
-        yScreenInPoints = yScreenInCm / deviceMetrics["heightScreenInCm"] * heightScreenInPoints
+    if orientation == 1:
+        # Camera above screen
+        # - Portrait on iOS devices
+        # - Landscape on Surface devices
+        xScreenInCm = xDisplacementFromCameraInCm + xCameraToScreenDisplacementInCm
+        yScreenInCm = -yDisplacementFromCameraInCm - yCameraToScreenDisplacementInCm
+        xScreenInPoints = xScreenInCm / widthScreenInCm * widthScreenInPoints
+        yScreenInPoints = yScreenInCm / heightScreenInCm * heightScreenInPoints
+    elif orientation == 2:
+        # Camera below screen
+        # - Portrait Inverted on iOS devices
+        # - Landscape inverted on Surface devices
+        xScreenInCm = xDisplacementFromCameraInCm - xCameraToScreenDisplacementInCm + widthScreenInCm
+        yScreenInCm = -yDisplacementFromCameraInCm + yCameraToScreenDisplacementInCm + heightScreenInCm
+        xScreenInPoints = xScreenInCm / widthScreenInCm * widthScreenInPoints
+        yScreenInPoints = yScreenInCm / heightScreenInCm * heightScreenInPoints
     elif orientation == 3:
-        xScreenInCm = xDisplacementFromCameraInCm - deviceMetrics["yCameraToScreenDisplacementInCm"]
-        yScreenInCm = -yDisplacementFromCameraInCm - deviceMetrics["xCameraToScreenDisplacementInCm"] + deviceMetrics["widthScreenInCm"]
-        xScreenInPoints = xScreenInCm / deviceMetrics["widthScreenInCm"] * heightScreenInPoints
-        yScreenInPoints = yScreenInCm / deviceMetrics["heightScreenInCm"] * widthScreenInPoints
+        # Camera left of screen
+        # - Landscape home button on right on iOS devices
+        # - Portrait with camera on left on Surface devices
+        xScreenInCm = xDisplacementFromCameraInCm - yCameraToScreenDisplacementInCm
+        yScreenInCm = -yDisplacementFromCameraInCm - xCameraToScreenDisplacementInCm + widthScreenInCm
+        xScreenInPoints = xScreenInCm / widthScreenInCm * heightScreenInPoints
+        yScreenInPoints = yScreenInCm / heightScreenInCm * widthScreenInPoints
     elif orientation == 4:
-        xScreenInCm = xDisplacementFromCameraInCm + deviceMetrics["yCameraToScreenDisplacementInCm"] + deviceMetrics["heightScreenInCm"]
-        yScreenInCm = -yDisplacementFromCameraInCm + deviceMetrics["xCameraToScreenDisplacementInCm"]
-        xScreenInPoints = xScreenInCm / deviceMetrics["widthScreenInCm"] * heightScreenInPoints
-        yScreenInPoints = yScreenInCm / deviceMetrics["heightScreenInCm"] * widthScreenInPoints
+        # Camera right of screen
+        # - Landscape home button on left on iOS devices
+        # - Portrait with camera on right on Surface devices
+        xScreenInCm = xDisplacementFromCameraInCm + yCameraToScreenDisplacementInCm + heightScreenInCm
+        yScreenInCm = -yDisplacementFromCameraInCm + xCameraToScreenDisplacementInCm
+        xScreenInPoints = xScreenInCm / widthScreenInCm * heightScreenInPoints
+        yScreenInPoints = yScreenInCm / heightScreenInCm * widthScreenInPoints
     else:
         xScreenInPoints = 0
         yScreenInPoints = 0
