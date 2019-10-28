@@ -6,6 +6,7 @@ import sys  # for command line argument dumping
 import time
 from collections import OrderedDict
 from datetime import datetime  # for timing
+import progressbar
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -47,6 +48,31 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 OUTPUT_PATH = os.path.dirname(os.path.realpath(__file__))
 
 
+# widgets=[
+#         'Progress',#0
+#         ' ',#1
+#         progressbar.Bar(marker='■', left='|', right='|', fill='-'),#2
+#         progressbar.SimpleProgress(),#3
+#         '[',progressbar.ETA(),']', #5 
+#         '[','RMSError',']',#8
+#     ]
+# bar = progressbar.ProgressBar(max_value=progressbar.UnknownLength, widgets=widgets)
+# def progressbar_update(value, max, label, error):
+#     # update label
+#     label = '{:8}'.format(label)
+#     if bar.widgets[0] != label:
+#         bar.widgets[0] = label
+#     if bar.widgets[8] != error:
+#         bar.widgets[8] = error
+#     # update max_value
+#     if bar.max_value != max:
+#         bar.max_value = max
+#     # update value
+#     bar.update(value)
+#     # update finish
+#     if value >= bar.max_value:
+#         bar.finish()
+
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
@@ -76,6 +102,8 @@ parser.add_argument('--workers', type=int, default=16)
 parser.add_argument('--dataset_size', type=int, default=0)
 parser.add_argument('--exportONNX', type=str2bool, nargs='?', const=True, default=False)
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
+parser.add_argument('--verbose', type=str2bool, nargs='?', const=True, default=False,
+                    help="verbose mode - print details every batch")
 args = parser.parse_args()
 args.device = None
 usingCuda = False
@@ -115,35 +143,37 @@ count = 0
 
 dataset_size = args.dataset_size
 
-
 def main():
-    global args, best_prec1, weight_decay, momentum
-
-    print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
-    print('')
-    print('Number of arguments:', len(sys.argv), 'arguments.')
-    print('Argument List:', str(sys.argv))
-    print('')
-    print('args.epochs           = %s' % args.epochs)
-    print('args.reset            = %s' % args.reset)
-    print('args.test             = %s' % args.test)
-    print('args.validate         = %s' % args.validate)
-    print('args.workers          = %s' % args.workers)
-    print('args.data_path        = %s' % args.data_path)
-    print('args.output_path      = %s' % args.output_path)
-    print('args.save_checkpoints = %s' % args.save_checkpoints)
-    print('args.exportONNX       = %s' % args.exportONNX)
-    print('args.disable_cuda     = %d' % args.disable_cuda)
-    print('')
-    print('doLoad                = %d' % doLoad)
-    print('doTest                = %d' % doTest)
-    print('doValidate            = %d' % doValidate)
-    print('dataPath              = %s' % dataPath)
-    print('checkpointsPath       = %s' % checkpointsPath)
-    print('saveCheckpoints       = %d' % saveCheckpoints)
-    print('workers               = %d' % workers)
-    print('epochs                = %d' % epochs)
-    print('exportONNX            = %d' % exportONNX)
+    global args, best_prec1, weight_decay, momentum, data_size
+    
+    if args.verbose:
+        print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
+        print('')
+        print('Number of arguments:', len(sys.argv), 'arguments.')
+        print('Argument List:', str(sys.argv))
+        print('===================================================')
+        print('args.epochs           = %s' % args.epochs)
+        print('args.reset            = %s' % args.reset)
+        print('args.test             = %s' % args.test)
+        print('args.validate         = %s' % args.validate)
+        print('args.workers          = %s' % args.workers)
+        print('args.data_path        = %s' % args.data_path)
+        print('args.output_path      = %s' % args.output_path)
+        print('args.save_checkpoints = %s' % args.save_checkpoints)
+        print('args.exportONNX       = %s' % args.exportONNX)
+        print('args.disable_cuda     = %d' % args.disable_cuda)
+        print('args.verbose          = %d' % args.verbose)
+        print('===================================================')
+        print('doLoad                = %d' % doLoad)
+        print('doTest                = %d' % doTest)
+        print('doValidate            = %d' % doValidate)
+        print('dataPath              = %s' % dataPath)
+        print('checkpointsPath       = %s' % checkpointsPath)
+        print('saveCheckpoints       = %d' % saveCheckpoints)
+        print('workers               = %d' % workers)
+        print('epochs                = %d' % epochs)
+        print('exportONNX            = %d' % exportONNX)
+        print('===================================================')
 
     model = ITrackerModel().to(device=args.device)
 
@@ -169,72 +199,82 @@ def main():
             best_prec1 = saved['best_prec1']
         else:
             print('Warning: Could not read checkpoint!')
-
+    
     print('epoch = %d' % epoch)
-
+    
     totalstart_time = datetime.now()
-
-    data_train = ITrackerData(dataPath, split='train', imSize=imSize)
-    data_test = ITrackerData(dataPath, split='test', imSize=imSize)
-    data_val = ITrackerData(dataPath, split='val', imSize=imSize)
-
+    
+    # training data : model sees and learns from this data 
+    data_train = ITrackerData(dataPath, split='train', imSize=imSize, silent = not args.verbose)
+    # validation data : model sees but never learns from this data 
+    data_val = ITrackerData(dataPath, split='val', imSize=imSize, silent = not args.verbose)
+    # test data : model never sees or learns from this data 
+    data_test = ITrackerData(dataPath, split='test', imSize=imSize, silent = not args.verbose)
+    
+    data_size = {'train':len(data_train.indices), 'val':len(data_val.indices), 'test':len(data_test.indices)}
+    
     train_loader = torch.utils.data.DataLoader(
         data_train,
         batch_size=batch_size, shuffle=True,
         num_workers=workers, pin_memory=True)
-
-    test_loader = torch.utils.data.DataLoader(
-        data_test,
-        batch_size=batch_size, shuffle=False,
-        num_workers=workers, pin_memory=True)
-
+    
     val_loader = torch.utils.data.DataLoader(
         data_val,
         batch_size=batch_size, shuffle=False,
         num_workers=workers, pin_memory=True)
-
-    criterion = nn.MSELoss().to(device=args.device)
-
+    
+    test_loader = torch.utils.data.DataLoader(
+        data_test,
+        batch_size=batch_size, shuffle=False,
+        num_workers=workers, pin_memory=True)
+    
+    
+#     criterion = nn.MSELoss(reduction='sum').to(device=args.device)
+    criterion = nn.MSELoss(reduction='mean').to(device=args.device)
+    
     optimizer = torch.optim.SGD(model.parameters(), lr,
                                 momentum=momentum,
                                 weight_decay=weight_decay)
-
+    
     # Quick test
     if doTest:
-        print('doTest - Running validation on Test data only')
-        print('\nValidation Started')
-        validate(test_loader, model, criterion, epoch)
-        print('\nValidation Completed')
+        start_time = datetime.now()
+        precision = test(test_loader, model, criterion, epoch=0)
+        time_elapsed = datetime.now() - start_time
+        print('Testing loss %.5f' % (precision))
+        print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif doValidate:
-        print('doTest - Running validation on Test data only')
-        print('\nValidation Started')
-        validate(val_loader, model, criterion, epoch)
-        print('\nValidation Completed')
+        start_time = datetime.now()
+        precision = validate(val_loader, model, criterion, epoch=0)
+        time_elapsed = datetime.now() - start_time
+        print('Validation loss %.5f' % (precision))
+        print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif exportONNX:
         export_onnx_model(val_loader, model)
-    else:
+    else:#Train
+        # first cmake a learning_rate correction suitable for epoch from saved checkpoint
         # epoch will be non-zero if a checkpoint was loaded
         for epoch in range(1, epoch):
-            print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
-            start_time = datetime.now()
+            if args.verbose:
+                print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
+                start_time = datetime.now()
             adjust_learning_rate(optimizer, epoch)
-            time_elapsed = datetime.now() - start_time
-            print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-
+            if args.verbose:
+                time_elapsed = datetime.now() - start_time
+                print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
+        
+        # now start training from last best epoch
         for epoch in range(epoch, epochs):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
             start_time = datetime.now()
             adjust_learning_rate(optimizer, epoch)
 
             # train for one epoch
-            print('\nTraining Started')
-            train(train_loader, model, criterion, optimizer, epoch)
-            print('\nTraining Completed')
+            print('\nEpoch:{} [device:{}, id:{}, lr:{}]'.format(epoch, args.device, torch.cuda.current_device(), lr))
+            train_error = train(train_loader, model, criterion, optimizer, epoch)
 
             # evaluate on validation set
-            print('\nValidation Started')
             prec1 = validate(test_loader, model, criterion, epoch)
-            print('\nValidation Completed')
 
             # remember best prec@1 and save checkpoint
             is_best = prec1 < best_prec1
@@ -254,7 +294,6 @@ def main():
             }, is_best)
 
             print('Epoch %05d with loss %.5f' % (epoch, best_prec1))
-
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
     totaltime_elapsed = datetime.now() - totalstart_time
@@ -264,9 +303,13 @@ def main():
 def train(train_loader, model, criterion, optimizer, epoch):
     global count
     global dataset_size
+    global data_train
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
+    lossesLin = AverageMeter()
+    progress_meter = ProgressMeter()
+    num_samples = 0
 
     # switch to train mode
     model.train()
@@ -274,7 +317,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
     end = time.time()
 
     for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame) in enumerate(train_loader):
-
+        batchNum = i+1
+        num_samples += imFace.size(0)
+        
         # measure data loading time
         data_time.update(time.time() - end)
         imFace = imFace.to(device=args.device)
@@ -291,10 +336,18 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         # compute output
         output = model(imFace, imEyeL, imEyeR, faceGrid)
-
+        
         loss = criterion(output, gaze)
+        
+        lossLin = output - gaze
+        lossLin = torch.mul(lossLin, lossLin)
+        lossLin = torch.sum(lossLin, 1)
+        # MSE vs RMS error
+#         lossLin = torch.sum(lossLin)
+        lossLin = torch.sum(torch.sqrt(lossLin))
 
         losses.update(loss.data.item(), imFace.size(0))
+        lossesLin.update(lossLin.item()/batch_size, imFace.size(0))
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -306,24 +359,32 @@ def train(train_loader, model, criterion, optimizer, epoch):
         end = time.time()
 
         count = count + 1
+        
+        if args.verbose:
+            print('Epoch (train): [{}][{}/{}]\t'
+                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                  'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
+                  'MSELoss {loss.val:.4f} ({loss.avg:.4f})\t'
+                  'RMSErr {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
+                    epoch, batchNum, len(train_loader), batch_time=batch_time,
+                    data_time=data_time, loss=losses, lossLin=lossesLin))
+        else:
+            progress_meter.update(num_samples, data_size['train'], 'train', lossesLin.avg)
+            
+        if 0 < dataset_size < batchNum:
+            breakvalvalvalvalval
+    
+    return lossesLin.avg
 
-        print('Epoch (train): [{0}][{1}/{2}]\t'
-              'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-              'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-              'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(
-                epoch, i, len(train_loader), batch_time=batch_time,
-                data_time=data_time, loss=losses))
-        if 0 < dataset_size < i + 1:
-            break
-
-
-def validate(val_loader, model, criterion, epoch):
+def evaluate(eval_loader, model, criterion, epoch, stage):
     global count_test
     global dataset_size
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
     lossesLin = AverageMeter()
+    progress_meter = ProgressMeter()
+    num_samples = 0
 
     # switch to evaluate mode
     model.eval()
@@ -331,7 +392,10 @@ def validate(val_loader, model, criterion, epoch):
 
     results = []
 
-    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame) in enumerate(val_loader):
+    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame) in enumerate(eval_loader):
+        batchNum = i+1
+        num_samples += imFace.size(0)
+        
         # measure data loading time
         data_time.update(time.time() - end)
         imFace = imFace.to(device=args.device)
@@ -361,37 +425,47 @@ def validate(val_loader, model, criterion, epoch):
             return {'frame': result[0], 'gazePoint': result[1], 'gazePrediction': result[2]}
 
         results += list(map(convertResult, r1))
-
         loss = criterion(output, gaze)
-
+        
         lossLin = output - gaze
         lossLin = torch.mul(lossLin, lossLin)
         lossLin = torch.sum(lossLin, 1)
-        lossLin = torch.mean(torch.sqrt(lossLin))
+        # MSE vs RMS error
+#         lossLin = torch.sum(lossLin)
+        lossLin = torch.sum(torch.sqrt(lossLin))
 
         losses.update(loss.data.item(), imFace.size(0))
-        lossesLin.update(lossLin.item(), imFace.size(0))
+        lossesLin.update(lossLin.item()/batch_size, imFace.size(0))
 
         # compute gradient and do SGD step
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
-
-        print('Epoch (val): [{0}][{1}/{2}]\t'
+        
+        if args.verbose:
+            print('Epoch ({}): [{}][{}/{}]\t'
               'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-              'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-              'Error L2 {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
-                epoch, i, len(val_loader), batch_time=batch_time,
+              'MSELoss {loss.val:.4f} ({loss.avg:.4f})\t'
+              'RMSErr {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
+                stage, epoch, batchNum, len(eval_loader), batch_time=batch_time,
                 loss=losses, lossLin=lossesLin))
-        if 0 < dataset_size < i + 1:
+        else:
+            progress_meter.update(num_samples, data_size[stage], stage, lossesLin.avg)
+            
+        if 0 < dataset_size < batchNum:
             break
-
+    
     resultsFileName = os.path.join(checkpointsPath, 'results.json')
     with open(resultsFileName, 'w+') as outfile:
         json.dump(results, outfile)
 
     return lossesLin.avg
 
+def validate(val_loader, model, criterion, epoch):
+    return evaluate(val_loader, model, criterion, epoch, 'val')
+
+def test(test_loader, model, criterion, epoch):
+    return evaluate(test_loader, model, criterion, epoch, 'test')
 
 def export_onnx_model(val_loader, model):
     global count_test
@@ -482,6 +556,39 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+
+
+class ProgressMeter(object):
+    def __init__(self):
+        self.widgets=[
+            'Progress',#0
+            ' ',#1
+            progressbar.Bar(marker='■', left='|', right='|', fill='-'),#2
+            '[',progressbar.SimpleProgress(),']',#4
+            '[',progressbar.ETA(),']', #7 
+            '[','RMSError',']',#10
+        ]
+        self.bar = progressbar.ProgressBar(max_value=progressbar.UnknownLength, widgets=self.widgets)
+     
+    def update(self, value, max, label, error):
+        # update label
+        label = '{:5}'.format(label)
+        if self.bar.widgets[0] != label:
+            self.bar.widgets[0] = label
+        
+        #update metric
+        metric = '{metric:.4f}'.format(metric=error)
+        if self.bar.widgets[10] != metric:
+            self.bar.widgets[10] = metric
+        
+        # update max_value
+        if self.bar.max_value != max:
+            self.bar.max_value = max
+        # update value
+        self.bar.update(value)
+        # update finish
+        if value >= self.bar.max_value:
+            self.bar.finish()
 
 
 def adjust_learning_rate(optimizer, epoch):

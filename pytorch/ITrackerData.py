@@ -97,7 +97,7 @@ class NormalizeImage:
 
 
 class ITrackerData(data.Dataset):
-    def __init__(self, dataPath, split='train', image_size=(224, 224), grid_size=(25, 25)):
+    def __init__(self, dataPath, split='train', image_size=(224, 224), grid_size=(25, 25), silent=False):
 
         self.dataPath = dataPath
         self.image_size = image_size
