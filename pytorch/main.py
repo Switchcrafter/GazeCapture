@@ -308,8 +308,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
     data_time = AverageMeter()
     losses = AverageMeter()
     lossesLin = AverageMeter()
-    progress_meter = ProgressMeter()
     num_samples = 0
+
+    if not args.verbose:
+        progress_meter = ProgressMeter()
 
     # switch to train mode
     model.train()
@@ -385,8 +387,10 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
     data_time = AverageMeter()
     losses = AverageMeter()
     lossesLin = AverageMeter()
-    progress_meter = ProgressMeter()
     num_samples = 0
+
+    if not args.verbose:
+        progress_meter = ProgressMeter()
 
     # switch to evaluate mode
     model.eval()
@@ -573,10 +577,10 @@ class ProgressMeter(object):
             '[', progressbar.ETA(), ']',  # 7
             '[', 'RMSError', ']',  # 10
         ]
-        self.bar = ProgressBar(maxval=UnknownLength, widgets=self.widgets)
+        self.bar = ProgressBar(maxval=0, widgets=self.widgets)
         self.bar.start()
 
-    def update(self, value, max, label, error):
+    def update(self, value, maxval, label, error):
         # update label
         label = '{:5}'.format(label)
         if self.bar.widgets[0] != label:
@@ -588,8 +592,8 @@ class ProgressMeter(object):
             self.bar.widgets[10] = metric
 
         # update max_value
-        if self.bar.maxval != max:
-            self.bar.maxval = max
+        if self.bar.maxval != maxval:
+            self.bar.maxval = maxval
         # update value
         self.bar.update(value)
         # update finish
