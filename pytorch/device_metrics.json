@@ -112,10 +112,10 @@
         "ppi": 127
     },
     "Surface Pro 3": {
-        "xCameraToScreenDisplacementInCm": 6.5,
-        "yCameraToScreenDisplacementInCm": 0.325,
-        "widthScreenInCm": 25.4,
-        "heightScreenInCm": 16.9,
+        "xCameraToScreenDisplacementInCm": 12.8,
+        "yCameraToScreenDisplacementInCm": 0.65,
+        "widthScreenInCm": 25.45,
+        "heightScreenInCm": 17.05,
         "ppi": 216
     },
     "Surface Pro 4": {
