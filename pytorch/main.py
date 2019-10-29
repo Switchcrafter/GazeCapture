@@ -49,31 +49,6 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 OUTPUT_PATH = os.path.dirname(os.path.realpath(__file__))
 
 
-# widgets=[
-#         'Progress',#0
-#         ' ',#1
-#         progressbar.Bar(marker='■', left='|', right='|', fill='-'),#2
-#         progressbar.SimpleProgress(),#3
-#         '[',progressbar.ETA(),']', #5 
-#         '[','RMSError',']',#8
-#     ]
-# bar = progressbar.ProgressBar(max_value=progressbar.UnknownLength, widgets=widgets)
-# def progressbar_update(value, max, label, error):
-#     # update label
-#     label = '{:8}'.format(label)
-#     if bar.widgets[0] != label:
-#         bar.widgets[0] = label
-#     if bar.widgets[8] != error:
-#         bar.widgets[8] = error
-#     # update max_value
-#     if bar.max_value != max:
-#         bar.max_value = max
-#     # update value
-#     bar.update(value)
-#     # update finish
-#     if value >= bar.max_value:
-#         bar.finish()
-
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
