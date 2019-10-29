@@ -6,7 +6,6 @@ import sys  # for command line argument dumping
 import time
 from collections import OrderedDict
 from datetime import datetime  # for timing
-import progressbar
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -14,7 +13,7 @@ import torch.nn as nn
 import torch.nn.parallel
 import torch.optim
 import torch.utils.data
-from progressbar import ProgressBar, UnknownLength
+from progressbar import ProgressBar
 
 from ITrackerData import ITrackerData
 from ITrackerModel import ITrackerModel
@@ -165,8 +164,11 @@ def main():
         saved = load_checkpoint()
         if saved:
             print(
-                'Loading checkpoint for epoch %05d with loss %.5f (which is the mean squared error not the actual linear error)...' % (
-                    saved['epoch'], saved['best_prec1']))
+                'Loading checkpoint for epoch %05d with loss %.5f '
+                '(which is the mean squared error not the actual linear error)...' % (
+                    saved['epoch'],
+                    saved['best_prec1'])
+            )
 
             try:
                 state = saved['state_dict']
@@ -350,8 +352,8 @@ def train(train_loader, model, criterion, optimizer, epoch):
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'MSELoss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'RMSErr {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
-                epoch, batchNum, len(train_loader), batch_time=batch_time,
-                data_time=data_time, loss=losses, lossLin=lossesLin))
+                      epoch, batchNum, len(train_loader), batch_time=batch_time,
+                      data_time=data_time, loss=losses, lossLin=lossesLin))
         else:
             progress_meter.update(num_samples, data_size['train'], 'train', lossesLin.avg)
 
@@ -435,8 +437,8 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'MSELoss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'RMSErr {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
-                stage, epoch, batchNum, len(eval_loader), batch_time=batch_time,
-                loss=losses, lossLin=lossesLin))
+                      stage, epoch, batchNum, len(eval_loader), batch_time=batch_time,
+                      loss=losses, lossLin=lossesLin))
         else:
             progress_meter.update(num_samples, data_size[stage], stage, lossesLin.avg)
 
