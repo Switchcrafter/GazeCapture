@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.parallel
 import torch.optim
 import torch.utils.data
+from progressbar import ProgressBar, UnknownLength
 
 from ITrackerData import ITrackerData
 from ITrackerModel import ITrackerModel
@@ -143,9 +144,10 @@ count = 0
 
 dataset_size = args.dataset_size
 
+
 def main():
     global args, best_prec1, weight_decay, momentum, data_size
-    
+
     if args.verbose:
         print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
         print('')
@@ -190,52 +192,50 @@ def main():
             print(
                 'Loading checkpoint for epoch %05d with loss %.5f (which is the mean squared error not the actual linear error)...' % (
                     saved['epoch'], saved['best_prec1']))
-            state = saved['state_dict']
 
-            state = remove_module_from_state(state)
+            state = remove_module_from_state(saved)
 
             model.load_state_dict(state)
             epoch = saved['epoch']
             best_prec1 = saved['best_prec1']
         else:
             print('Warning: Could not read checkpoint!')
-    
+
     print('epoch = %d' % epoch)
-    
+
     totalstart_time = datetime.now()
-    
+
     # training data : model sees and learns from this data 
-    data_train = ITrackerData(dataPath, split='train', imSize=imSize, silent = not args.verbose)
+    data_train = ITrackerData(dataPath, split='train', imSize=imSize, silent=not args.verbose)
     # validation data : model sees but never learns from this data 
-    data_val = ITrackerData(dataPath, split='val', imSize=imSize, silent = not args.verbose)
+    data_val = ITrackerData(dataPath, split='val', imSize=imSize, silent=not args.verbose)
     # test data : model never sees or learns from this data 
-    data_test = ITrackerData(dataPath, split='test', imSize=imSize, silent = not args.verbose)
-    
-    data_size = {'train':len(data_train.indices), 'val':len(data_val.indices), 'test':len(data_test.indices)}
-    
+    data_test = ITrackerData(dataPath, split='test', imSize=imSize, silent=not args.verbose)
+
+    data_size = {'train': len(data_train.indices), 'val': len(data_val.indices), 'test': len(data_test.indices)}
+
     train_loader = torch.utils.data.DataLoader(
         data_train,
         batch_size=batch_size, shuffle=True,
         num_workers=workers, pin_memory=True)
-    
+
     val_loader = torch.utils.data.DataLoader(
         data_val,
         batch_size=batch_size, shuffle=False,
         num_workers=workers, pin_memory=True)
-    
+
     test_loader = torch.utils.data.DataLoader(
         data_test,
         batch_size=batch_size, shuffle=False,
         num_workers=workers, pin_memory=True)
-    
-    
-#     criterion = nn.MSELoss(reduction='sum').to(device=args.device)
+
+    #     criterion = nn.MSELoss(reduction='sum').to(device=args.device)
     criterion = nn.MSELoss(reduction='mean').to(device=args.device)
-    
+
     optimizer = torch.optim.SGD(model.parameters(), lr,
                                 momentum=momentum,
                                 weight_decay=weight_decay)
-    
+
     # Quick test
     if doTest:
         start_time = datetime.now()
@@ -251,7 +251,7 @@ def main():
         print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif exportONNX:
         export_onnx_model(val_loader, model)
-    else:#Train
+    else:  # Train
         # first cmake a learning_rate correction suitable for epoch from saved checkpoint
         # epoch will be non-zero if a checkpoint was loaded
         for epoch in range(1, epoch):
@@ -262,7 +262,7 @@ def main():
             if args.verbose:
                 time_elapsed = datetime.now() - start_time
                 print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-        
+
         # now start training from last best epoch
         for epoch in range(epoch, epochs):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
@@ -303,7 +303,7 @@ def main():
 def train(train_loader, model, criterion, optimizer, epoch):
     global count
     global dataset_size
-    global data_train
+
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -317,9 +317,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
     end = time.time()
 
     for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame) in enumerate(train_loader):
-        batchNum = i+1
+        batchNum = i + 1
         num_samples += imFace.size(0)
-        
+
         # measure data loading time
         data_time.update(time.time() - end)
         imFace = imFace.to(device=args.device)
@@ -336,18 +336,18 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         # compute output
         output = model(imFace, imEyeL, imEyeR, faceGrid)
-        
+
         loss = criterion(output, gaze)
-        
+
         lossLin = output - gaze
         lossLin = torch.mul(lossLin, lossLin)
         lossLin = torch.sum(lossLin, 1)
         # MSE vs RMS error
-#         lossLin = torch.sum(lossLin)
+        #         lossLin = torch.sum(lossLin)
         lossLin = torch.sum(torch.sqrt(lossLin))
 
         losses.update(loss.data.item(), imFace.size(0))
-        lossesLin.update(lossLin.item()/batch_size, imFace.size(0))
+        lossesLin.update(lossLin.item() / batch_size, imFace.size(0))
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -359,26 +359,28 @@ def train(train_loader, model, criterion, optimizer, epoch):
         end = time.time()
 
         count = count + 1
-        
+
         if args.verbose:
             print('Epoch (train): [{}][{}/{}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'MSELoss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'RMSErr {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
-                    epoch, batchNum, len(train_loader), batch_time=batch_time,
-                    data_time=data_time, loss=losses, lossLin=lossesLin))
+                epoch, batchNum, len(train_loader), batch_time=batch_time,
+                data_time=data_time, loss=losses, lossLin=lossesLin))
         else:
             progress_meter.update(num_samples, data_size['train'], 'train', lossesLin.avg)
-            
+
         if 0 < dataset_size < batchNum:
-            breakvalvalvalvalval
-    
+            break
+
     return lossesLin.avg
+
 
 def evaluate(eval_loader, model, criterion, epoch, stage):
     global count_test
     global dataset_size
+
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -393,9 +395,9 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
     results = []
 
     for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame) in enumerate(eval_loader):
-        batchNum = i+1
+        batchNum = i + 1
         num_samples += imFace.size(0)
-        
+
         # measure data loading time
         data_time.update(time.time() - end)
         imFace = imFace.to(device=args.device)
@@ -426,46 +428,49 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
 
         results += list(map(convertResult, r1))
         loss = criterion(output, gaze)
-        
+
         lossLin = output - gaze
         lossLin = torch.mul(lossLin, lossLin)
         lossLin = torch.sum(lossLin, 1)
         # MSE vs RMS error
-#         lossLin = torch.sum(lossLin)
+        #         lossLin = torch.sum(lossLin)
         lossLin = torch.sum(torch.sqrt(lossLin))
 
         losses.update(loss.data.item(), imFace.size(0))
-        lossesLin.update(lossLin.item()/batch_size, imFace.size(0))
+        lossesLin.update(lossLin.item() / batch_size, imFace.size(0))
 
         # compute gradient and do SGD step
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
-        
+
         if args.verbose:
             print('Epoch ({}): [{}][{}/{}]\t'
-              'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-              'MSELoss {loss.val:.4f} ({loss.avg:.4f})\t'
-              'RMSErr {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
+                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                  'MSELoss {loss.val:.4f} ({loss.avg:.4f})\t'
+                  'RMSErr {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
                 stage, epoch, batchNum, len(eval_loader), batch_time=batch_time,
                 loss=losses, lossLin=lossesLin))
         else:
             progress_meter.update(num_samples, data_size[stage], stage, lossesLin.avg)
-            
+
         if 0 < dataset_size < batchNum:
             break
-    
+
     resultsFileName = os.path.join(checkpointsPath, 'results.json')
     with open(resultsFileName, 'w+') as outfile:
         json.dump(results, outfile)
 
     return lossesLin.avg
 
+
 def validate(val_loader, model, criterion, epoch):
     return evaluate(val_loader, model, criterion, epoch, 'val')
 
+
 def test(test_loader, model, criterion, epoch):
     return evaluate(test_loader, model, criterion, epoch, 'test')
+
 
 def export_onnx_model(val_loader, model):
     global count_test
@@ -560,34 +565,35 @@ class AverageMeter(object):
 
 class ProgressMeter(object):
     def __init__(self):
-        self.widgets=[
-            'Progress',#0
-            ' ',#1
-            progressbar.Bar(marker='■', left='|', right='|', fill='-'),#2
-            '[',progressbar.SimpleProgress(),']',#4
-            '[',progressbar.ETA(),']', #7 
-            '[','RMSError',']',#10
+        self.widgets = [
+            'Progress',  # 0
+            ' ',  # 1
+            progressbar.Bar(marker='■', left='|', right='|', fill='-'),  # 2
+            '[', progressbar.SimpleProgress(), ']',  # 4
+            '[', progressbar.ETA(), ']',  # 7
+            '[', 'RMSError', ']',  # 10
         ]
-        self.bar = progressbar.ProgressBar(max_value=progressbar.UnknownLength, widgets=self.widgets)
-     
+        self.bar = ProgressBar(maxval=UnknownLength, widgets=self.widgets)
+        self.bar.start()
+
     def update(self, value, max, label, error):
         # update label
         label = '{:5}'.format(label)
         if self.bar.widgets[0] != label:
             self.bar.widgets[0] = label
-        
-        #update metric
+
+        # update metric
         metric = '{metric:.4f}'.format(metric=error)
         if self.bar.widgets[10] != metric:
             self.bar.widgets[10] = metric
-        
+
         # update max_value
-        if self.bar.max_value != max:
-            self.bar.max_value = max
+        if self.bar.maxval != max:
+            self.bar.maxval = max
         # update value
         self.bar.update(value)
         # update finish
-        if value >= self.bar.max_value:
+        if value >= self.bar.maxval:
             self.bar.finish()
 
 

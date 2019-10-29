@@ -97,11 +97,11 @@ class NormalizeImage:
 
 
 class ITrackerData(data.Dataset):
-    def __init__(self, dataPath, split='train', image_size=(224, 224), grid_size=(25, 25), silent=False):
+    def __init__(self, dataPath, split='train', imSize=(224, 224), gridSize=(25, 25), silent=False):
 
         self.dataPath = dataPath
-        self.image_size = image_size
-        self.grid_size = grid_size
+        self.imSize = imSize
+        self.gridSize = gridSize
 
         print('Loading iTracker dataset...')
         metadata_file = os.path.join(dataPath, 'metadata.mat')
@@ -112,7 +112,7 @@ class ITrackerData(data.Dataset):
         if self.metadata is None:
             raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % metadata_file)
 
-        self.normalize_image = NormalizeImage(image_size=self.image_size)
+        self.normalize_image = NormalizeImage(image_size=self.imSize)
 
         if split == 'test':
             mask = self.metadata['labelTest']
