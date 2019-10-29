@@ -214,13 +214,13 @@ def main():
     # Quick test
     if doTest:
         start_time = datetime.now()
-        precision = test(test_loader, model, criterion, epoch=0)
+        precision = test(test_loader, model, criterion, epoch=1)
         time_elapsed = datetime.now() - start_time
         print('Testing loss %.5f' % precision)
         print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif doValidate:
         start_time = datetime.now()
-        precision = validate(val_loader, model, criterion, epoch=0)
+        precision = validate(val_loader, model, criterion, epoch=1)
         time_elapsed = datetime.now() - start_time
         print('Validation loss %.5f' % precision)
         print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
@@ -348,7 +348,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         else:
             progress_meter.update(num_samples, data_size['train'], 'train', lossesLin.avg)
 
-        if 0 < dataset_size < batchNum:
+        if 0 < dataset_size < batchNum - 1:
             break
 
     return lossesLin.avg
@@ -433,7 +433,7 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
         else:
             progress_meter.update(num_samples, data_size[stage], stage, lossesLin.avg)
 
-        if 0 < dataset_size < batchNum:
+        if 0 < dataset_size < batchNum - 1:
             break
 
     resultsFileName = os.path.join(checkpointsPath, 'results.json')
@@ -547,7 +547,7 @@ class ProgressMeter(object):
         self.widgets = [
             'Progress',  # 0
             ' ',  # 1
-            progressbar.Bar(marker='■', left='|', right='|', fill='-'),  # 2
+            progressbar.Bar(marker='X', left='|', right='|', fill='-'),  # 2
             '[', progressbar.SimpleProgress(), ']',  # 4
             '[', progressbar.ETA(), ']',  # 7
             '[', 'RMSError', ']',  # 10
