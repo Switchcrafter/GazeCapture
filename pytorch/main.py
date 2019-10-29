@@ -168,9 +168,16 @@ def main():
                 'Loading checkpoint for epoch %05d with loss %.5f (which is the mean squared error not the actual linear error)...' % (
                     saved['epoch'], saved['best_prec1']))
 
-            state = remove_module_from_state(saved)
+            try:
+                state = saved['state_dict']
+                model.load_state_dict(state)
+            except RuntimeError:
+                # The most likely cause of a failure to load is that there is a leading "module." from training. This is
+                # normal for models trained with DataParallel. If not using DataParallel, then the "module." needs to be
+                # removed.
+                state = remove_module_from_state(saved)
+                model.load_state_dict(state)
 
-            model.load_state_dict(state)
             epoch = saved['epoch']
             best_prec1 = saved['best_prec1']
         else:
