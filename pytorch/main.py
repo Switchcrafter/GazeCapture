@@ -6,7 +6,7 @@ import sys  # for command line argument dumping
 import time
 from collections import OrderedDict
 from datetime import datetime  # for timing
-import progressbar
+# import progressbar
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -46,32 +46,6 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 '''
 
 OUTPUT_PATH = os.path.dirname(os.path.realpath(__file__))
-
-
-# widgets=[
-#         'Progress',#0
-#         ' ',#1
-#         progressbar.Bar(marker='■', left='|', right='|', fill='-'),#2
-#         progressbar.SimpleProgress(),#3
-#         '[',progressbar.ETA(),']', #5 
-#         '[','RMSError',']',#8
-#     ]
-# bar = progressbar.ProgressBar(max_value=progressbar.UnknownLength, widgets=widgets)
-# def progressbar_update(value, max, label, error):
-#     # update label
-#     label = '{:8}'.format(label)
-#     if bar.widgets[0] != label:
-#         bar.widgets[0] = label
-#     if bar.widgets[8] != error:
-#         bar.widgets[8] = error
-#     # update max_value
-#     if bar.max_value != max:
-#         bar.max_value = max
-#     # update value
-#     bar.update(value)
-#     # update finish
-#     if value >= bar.max_value:
-#         bar.finish()
 
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -310,11 +284,13 @@ def train(train_loader, model, criterion, optimizer, epoch):
     global count
     global dataset_size
     global data_train
+    stage = 'train'
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
     lossesLin = AverageMeter()
     progress_meter = ProgressMeter()
+    progress_meter = ProgressMeter(max_value=data_size[stage], label=stage)
     num_samples = 0
 
     # switch to train mode
@@ -375,7 +351,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
                     epoch, batchNum, len(train_loader), batch_time=batch_time,
                     data_time=data_time, loss=losses, lossLin=lossesLin))
         else:
-            progress_meter.update(num_samples, data_size['train'], 'train', lossesLin.avg)
+            progress_meter.update(num_samples, lossesLin.avg)
             
         if 0 < dataset_size < batchNum:
             breakvalvalvalvalval
@@ -389,7 +365,7 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
     data_time = AverageMeter()
     losses = AverageMeter()
     lossesLin = AverageMeter()
-    progress_meter = ProgressMeter()
+    progress_meter = ProgressMeter(max_value=data_size[stage], label=stage)
     num_samples = 0
 
     # switch to evaluate mode
@@ -456,7 +432,7 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
                 stage, epoch, batchNum, len(eval_loader), batch_time=batch_time,
                 loss=losses, lossLin=lossesLin))
         else:
-            progress_meter.update(num_samples, data_size[stage], stage, lossesLin.avg)
+            progress_meter.update(num_samples, lossesLin.avg)
             
         if 0 < dataset_size < batchNum:
             break
@@ -551,49 +527,79 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
-
 class ProgressMeter(object):
-    def __init__(self):
-        self.widgets=[
-            'Progress',#0
-            ' ',#1
-            progressbar.Bar(marker='■', left='|', right='|', fill='-'),#2
-            '[',progressbar.SimpleProgress(),']',#4
-            '[',progressbar.ETA(),']', #7 
-            '[','RMSError',']',#10
-        ]
-        self.bar = progressbar.ProgressBar(max_value=progressbar.UnknownLength, widgets=self.widgets)
-     
-    def update(self, value, max, label, error):
-        # update label
-        label = '{:5}'.format(label)
-        if self.bar.widgets[0] != label:
-            self.bar.widgets[0] = label
+    '''A progress bar which stretches to fill the line.'''
+    def __init__(self, max_value=100, label='', marker='#', left='|', right='|', arror = '>', fill='-'):
+        '''Creates a customizable progress bar.
+        max_value - max possible value for the progressbar
+        label - title for the progressbar as prefix
+        marker - string or callable object to use as a marker
+        left - string or callable object to use as a left border
+        right - string or callable object to use as a right border
+        fill - character to use for the empty part of the progress bar
+        '''
+        self.label = label
+        self.left = '|'
+        self.marker = '■' # alt: '#'
+        self.arrow = '▶' # alt: '>'
+        self.right = '|'
+        self.fill = '-'
+        self.max_value = max_value
+        self.start_time = datetime.now()
+    
+    def create_marker(self, value, width):
+        if self.max_value > 0:
+            length = int(value / self.max_value * width)
+            if length == width:
+                return (self.marker * length)
+            elif length == 0:
+                return ''
+            else:
+                marker = (self.marker * (length-1)) + self.arrow
+        else:
+            marker = self.marker
+        return marker
+    
+    def getTerminalWidth(self):
+        import shutil
+        size_tuple = shutil.get_terminal_size((80, 20))  # pass fallback
+        return size_tuple.columns
+    
+    def update(self, value, metric):
+        '''Updates the progress bar and its subcomponents'''
+        if metric:
+            metric = '{metric:.4f}'.format(metric=metric)
+        else:
+            metric = ''
         
-        #update metric
-        metric = '{metric:.4f}'.format(metric=error)
-        if self.bar.widgets[10] != metric:
-            self.bar.widgets[10] = metric
-        
-        # update max_value
-        if self.bar.max_value != max:
-            self.bar.max_value = max
-        # update value
-        self.bar.update(value)
-        # update finish
-        if value >= self.bar.max_value:
-            self.bar.finish()
-
-
+        time_elapsed = ' [Time: '+str(datetime.now() - self.start_time)+']'
+        assert( value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value ('+ str(self.max_value)+').'
+        width = self.getTerminalWidth() - (len(self.label)+len(self.left)+len(self.right)+len(metric)+len(time_elapsed))
+        marker = self.create_marker(value, width).ljust(width, self.fill)
+        marker = self.left + marker + self.right 
+        # append infoString at the center
+        infoString = ' {val:d}/{max:d} ({percent:d}%) '.format(val=value, max=self.max_value, percent=int(value/self.max_value*100))
+        index = (len(marker)-len(infoString))//2
+        marker = marker[:index] + infoString + marker[index + len(infoString):]
+        print('\r'+self.label + marker + metric + time_elapsed, end='')
+    
+    
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
     lr = base_lr * (0.1 ** (epoch // 30))
     for param_group in optimizer.state_dict()['param_groups']:
         param_group['lr'] = lr
+    
 
+def cleanup_stop_thread():
+    print('Thread is killed.')
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (KeyboardInterrupt, SystemExit):
+        cleanup_stop_thread()
+        sys.exit()
     print('')
     print('DONE')
     print('')
