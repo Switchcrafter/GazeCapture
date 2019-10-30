@@ -33,7 +33,7 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 MEAN_PATH = os.path.dirname(os.path.realpath(__file__))
 
 
-def loadMetadata(filename, silent = False):
+def loadMetadata(filename, silent=False):
     try:
         # http://stackoverflow.com/questions/6273634/access-array-contents-from-a-mat-file-loaded-using-scipy-io-loadmat-python
         if not silent:
@@ -58,7 +58,7 @@ class SubtractMean(object):
             tensor (Tensor): Tensor image of size (C, H, W) to be normalized.
         Returns:
             Tensor: Normalized image.
-        """       
+        """
         return tensor.sub(self.meanImg)
 
 
@@ -66,9 +66,9 @@ class NormalizeImage:
     def __init__(self, image_size=(224, 224)):
         self.image_size = image_size
 
-        self.mean_face = loadMetadata(os.path.join(MEAN_PATH, 'mean_face_224.mat'))['image_mean']
-        self.mean_left = loadMetadata(os.path.join(MEAN_PATH, 'mean_left_224.mat'))['image_mean']
-        self.mean_right = loadMetadata(os.path.join(MEAN_PATH, 'mean_right_224.mat'))['image_mean']
+        self.mean_face = loadMetadata(os.path.join(MEAN_PATH, 'mean_face_224.mat'), silent=True)['image_mean']
+        self.mean_left = loadMetadata(os.path.join(MEAN_PATH, 'mean_left_224.mat'), silent=True)['image_mean']
+        self.mean_right = loadMetadata(os.path.join(MEAN_PATH, 'mean_right_224.mat'), silent=True)['image_mean']
 
         self.transform_face = transforms.Compose([
             transforms.Resize(self.image_size),
@@ -108,7 +108,7 @@ class ITrackerData(data.Dataset):
 
         if metadata_file is None or not os.path.isfile(metadata_file):
             raise RuntimeError('There is no such file %s! Provide a valid dataset path.' % metadata_file)
-        self.metadata = loadMetadata(metadata_file)
+        self.metadata = loadMetadata(metadata_file, silent=True)
         if self.metadata is None:
             raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % metadata_file)
 
@@ -123,7 +123,7 @@ class ITrackerData(data.Dataset):
         else:
             raise Exception('split should be test, val or train. The value of split was: {}'.format(split))
 
-        self.indices = np.argwhere(mask)[:,0]
+        self.indices = np.argwhere(mask)[:, 0]
         print('Loaded iTracker dataset split "%s" with %d records...' % (split, len(self.indices)))
 
     def loadImage(self, path):
@@ -138,11 +138,11 @@ class ITrackerData(data.Dataset):
     def makeGrid(self, params):
         gridLen = self.gridSize[0] * self.gridSize[1]
         grid = np.zeros([gridLen, ], np.float32)
-        
+
         indsY = np.array([i // self.gridSize[0] for i in range(gridLen)])
         indsX = np.array([i % self.gridSize[0] for i in range(gridLen)])
-        condX = np.logical_and(indsX >= params[0], indsX < params[0] + params[2]) 
-        condY = np.logical_and(indsY >= params[1], indsY < params[1] + params[3]) 
+        condX = np.logical_and(indsX >= params[0], indsX < params[0] + params[2])
+        condY = np.logical_and(indsY >= params[1], indsY < params[1] + params[3])
         cond = np.logical_and(condX, condY)
 
         grid[cond] = 1
@@ -180,6 +180,6 @@ class ITrackerData(data.Dataset):
         gaze = torch.FloatTensor(gaze)
 
         return row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame
-        
+
     def __len__(self):
         return len(self.indices)
