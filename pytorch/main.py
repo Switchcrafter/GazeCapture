@@ -113,9 +113,6 @@ prec1 = 0
 best_prec1 = 1e20
 lr = base_lr
 
-count_test = 0
-count = 0
-
 dataset_size = args.dataset_size
 
 
@@ -285,7 +282,6 @@ def main():
 
 
 def train(train_loader, model, criterion, optimizer, epoch):
-    global count
     global dataset_size
 
     batch_time = AverageMeter()
@@ -344,8 +340,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        count = count + 1
-
         if args.verbose:
             print('Epoch (train): [{}][{}/{}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
@@ -357,14 +351,13 @@ def train(train_loader, model, criterion, optimizer, epoch):
         else:
             progress_meter.update(num_samples, data_size['train'], 'train', lossesLin.avg)
 
-        if 0 < dataset_size < batchNum - 1:
+        if 0 < dataset_size <= batchNum:
             break
 
     return lossesLin.avg
 
 
 def evaluate(eval_loader, model, criterion, epoch, stage):
-    global count_test
     global dataset_size
 
     batch_time = AverageMeter()
@@ -378,6 +371,7 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
 
     # switch to evaluate mode
     model.eval()
+
     end = time.time()
 
     results = []
@@ -442,7 +436,7 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
         else:
             progress_meter.update(num_samples, data_size[stage], stage, lossesLin.avg)
 
-        if 0 < dataset_size < batchNum - 1:
+        if 0 < dataset_size <= batchNum:
             break
 
     resultsFileName = os.path.join(checkpointsPath, 'results.json')
@@ -461,9 +455,6 @@ def test(test_loader, model, criterion, epoch):
 
 
 def export_onnx_model(val_loader, model):
-    global count_test
-    global dataset_size
-
     # switch to evaluate mode
     model.eval()
 
@@ -483,13 +474,22 @@ def export_onnx_model(val_loader, model):
     in_names = ["faces", "eyesLeft", "eyesRight", "faceGrids"]
     out_names = ["x"]
 
-    torch.onnx.export(model.module,
-                      dummy_in,
-                      "itracker.onnx",
-                      input_names=in_names,
-                      output_names=out_names,
-                      opset_version=7,
-                      verbose=True)
+    try:
+        torch.onnx.export(model.module,
+                          dummy_in,
+                          "itracker.onnx",
+                          input_names=in_names,
+                          output_names=out_names,
+                          opset_version=7,
+                          verbose=True)
+    except AttributeError:
+        torch.onnx.export(model,
+                          dummy_in,
+                          "itracker.onnx",
+                          input_names=in_names,
+                          output_names=out_names,
+                          opset_version=7,
+                          verbose=True)
 
 
 def load_checkpoint(filename='checkpoint.pth.tar'):
