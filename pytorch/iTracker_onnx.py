@@ -11,20 +11,15 @@ from imutils import face_utils
 from screeninfo import get_monitors
 
 from ITrackerData import NormalizeImage
-from ITrackerModel import ITrackerModel
 from cam2screen import cam2screen
+
+import onnxruntime
 
 MEAN_PATH = '.'
 
 
 def main():
-    model = ITrackerModel().to(device='cpu')
-    saved = torch.load('checkpoint.pth.tar', map_location='cpu')
-
-    state = remove_module_from_state(saved)
-
-    model.load_state_dict(state)
-    model.eval()
+    session = onnxruntime.InferenceSession('itracker.onnx')
 
     monitor = get_monitors()[0]
 
@@ -122,13 +117,13 @@ def main():
             imFace = normalize_image.face(image=imFace)
             imEyeL = normalize_image.eye_left(image=imEyeL)
             imEyeR = normalize_image.eye_right(image=imEyeR)
-            faceGrid = torch.FloatTensor(face_grid)
+            faceGrid = torch.FloatTensor(faceGrid)
 
             # convert the 3 dimensional array into a 4 dimensional array, making it a batch size of 1
             imFace.unsqueeze_(0)
             imEyeL.unsqueeze_(0)
             imEyeR.unsqueeze_(0)
-            face_grid.unsqueeze_(0)
+            faceGrid.unsqueeze_(0)
 
             imFace = torch.autograd.Variable(imFace, requires_grad=False)
             imEyeL = torch.autograd.Variable(imEyeL, requires_grad=False)
@@ -139,24 +134,31 @@ def main():
             with torch.no_grad():
                 start_time = datetime.now()
 
-                output = model(imFace, imEyeL, imEyeR, faceGrid)
-                gaze_prediction_np = output.numpy()[0]
+                output = session.run(None,
+                                     {"face": imFace.numpy(),
+                                      "eyesLeft": imEyeL.numpy(),
+                                      "eyesRight": imEyeR.numpy(),
+                                      "faceGrid": faceGrid.numpy()})
+                print(output[0])
+                gaze_prediction = (output[0])[0]
 
                 time_elapsed = datetime.now() - start_time
-                print('GazePrediction(cam) - {} - time elapsed {}'.format(gaze_prediction_np, time_elapsed))
+                print('GazePrediction(cam) - {} - time elapsed {}'.format(gaze_prediction, time_elapsed))
 
                 (gazePredictionScreenPixelXFromCamera, gazePredictionScreenPixelYFromCamera) = cam2screen(
-                    gaze_prediction_np[0],
-                    gaze_prediction_np[1],
+                    gaze_prediction[0],
+                    gaze_prediction[1],
                     1,
                     monitor.width,
                     monitor.height,
                     deviceName="Alienware 51m"
                 )
 
-                print('GazePrediction(screen) - {}, {}'.format(gazePredictionScreenPixelXFromCamera, gazePredictionScreenPixelYFromCamera))
+                print('GazePrediction(screen) - {}, {}'.format(gazePredictionScreenPixelXFromCamera,
+                                                               gazePredictionScreenPixelYFromCamera))
                 cam_2_screen = np.zeros((monitor.height, monitor.width, 1), dtype=np.uint8)
-                cam_2_screen[int(gazePredictionScreenPixelYFromCamera)][int(gazePredictionScreenPixelXFromCamera)][0] = 255
+                cam_2_screen[int(gazePredictionScreenPixelYFromCamera)][int(gazePredictionScreenPixelXFromCamera)][
+                    0] = 255
 
                 cv2.imshow("display", cam_2_screen)
 
