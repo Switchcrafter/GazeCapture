@@ -117,7 +117,7 @@ def main():
             imFace = normalize_image.face(image=imFace)
             imEyeL = normalize_image.eye_left(image=imEyeL)
             imEyeR = normalize_image.eye_right(image=imEyeR)
-            faceGrid = torch.FloatTensor(faceGrid)
+            faceGrid = torch.FloatTensor(face_grid)
 
             # convert the 3 dimensional array into a 4 dimensional array, making it a batch size of 1
             imFace.unsqueeze_(0)
