@@ -128,7 +128,7 @@ def main():
             imFace.unsqueeze_(0)
             imEyeL.unsqueeze_(0)
             imEyeR.unsqueeze_(0)
-            face_grid.unsqueeze_(0)
+            faceGrid.unsqueeze_(0)
 
             imFace = torch.autograd.Variable(imFace, requires_grad=False)
             imEyeL = torch.autograd.Variable(imEyeL, requires_grad=False)
