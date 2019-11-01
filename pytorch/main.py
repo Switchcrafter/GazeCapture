@@ -6,7 +6,7 @@ import sys  # for command line argument dumping
 import time
 from collections import OrderedDict
 from datetime import datetime  # for timing
-# import progressbar
+import shutil
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -73,6 +73,7 @@ parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=Fal
                     help="Start from scratch (do not load).")
 parser.add_argument('--epochs', type=int, default=25)
 parser.add_argument('--workers', type=int, default=16)
+parser.add_argument('--batch_size', type=int, default=100)
 parser.add_argument('--dataset_size', type=int, default=0)
 parser.add_argument('--exportONNX', type=str2bool, nargs='?', const=True, default=False)
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
@@ -99,10 +100,11 @@ saveCheckpoints = args.save_checkpoints
 workers = args.workers
 epochs = args.epochs
 
-if usingCuda and torch.cuda.device_count() > 0:
-    batch_size = torch.cuda.device_count() * 100  # Change if out of cuda memory
-else:
-    batch_size = 5
+batch_size = args.batch_size
+# if usingCuda and torch.cuda.device_count() > 0:
+#     batch_size = torch.cuda.device_count() * 100  # Change if out of cuda memory
+# else:
+#     batch_size = 5
 
 base_lr = 0.001
 momentum = 0.9
@@ -254,7 +256,7 @@ def main():
             train_error = train(train_loader, model, criterion, optimizer, epoch)
 
             # evaluate on validation set
-            prec1 = validate(test_loader, model, criterion, epoch)
+            prec1 = validate(val_loader, model, criterion, epoch)
 
             # remember best prec@1 and save checkpoint
             is_best = prec1 < best_prec1
@@ -309,13 +311,13 @@ def train(train_loader, model, criterion, optimizer, epoch):
         imEyeR = imEyeR.to(device=args.device)
         faceGrid = faceGrid.to(device=args.device)
         gaze = gaze.to(device=args.device)
-
+        
         imFace = torch.autograd.Variable(imFace, requires_grad=True)
         imEyeL = torch.autograd.Variable(imEyeL, requires_grad=True)
         imEyeR = torch.autograd.Variable(imEyeR, requires_grad=True)
         faceGrid = torch.autograd.Variable(faceGrid, requires_grad=True)
         gaze = torch.autograd.Variable(gaze, requires_grad=False)
-
+        
         # compute output
         output = model(imFace, imEyeL, imEyeR, faceGrid)
         
@@ -324,22 +326,22 @@ def train(train_loader, model, criterion, optimizer, epoch):
         lossLin = output - gaze
         lossLin = torch.mul(lossLin, lossLin)
         lossLin = torch.sum(lossLin, 1)
-        # MSE vs RMS error
-#         lossLin = torch.sum(lossLin)
-        lossLin = torch.sum(torch.sqrt(lossLin))
-
+        # MS vs RMS Distance
+#         lossLin = torch.sum(lossLin) #MSDistance
+        lossLin = torch.sum(torch.sqrt(lossLin)) #RMSDistance
+        
         losses.update(loss.data.item(), imFace.size(0))
         lossesLin.update(lossLin.item()/batch_size, imFace.size(0))
-
+        
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
+        
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
-
+        
         count = count + 1
         
         if args.verbose:
@@ -385,27 +387,27 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
         imEyeR = imEyeR.to(device=args.device)
         faceGrid = faceGrid.to(device=args.device)
         gaze = gaze.to(device=args.device)
-
+        
         imFace = torch.autograd.Variable(imFace, requires_grad=False)
         imEyeL = torch.autograd.Variable(imEyeL, requires_grad=False)
         imEyeR = torch.autograd.Variable(imEyeR, requires_grad=False)
         faceGrid = torch.autograd.Variable(faceGrid, requires_grad=False)
         gaze = torch.autograd.Variable(gaze, requires_grad=False)
-
+        
         # compute output
         with torch.no_grad():
             output = model(imFace, imEyeL, imEyeR, faceGrid)
-
+        
         # Combine the tensor results together into a colated list so that we have the gazePoint and gazePrediction for each frame
         f1 = frame.cpu().numpy().tolist()
         g1 = gaze.cpu().numpy().tolist()
         o1 = output.cpu().numpy().tolist()
         r1 = [list(r) for r in zip(f1, g1, o1)]
-
+        
         def convertResult(result):
             r = {'frame': result[0], 'gazePoint': result[1], 'gazePrediction': result[2]}
             return r
-
+        
         results += list(map(convertResult, r1))
         loss = criterion(output, gaze)
         
@@ -415,10 +417,10 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
         # MSE vs RMS error
 #         lossLin = torch.sum(lossLin)
         lossLin = torch.sum(torch.sqrt(lossLin))
-
+        
         losses.update(loss.data.item(), imFace.size(0))
         lossesLin.update(lossLin.item()/batch_size, imFace.size(0))
-
+        
         # compute gradient and do SGD step
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -440,7 +442,7 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
     resultsFileName = os.path.join(checkpointsPath, 'results.json')
     with open(resultsFileName, 'w+') as outfile:
         json.dump(results, outfile)
-
+    
     return lossesLin.avg
 
 def validate(val_loader, model, criterion, epoch):
@@ -538,7 +540,7 @@ class ProgressMeter(object):
         right - string or callable object to use as a right border
         fill - character to use for the empty part of the progress bar
         '''
-        self.label = label
+        self.label = '{:5}'.format(label)
         self.left = '|'
         self.marker = '■' # alt: '#'
         self.arrow = '▶' # alt: '>'
@@ -561,8 +563,9 @@ class ProgressMeter(object):
         return marker
     
     def getTerminalWidth(self):
-        import shutil
-        size_tuple = shutil.get_terminal_size((80, 20))  # pass fallback
+        default_width = 80
+        default_height = 20
+        size_tuple = shutil.get_terminal_size((default_width, default_height))  # pass fallback
         return size_tuple.columns
     
     def update(self, value, metric):
@@ -573,6 +576,7 @@ class ProgressMeter(object):
             metric = ''
         
         time_elapsed = ' [Time: '+str(datetime.now() - self.start_time)+']'
+#         value = min(value, self.max_value)
         assert( value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value ('+ str(self.max_value)+').'
         width = self.getTerminalWidth() - (len(self.label)+len(self.left)+len(self.right)+len(metric)+len(time_elapsed))
         marker = self.create_marker(value, width).ljust(width, self.fill)
@@ -581,7 +585,8 @@ class ProgressMeter(object):
         infoString = ' {val:d}/{max:d} ({percent:d}%) '.format(val=value, max=self.max_value, percent=int(value/self.max_value*100))
         index = (len(marker)-len(infoString))//2
         marker = marker[:index] + infoString + marker[index + len(infoString):]
-        print('\r'+self.label + marker + metric + time_elapsed, end='')
+        print('\r'+self.label + marker + metric + time_elapsed, end= '' if value < self.max_value else '\n')
+        
     
     
 def adjust_learning_rate(optimizer, epoch):
