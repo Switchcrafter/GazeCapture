@@ -17,6 +17,7 @@ import torch.utils.data
 
 from ITrackerData import ITrackerData
 from ITrackerModel import ITrackerModel
+from AdaptiveWeightedRandomSampler import AdaptiveWeightedRandomSampler
 
 try:
     from azureml.core.run import Run
@@ -26,7 +27,7 @@ except ImportError:
 '''
 Train/test code for iTracker.
 
-Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018. 
+Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018.
 
 Website: http://gazecapture.csail.mit.edu/
 
@@ -79,6 +80,7 @@ parser.add_argument('--exportONNX', type=str2bool, nargs='?', const=True, defaul
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('--verbose', type=str2bool, nargs='?', const=True, default=False,
                     help="verbose mode - print details every batch")
+parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
 args = parser.parse_args()
 args.device = None
 usingCuda = False
@@ -120,8 +122,9 @@ count = 0
 dataset_size = args.dataset_size
 
 def main():
-    global args, best_prec1, weight_decay, momentum, data_size
-    
+    global args, best_prec1, weight_decay, momentum, data_size, multinomial_weights
+    global sampler
+
     if args.verbose:
         print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
         print('')
@@ -181,53 +184,69 @@ def main():
             best_prec1 = saved['best_prec1']
         else:
             print('Warning: Could not read checkpoint!')
-    
+
     print('epoch = %d' % epoch)
-    
+
     totalstart_time = datetime.now()
-    
-    # training data : model sees and learns from this data 
+
+    # Dataset
+    # training data : model sees and learns from this data
     data_train = ITrackerData(dataPath, split='train', imSize=imSize, silent = not args.verbose)
-    # validation data : model sees but never learns from this data 
+    # validation data : model sees but never learns from this data
     data_val = ITrackerData(dataPath, split='val', imSize=imSize, silent = not args.verbose)
-    # test data : model never sees or learns from this data 
+    # test data : model never sees or learns from this data
     data_test = ITrackerData(dataPath, split='test', imSize=imSize, silent = not args.verbose)
-    
+
     data_size = {'train':len(data_train.indices), 'val':len(data_val.indices), 'test':len(data_test.indices)}
-    
+
+    # Sampling Strategy
+    # sampler = torch.utils.data.RandomSampler(data_train, replacement=False, num_samples=None)
+    # sampler = torch.utils.data.SequentialSampler(data_train)
+    # sampler = torch.utils.data.WeightedRandomSampler(samples_weight, int(len(samples_weight)))
+
+    init_loss_value = 100.0
+    multinomial_weights = torch.ones(len(data_train), dtype=torch.double)*init_loss_value
+    sampler = AdaptiveWeightedRandomSampler(multinomial_weights, int(len(multinomial_weights)))
+    # Batch sampling
+    # batch_sampler = torch.utils.data.BatchSampler(sampler, batch_size, drop_last=False)
+
+    # Dataloader using the sampling strategy
+    # train_loader = torch.utils.data.DataLoader(
+    #     data_train,
+    #     batch_sampler=batch_sampler,
+    #     num_workers=workers)
+
     train_loader = torch.utils.data.DataLoader(
         data_train,
-        batch_size=batch_size, shuffle=True,
-        num_workers=workers, pin_memory=True)
-    
+        batch_size=batch_size, sampler=sampler,
+        num_workers=workers)
+
     val_loader = torch.utils.data.DataLoader(
         data_val,
         batch_size=batch_size, shuffle=False,
         num_workers=workers, pin_memory=True)
-    
+
     test_loader = torch.utils.data.DataLoader(
         data_test,
         batch_size=batch_size, shuffle=False,
         num_workers=workers, pin_memory=True)
-    
-    
-#     criterion = nn.MSELoss(reduction='sum').to(device=args.device)
+
     criterion = nn.MSELoss(reduction='mean').to(device=args.device)
-    
+
     optimizer = torch.optim.SGD(model.parameters(), lr,
                                 momentum=momentum,
                                 weight_decay=weight_decay)
-    
+
     # Quick test
     if doTest:
         start_time = datetime.now()
-        precision = test(test_loader, model, criterion, epoch=0)
+        precision = test(test_loader, model, criterion, epoch=1)
         time_elapsed = datetime.now() - start_time
         print('Testing loss %.5f' % (precision))
         print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif doValidate:
         start_time = datetime.now()
-        precision = validate(val_loader, model, criterion, epoch=0)
+        precision = validate(val_loader, model, criterion, epoch=1)
         time_elapsed = datetime.now() - start_time
         print('Validation loss %.5f' % (precision))
         print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
@@ -244,7 +263,7 @@ def main():
             if args.verbose:
                 time_elapsed = datetime.now() - start_time
                 print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-        
+
         # now start training from last best epoch
         for epoch in range(epoch, epochs):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
@@ -286,12 +305,16 @@ def train(train_loader, model, criterion, optimizer, epoch):
     global count
     global dataset_size
     global data_train
+    global multinomial_weights
+    global sampler
+
     stage = 'train'
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
     lossesLin = AverageMeter()
-    progress_meter = ProgressMeter()
+
+    # todo: init only for verbose disabled
     progress_meter = ProgressMeter(max_value=data_size[stage], label=stage)
     num_samples = 0
 
@@ -300,10 +323,15 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
     end = time.time()
 
-    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame) in enumerate(train_loader):
+    if args.hsm:
+        sampling_meter = SamplingMeter('HSM')
+        sampling_meter.display(multinomial_weights)
+        sampler.update(multinomial_weights)
+
+    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(train_loader):
         batchNum = i+1
         num_samples += imFace.size(0)
-        
+
         # measure data loading time
         data_time.update(time.time() - end)
         imFace = imFace.to(device=args.device)
@@ -311,39 +339,48 @@ def train(train_loader, model, criterion, optimizer, epoch):
         imEyeR = imEyeR.to(device=args.device)
         faceGrid = faceGrid.to(device=args.device)
         gaze = gaze.to(device=args.device)
-        
+
         imFace = torch.autograd.Variable(imFace, requires_grad=True)
         imEyeL = torch.autograd.Variable(imEyeL, requires_grad=True)
         imEyeR = torch.autograd.Variable(imEyeR, requires_grad=True)
         faceGrid = torch.autograd.Variable(faceGrid, requires_grad=True)
         gaze = torch.autograd.Variable(gaze, requires_grad=False)
-        
+
         # compute output
         output = model(imFace, imEyeL, imEyeR, faceGrid)
-        
+
         loss = criterion(output, gaze)
-        
+
         lossLin = output - gaze
         lossLin = torch.mul(lossLin, lossLin)
-        lossLin = torch.sum(lossLin, 1)
-        # MS vs RMS Distance
-#         lossLin = torch.sum(lossLin) #MSDistance
-        lossLin = torch.sum(torch.sqrt(lossLin)) #RMSDistance
-        
+        lossLin = torch.sum(lossLin, 1) #MSDistance
+        lossLin = torch.sqrt(lossLin) #RMSDistance
+
+        if args.hsm:
+            # update sample weights to be the loss, so that harder samples have larger chances to be drawn in the next epoch
+            # multinomial_weights[indices] = lossLin.detach().cpu()
+            # print(len(multinomial_weights))
+            # print(indices)
+            print([idx for idx in indices if idx > len(multinomial_weights)])
+            # print(multinomial_weights[indices])
+
+        # average over the batch
+        lossLin = torch.sum(lossLin)
+
         losses.update(loss.data.item(), imFace.size(0))
         lossesLin.update(lossLin.item()/batch_size, imFace.size(0))
-        
+
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        
+
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
-        
+
         count = count + 1
-        
+
         if args.verbose:
             print('Epoch (train): [{}][{}/{}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
@@ -354,10 +391,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
                     data_time=data_time, loss=losses, lossLin=lossesLin))
         else:
             progress_meter.update(num_samples, lossesLin.avg)
-            
+
         if 0 < dataset_size < batchNum:
-            breakvalvalvalvalval
-    
+            break
+
     return lossesLin.avg
 
 def evaluate(eval_loader, model, criterion, epoch, stage):
@@ -376,10 +413,10 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
 
     results = []
 
-    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame) in enumerate(eval_loader):
+    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(eval_loader):
         batchNum = i+1
         num_samples += imFace.size(0)
-        
+
         # measure data loading time
         data_time.update(time.time() - end)
         imFace = imFace.to(device=args.device)
@@ -387,45 +424,45 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
         imEyeR = imEyeR.to(device=args.device)
         faceGrid = faceGrid.to(device=args.device)
         gaze = gaze.to(device=args.device)
-        
+
         imFace = torch.autograd.Variable(imFace, requires_grad=False)
         imEyeL = torch.autograd.Variable(imEyeL, requires_grad=False)
         imEyeR = torch.autograd.Variable(imEyeR, requires_grad=False)
         faceGrid = torch.autograd.Variable(faceGrid, requires_grad=False)
         gaze = torch.autograd.Variable(gaze, requires_grad=False)
-        
+
         # compute output
         with torch.no_grad():
             output = model(imFace, imEyeL, imEyeR, faceGrid)
-        
+
         # Combine the tensor results together into a colated list so that we have the gazePoint and gazePrediction for each frame
         f1 = frame.cpu().numpy().tolist()
         g1 = gaze.cpu().numpy().tolist()
         o1 = output.cpu().numpy().tolist()
         r1 = [list(r) for r in zip(f1, g1, o1)]
-        
+
         def convertResult(result):
             r = {'frame': result[0], 'gazePoint': result[1], 'gazePrediction': result[2]}
             return r
-        
+
         results += list(map(convertResult, r1))
         loss = criterion(output, gaze)
-        
+
         lossLin = output - gaze
         lossLin = torch.mul(lossLin, lossLin)
         lossLin = torch.sum(lossLin, 1)
         # MSE vs RMS error
 #         lossLin = torch.sum(lossLin)
         lossLin = torch.sum(torch.sqrt(lossLin))
-        
+
         losses.update(loss.data.item(), imFace.size(0))
         lossesLin.update(lossLin.item()/batch_size, imFace.size(0))
-        
+
         # compute gradient and do SGD step
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
-        
+
         if args.verbose:
             print('Epoch ({}): [{}][{}/{}]\t'
               'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
@@ -435,14 +472,14 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
                 loss=losses, lossLin=lossesLin))
         else:
             progress_meter.update(num_samples, lossesLin.avg)
-            
+
         if 0 < dataset_size < batchNum:
             break
-    
+
     resultsFileName = os.path.join(checkpointsPath, 'results.json')
     with open(resultsFileName, 'w+') as outfile:
         json.dump(results, outfile)
-    
+
     return lossesLin.avg
 
 def validate(val_loader, model, criterion, epoch):
@@ -548,7 +585,7 @@ class ProgressMeter(object):
         self.fill = '-'
         self.max_value = max_value
         self.start_time = datetime.now()
-    
+
     def create_marker(self, value, width):
         if self.max_value > 0:
             length = int(value / self.max_value * width)
@@ -561,40 +598,93 @@ class ProgressMeter(object):
         else:
             marker = self.marker
         return marker
-    
+
     def getTerminalWidth(self):
         default_width = 80
         default_height = 20
         size_tuple = shutil.get_terminal_size((default_width, default_height))  # pass fallback
         return size_tuple.columns
-    
+
     def update(self, value, metric):
         '''Updates the progress bar and its subcomponents'''
         if metric:
             metric = '{metric:.4f}'.format(metric=metric)
         else:
             metric = ''
-        
+
         time_elapsed = ' [Time: '+str(datetime.now() - self.start_time)+']'
 #         value = min(value, self.max_value)
         assert( value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value ('+ str(self.max_value)+').'
         width = self.getTerminalWidth() - (len(self.label)+len(self.left)+len(self.right)+len(metric)+len(time_elapsed))
         marker = self.create_marker(value, width).ljust(width, self.fill)
-        marker = self.left + marker + self.right 
+        marker = self.left + marker + self.right
         # append infoString at the center
         infoString = ' {val:d}/{max:d} ({percent:d}%) '.format(val=value, max=self.max_value, percent=int(value/self.max_value*100))
         index = (len(marker)-len(infoString))//2
         marker = marker[:index] + infoString + marker[index + len(infoString):]
         print('\r'+self.label + marker + metric + time_elapsed, end= '' if value < self.max_value else '\n')
-        
-    
-    
+
+import math
+import shutil
+class SamplingMeter(object):
+    '''A sampling hotness bar which stretches to fill the line.'''
+    def __init__(self, label='', left='|', right='|'):
+        '''Creates a multinomial sampling hotness bar.
+        '''
+        self.label = '{:5}'.format(label)
+        self.left = '|'
+        self.right = '|'
+
+    def getTerminalWidth(self):
+        default_width = 80
+        default_height = 20
+        size_tuple = shutil.get_terminal_size((default_width, default_height))  # pass fallback
+        return size_tuple.columns
+
+    ##  colorCodes = {black, VIBGYOR, White}
+    def getCode(self, value, max, s):
+        if value == 0:
+            value = 0.1
+        if s == None or s == '':
+            s = '█'
+        colorCodes = ["\033[30m", "\033[1;30m", "\033[35m", "\033[1;35m", "\033[34m", "\033[1;34m", "\033[36m", "\033[32m", "\033[1;32m", "\033[1;33m", "\033[33m",  "\033[1;31m", "\033[31m", "\033[37m", "\033[1;37m"]
+        index = int((len(colorCodes)-1) * (value/max))
+        return colorCodes[index] + s + "\033[0m"
+
+    # creates numBins of equal length
+    # (except last bin which contains remaining items)
+    # returns max val in each bucket
+    def bucket(self, data, numBins):
+        dataLength = len(data)
+        if dataLength <= numBins:
+            return data
+        windowLength = dataLength//numBins
+        limit = numBins * windowLength
+        output = torch.Tensor(numBins)
+        for i in range(0, numBins):
+            start = i*windowLength
+            stop = (i+1)*windowLength
+            if (stop == limit):
+                stop = dataLength
+            output[i] = torch.max(data[start:stop])
+        return output
+
+    def display(self, data):
+        barLength = self.getTerminalWidth() - 30 - len(self.label)
+        normalizedData = torch.floor((1.0*data*barLength)/torch.max(data))
+        bucketData = self.bucket(normalizedData, barLength)
+        maxValue = torch.max(bucketData)
+        code = ''
+        for i in range(1, len(bucketData)):
+            code = code + self.getCode(bucketData[i], maxValue, '█')
+        print(self.label + self.left + code + self.right)
+
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
     lr = base_lr * (0.1 ** (epoch // 30))
     for param_group in optimizer.state_dict()['param_groups']:
         param_group['lr'] = lr
-    
+
 
 def cleanup_stop_thread():
     print('Thread is killed.')
