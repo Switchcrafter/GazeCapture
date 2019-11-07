@@ -20,9 +20,10 @@ from ITrackerModel import ITrackerModel
 
 try:
     from azureml.core.run import Run
+
     run = Run.get_context()
 except ImportError:
-    Run = None
+    run = None
 
 '''
 Train/test code for iTracker.
@@ -46,87 +47,46 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 
 '''
 
-OUTPUT_PATH = os.path.dirname(os.path.realpath(__file__))
-
-device = None
-dataset_size = 0
-base_lr = 0.001
-verbose = False
-data_size = None
-checkpointsPath = None
-saveCheckpoints = False
-batch_size = 0
+BASE_LR = 0.001
+MOMENTUM = 0.9
+WEIGHT_DECAY = 1e-4
 
 
 def main():
-    global device
-    global dataset_size
-    global verbose
-    global data_size
-    global checkpointsPath
-    global saveCheckpoints
-    global batch_size
+    args, doLoad, doTest, doValidate, dataPath, checkpointsPath, \
+    exportONNX, saveCheckpoints, using_cuda, workers, epochs, dataset_limit, verbose = parse_commandline_arguments()
 
-    args = parse_commandline_arguments()
-    using_cuda = False
-    if not args.disable_cuda and torch.cuda.is_available():
+    if using_cuda and torch.cuda.is_available():
         device = torch.device('cuda')
         using_cuda = True
     else:
         device = torch.device('cpu')
-
-    # Change there flags to control what happens.
-    doLoad = not args.reset  # Load checkpoint at the beginning
-    doTest = args.test  # Only run test, no training
-    doValidate = args.validate  # Only run validation, no training
-    dataPath = args.data_path
-    checkpointsPath = args.output_path
-    exportONNX = args.exportONNX
-    saveCheckpoints = args.save_checkpoints
-    verbose = args.verbose
-
-    workers = args.workers
-    epochs = args.epochs
 
     if using_cuda and torch.cuda.device_count() > 0:
         batch_size = torch.cuda.device_count() * 100  # Change if out of cuda memory
     else:
         batch_size = 5
 
-    momentum = 0.9
-    weight_decay = 1e-4
     best_prec1 = 1e20
-    lr = base_lr
-
-    dataset_size = args.dataset_size
+    lr = BASE_LR
 
     if verbose:
         print('')
-        print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
+        if using_cuda:
+            print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
         print('')
-        print('===================================================')
-        print('doLoad                = %d' % doLoad)
-        print('doTest                = %d' % doTest)
-        print('doValidate            = %d' % doValidate)
-        print('dataPath              = %s' % dataPath)
-        print('checkpointsPath       = %s' % checkpointsPath)
-        print('saveCheckpoints       = %d' % saveCheckpoints)
-        print('workers               = %d' % workers)
-        print('epochs                = %d' % epochs)
-        print('exportONNX            = %d' % exportONNX)
-        print('===================================================')
 
     model = ITrackerModel().to(device=device)
 
     if using_cuda:
         model = torch.nn.DataParallel(model).to(device=device)
 
-    imSize = (224, 224)
+    image_size = (224, 224)
     cudnn.benchmark = False
 
     epoch = 1
     if doLoad:
-        saved = load_checkpoint()
+        saved = load_checkpoint(checkpointsPath, device)
         if saved:
             print(
                 'Loading checkpoint for epoch %05d with loss %.5f '
@@ -154,29 +114,7 @@ def main():
 
     totalstart_time = datetime.now()
 
-    # training data : model sees and learns from this data 
-    data_train = ITrackerData(dataPath, split='train', imSize=imSize, silent=not verbose)
-    # validation data : model sees but never learns from this data 
-    data_val = ITrackerData(dataPath, split='val', imSize=imSize, silent=not verbose)
-    # test data : model never sees or learns from this data 
-    data_test = ITrackerData(dataPath, split='test', imSize=imSize, silent=not verbose)
-
-    data_size = {'train': len(data_train.indices), 'val': len(data_val.indices), 'test': len(data_test.indices)}
-
-    train_loader = torch.utils.data.DataLoader(
-        data_train,
-        batch_size=batch_size, shuffle=True,
-        num_workers=workers, pin_memory=True)
-
-    val_loader = torch.utils.data.DataLoader(
-        data_val,
-        batch_size=batch_size, shuffle=False,
-        num_workers=workers, pin_memory=True)
-
-    test_loader = torch.utils.data.DataLoader(
-        data_test,
-        batch_size=batch_size, shuffle=False,
-        num_workers=workers, pin_memory=True)
+    datasets = load_all_data(dataPath, image_size, workers, batch_size, verbose)
 
     print('')  # print blank line after loading data
 
@@ -184,28 +122,30 @@ def main():
     criterion = nn.MSELoss(reduction='mean').to(device=device)
 
     optimizer = torch.optim.SGD(model.parameters(), lr,
-                                momentum=momentum,
-                                weight_decay=weight_decay)
+                                momentum=MOMENTUM,
+                                weight_decay=WEIGHT_DECAY)
 
-    # Quick test
     if doTest:
+        # Quick test
         start_time = datetime.now()
-        precision = test(test_loader, model, criterion, epoch=1)
+        precision = test(datasets, model, criterion, 1, checkpointsPath, batch_size, device, dataset_limit, verbose)
         time_elapsed = datetime.now() - start_time
         print('')
         print('Testing loss %.5f' % precision)
         print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif doValidate:
+        # Validation of saved checkpoint
         start_time = datetime.now()
-        precision = validate(val_loader, model, criterion, epoch=1)
+        precision = validate(datasets, model, criterion, 1, checkpointsPath, batch_size, device, dataset_limit, verbose)
         time_elapsed = datetime.now() - start_time
         print('')  # print blank line after loading data
         print('Validation loss %.5f' % precision)
         print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif exportONNX:
-        export_onnx_model(val_loader, model)
+        # export the model for use in other frameworks
+        export_onnx_model(model, device, verbose)
     else:  # Train
-        # first cmake a learning_rate correction suitable for epoch from saved checkpoint
+        # first make a learning_rate correction suitable for epoch from saved checkpoint
         # epoch will be non-zero if a checkpoint was loaded
         for epoch in range(1, epoch):
             if verbose:
@@ -217,25 +157,25 @@ def main():
                 print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
         # now start training from last best epoch
-        for epoch in range(epoch, epochs):
+        for epoch in range(epoch, epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
             start_time = datetime.now()
             adjust_learning_rate(optimizer, epoch)
 
             # train for one epoch
-            print('\nEpoch:{} [device:{}, id:{}, lr:{}]'.format(epoch, device, torch.cuda.current_device(), lr))
-            train_error = train(train_loader, model, criterion, optimizer, epoch)
+            print('\nEpoch:{} [device:{}, lr:{}]'.format(epoch, device, lr))
+            train_error = train(datasets['train'], model, criterion, optimizer, epoch, batch_size, device, dataset_limit, verbose)
 
             # evaluate on validation set
-            prec1 = validate(test_loader, model, criterion, epoch)
+            prec1 = validate(datasets, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose)
 
-            # remember best prec@1 and save checkpoint
+            # remember best prec1 and save checkpoint
             is_best = prec1 < best_prec1
             best_prec1 = min(prec1, best_prec1)
 
             time_elapsed = datetime.now() - start_time
 
-            if Run:
+            if run:
                 run.log('precision', prec1)
                 run.log('best precision', best_prec1)
                 run.log('epoch time', time_elapsed)
@@ -243,8 +183,11 @@ def main():
             save_checkpoint({
                 'epoch': epoch,
                 'state_dict': model.state_dict(),
-                'best_prec1': best_prec1,
-            }, is_best)
+                'best_prec1': best_prec1
+            },
+                is_best,
+                checkpointsPath,
+                saveCheckpoints)
 
             print('')
             print('Epoch %05d with loss %.5f' % (epoch, best_prec1))
@@ -254,12 +197,10 @@ def main():
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
 
 
-def train(loader, model, criterion, optimizer, epoch):
-    global data_size
-    global dataset_size
-    global device
-    global batch_size
-    global verbose
+def train(dataset, model, criterion, optimizer, epoch, batch_size, device, dataset_limit=None, verbose=False):
+    data_size = dataset['size']
+    loader = dataset['loader']
+    split = dataset['split']
 
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -323,12 +264,12 @@ def train(loader, model, criterion, optimizer, epoch):
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'MSELoss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'RMSErr {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
-                      epoch, batchNum, len(loader), batch_time=batch_time,
-                      data_time=data_time, loss=losses, lossLin=lossesLin))
+                epoch, batchNum, len(loader), batch_time=batch_time,
+                data_time=data_time, loss=losses, lossLin=lossesLin))
         else:
-            progress_meter.update(num_samples, data_size['train'], 'train', lossesLin.avg)
+            progress_meter.update(num_samples, data_size, split, lossesLin.avg)
 
-        if 0 < dataset_size <= batchNum:
+        if dataset_limit and dataset_limit <= batchNum:
             break
 
     print('')
@@ -336,11 +277,10 @@ def train(loader, model, criterion, optimizer, epoch):
     return lossesLin.avg
 
 
-def evaluate(loader, model, criterion, epoch, stage):
-    global data_size
-    global dataset_size
-    global verbose
-    global batch_size
+def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit=None, verbose=False):
+    data_size = dataset['size']
+    loader = dataset['loader']
+    split = dataset['split']
 
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -413,12 +353,12 @@ def evaluate(loader, model, criterion, epoch, stage):
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'MSELoss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'RMSErr {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
-                      stage, epoch, batchNum, len(loader), batch_time=batch_time,
-                      loss=losses, lossLin=lossesLin))
+                split, epoch, batchNum, len(loader), batch_time=batch_time,
+                loss=losses, lossLin=lossesLin))
         else:
-            progress_meter.update(num_samples, data_size[stage], stage, lossesLin.avg)
+            progress_meter.update(num_samples, data_size, split, lossesLin.avg)
 
-        if 0 < dataset_size <= batchNum:
+        if dataset_limit and dataset_limit <= batchNum:
             break
 
     resultsFileName = os.path.join(checkpointsPath, 'results.json')
@@ -430,15 +370,31 @@ def evaluate(loader, model, criterion, epoch, stage):
     return lossesLin.avg
 
 
-def validate(val_loader, model, criterion, epoch):
-    return evaluate(val_loader, model, criterion, epoch, 'val')
+def validate(datasets,
+             model,
+             criterion,
+             epoch,
+             checkpointsPath,
+             batch_size,
+             device,
+             dataset_limit=None,
+             verbose=False):
+    return evaluate(datasets['val'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose)
 
 
-def test(test_loader, model, criterion, epoch):
-    return evaluate(test_loader, model, criterion, epoch, 'test')
+def test(datasets,
+         model,
+         criterion,
+         epoch,
+         checkpointsPath,
+         batch_size,
+         device,
+         dataset_limit=None,
+         verbose=False):
+    return evaluate(datasets['test'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose)
 
 
-def export_onnx_model(val_loader, model):
+def export_onnx_model(model, device, verbose):
     # switch to evaluate mode
     model.eval()
 
@@ -474,7 +430,7 @@ def export_onnx_model(val_loader, model):
                           verbose=verbose)
 
 
-def load_checkpoint(filename='checkpoint.pth.tar'):
+def load_checkpoint(checkpointsPath, device, filename='checkpoint.pth.tar'):
     filename = os.path.join(checkpointsPath, filename)
     print(filename)
     if not os.path.isfile(filename):
@@ -483,7 +439,7 @@ def load_checkpoint(filename='checkpoint.pth.tar'):
     return state
 
 
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+def save_checkpoint(state, is_best, checkpointsPath, saveCheckpoints, filename='checkpoint.pth.tar'):
     resultsFilename = os.path.join(checkpointsPath, 'results.json')
     checkpointFilename = os.path.join(checkpointsPath, filename)
 
@@ -512,6 +468,35 @@ def remove_module_from_state(saved_state):
         state[key[7:]] = value.to(device='cpu')
 
     return state
+
+
+def load_data(split, path, image_size, workers, batch_size, verbose):
+    data = ITrackerData(path, split=split, imSize=image_size, silent=not verbose)
+    size = len(data.indices)
+    loader = torch.utils.data.DataLoader(
+        data,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=workers,
+        pin_memory=True)
+
+    return {
+        'split': split,
+        'data': data,
+        'size': size,
+        'loader': loader
+    }
+
+
+def load_all_data(path, image_size, workers, batch_size, verbose):
+    return {
+        # training data : model sees and learns from this data
+        'train': load_data('train', path, image_size, workers, batch_size, verbose),
+        # validation data : model sees but never learns from this data
+        'val': load_data('val', path, image_size, workers, batch_size, verbose),
+        # test data : model never sees or learns from this data
+        'test': load_data('test', path, image_size, workers, batch_size, verbose)
+    }
 
 
 class AverageMeter(object):
@@ -568,10 +553,8 @@ class ProgressMeter(object):
 
 
 def adjust_learning_rate(optimizer, epoch):
-    global base_lr
-
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
-    lr = base_lr * (0.1 ** (epoch // 30))
+    lr = BASE_LR * (0.1 ** (epoch // 30))
     for param_group in optimizer.state_dict()['param_groups']:
         param_group['lr'] = lr
 
@@ -600,9 +583,9 @@ def parse_commandline_arguments():
                         help="Start from scratch (do not load).")
     parser.add_argument('--epochs', type=int, default=25)
     parser.add_argument('--workers', type=int, default=16)
-    parser.add_argument('--dataset_size', type=int, default=0)
+    parser.add_argument('--dataset_limit', type=int, default=0, help="Limits the dataset size, useful for debugging")
     parser.add_argument('--exportONNX', type=str2bool, nargs='?', const=True, default=False)
-    parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
+    parser.add_argument('--disable-cuda', action='store_true', default=False, help='Disable CUDA')
     parser.add_argument('--verbose', type=str2bool, nargs='?', const=True, default=False,
                         help="verbose mode - print details every batch")
 
@@ -625,7 +608,35 @@ def parse_commandline_arguments():
         print('args.verbose          = %d' % args.verbose)
         print('===================================================')
 
-    return args
+    # Change there flags to control what happens.
+    doLoad = not args.reset  # Load checkpoint at the beginning
+    doTest = args.test  # Only run test, no training
+    doValidate = args.validate  # Only run validation, no training
+    dataPath = args.data_path
+    checkpointsPath = args.output_path
+    exportONNX = args.exportONNX
+    saveCheckpoints = args.save_checkpoints
+    using_cuda = not args.disable_cuda
+    verbose = args.verbose
+    workers = args.workers
+    epochs = args.epochs
+    dataset_limit = args.dataset_limit
+
+    if verbose:
+        print('===================================================')
+        print('doLoad                = %d' % doLoad)
+        print('doTest                = %d' % doTest)
+        print('doValidate            = %d' % doValidate)
+        print('dataPath              = %s' % dataPath)
+        print('checkpointsPath       = %s' % checkpointsPath)
+        print('saveCheckpoints       = %d' % saveCheckpoints)
+        print('workers               = %d' % workers)
+        print('epochs                = %d' % epochs)
+        print('exportONNX            = %d' % exportONNX)
+        print('===================================================')
+
+    return args, doLoad, doTest, doValidate, dataPath, checkpointsPath, exportONNX, saveCheckpoints, \
+           using_cuda, workers, epochs, dataset_limit, verbose
 
 
 if __name__ == "__main__":
