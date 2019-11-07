@@ -17,7 +17,6 @@ import torch.utils.data
 
 from ITrackerData import ITrackerData
 from ITrackerModel import ITrackerModel
-from AdaptiveWeightedRandomSampler import AdaptiveWeightedRandomSampler
 
 try:
     from azureml.core.run import Run
@@ -122,8 +121,9 @@ count = 0
 dataset_size = args.dataset_size
 
 def main():
-    global args, best_prec1, weight_decay, momentum, data_size, multinomial_weights
-    global sampler
+    global args, best_prec1, weight_decay, momentum
+    global data_size, data_train, sampler, sampling_meter
+    global multinomial_weights
 
     if args.verbose:
         print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
@@ -204,12 +204,17 @@ def main():
     # sampler = torch.utils.data.SequentialSampler(data_train)
     # sampler = torch.utils.data.WeightedRandomSampler(samples_weight, int(len(samples_weight)))
 
-    init_loss_value = 100.0
-    multinomial_weights = torch.ones(len(data_train), dtype=torch.double)*init_loss_value
-    sampler = AdaptiveWeightedRandomSampler(multinomial_weights, int(len(multinomial_weights)))
+    #approach-1
+    multinomial_weights = torch.ones(len(data_train), dtype=torch.double)*100
+
+    # #approach-2
+    # multinomial_weights = torch.ones(len(data_train), dtype=torch.double)
+
+    sampler = torch.utils.data.WeightedRandomSampler(multinomial_weights, int(len(multinomial_weights)))
+    
+    # sampler = MultinomialSampler(multinomial_weights, int(len(multinomial_weights)))
     # Batch sampling
     # batch_sampler = torch.utils.data.BatchSampler(sampler, batch_size, drop_last=False)
-
     # Dataloader using the sampling strategy
     # train_loader = torch.utils.data.DataLoader(
     #     data_train,
@@ -220,6 +225,11 @@ def main():
         data_train,
         batch_size=batch_size, sampler=sampler,
         num_workers=workers)
+
+    # train_loader = torch.utils.data.DataLoader(
+    #     data_train,
+    #     batch_size=batch_size, shuffle=True,
+    #     num_workers=workers)
 
     val_loader = torch.utils.data.DataLoader(
         data_val,
@@ -264,6 +274,9 @@ def main():
                 time_elapsed = datetime.now() - start_time
                 print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
+        if args.hsm:
+            sampling_meter = SamplingMeter('HSM')
+
         # now start training from last best epoch
         for epoch in range(epoch, epochs):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
@@ -304,9 +317,10 @@ def main():
 def train(train_loader, model, criterion, optimizer, epoch):
     global count
     global dataset_size
-    global data_train
-    global multinomial_weights
+    # global multinomial_weights
     global sampler
+    global data_train
+    global sampling_meter
 
     stage = 'train'
     batch_time = AverageMeter()
@@ -324,9 +338,13 @@ def train(train_loader, model, criterion, optimizer, epoch):
     end = time.time()
 
     if args.hsm:
-        sampling_meter = SamplingMeter('HSM')
         sampling_meter.display(multinomial_weights)
-        sampler.update(multinomial_weights)
+        # update dataloader and sampler
+        sampler = torch.utils.data.WeightedRandomSampler(multinomial_weights, int(len(multinomial_weights)))
+        train_loader = torch.utils.data.DataLoader(
+            data_train,
+            batch_size=batch_size, sampler=sampler,
+            num_workers=workers)
 
     for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(train_loader):
         batchNum = i+1
@@ -358,11 +376,27 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         if args.hsm:
             # update sample weights to be the loss, so that harder samples have larger chances to be drawn in the next epoch
-            # multinomial_weights[indices] = lossLin.detach().cpu()
+            seq_indices = torch.arange(i, i+indices.size(0)).type_as(torch.LongTensor())
+
+            # Approach-1
+            multinomial_weights[seq_indices] = lossLin.detach().cpu()
+
+            # Approach-2
+            # # normalize and threshold prob at max value '1'
+            # batch_loss = lossLin.detach().cpu().div_(10.0)
+            # batch_loss[batch_loss>1.0] = 1.0
+            # multinomial_weights[seq_indices] = batch_loss
+
+            # print(lossLin.detach().cpu())
             # print(len(multinomial_weights))
             # print(indices)
-            print([idx for idx in indices if idx > len(multinomial_weights)])
+            # print([idx for idx in indices if idx > len(multinomial_weights)])
             # print(multinomial_weights[indices])
+            # print(len(data_train))
+            # print([idx for idx in indices if idx > len(data_train)])
+            # print(len(data_train), indices)
+            # if i != indices.detach().cpu():
+            #     print(i, indices)
 
         # average over the batch
         lossLin = torch.sum(lossLin)
@@ -394,6 +428,14 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         if 0 < dataset_size < batchNum:
             break
+
+    if args.hsm:
+        # update dataloader and sampler
+        sampler = torch.utils.data.WeightedRandomSampler(multinomial_weights, int(len(multinomial_weights)))
+        train_loader = torch.utils.data.DataLoader(
+            data_train,
+            batch_size=batch_size, sampler=sampler,
+            num_workers=workers)
 
     return lossesLin.avg
 
@@ -547,7 +589,19 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
         shutil.copyfile(checkpointFilename, bestFilename)
         shutil.copyfile(resultsFilename, bestResultsFilename)
 
+def adjust_learning_rate(optimizer, epoch):
+    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
+    lr = base_lr * (0.1 ** (epoch // 30))
+    for param_group in optimizer.state_dict()['param_groups']:
+        param_group['lr'] = lr
 
+
+def cleanup_stop_thread():
+    print('Thread is killed.')
+
+################################################################
+# Utility classes
+################################################################
 class AverageMeter(object):
     """Computes and stores the average and current value"""
 
@@ -613,7 +667,6 @@ class ProgressMeter(object):
             metric = ''
 
         time_elapsed = ' [Time: '+str(datetime.now() - self.start_time)+']'
-#         value = min(value, self.max_value)
         assert( value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value ('+ str(self.max_value)+').'
         width = self.getTerminalWidth() - (len(self.label)+len(self.left)+len(self.right)+len(metric)+len(time_elapsed))
         marker = self.create_marker(value, width).ljust(width, self.fill)
@@ -622,7 +675,7 @@ class ProgressMeter(object):
         infoString = ' {val:d}/{max:d} ({percent:d}%) '.format(val=value, max=self.max_value, percent=int(value/self.max_value*100))
         index = (len(marker)-len(infoString))//2
         marker = marker[:index] + infoString + marker[index + len(infoString):]
-        print('\r'+self.label + marker + metric + time_elapsed, end= '' if value < self.max_value else '\n')
+        print('\r'+self.label + marker + metric + time_elapsed, end= '' if value < self.max_value else '\n\n')
 
 import math
 import shutil
@@ -679,15 +732,40 @@ class SamplingMeter(object):
             code = code + self.getCode(bucketData[i], maxValue, '█')
         print(self.label + self.left + code + self.right)
 
-def adjust_learning_rate(optimizer, epoch):
-    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
-    lr = base_lr * (0.1 ** (epoch // 30))
-    for param_group in optimizer.state_dict()['param_groups']:
-        param_group['lr'] = lr
+class MultinomialSampler(torch.utils.data.Sampler):
+    r"""Samples elements from ``[0,..,len(weights)-1]`` with given probabilities (weights).
+    Args:
+        weights (sequence)   : a sequence of weights, not necessary summing up to one
+        num_samples (int): number of samples to draw
+        replacement (bool): if ``True``, samples are drawn with replacement.
+            If not, they are drawn without replacement, which means that when a
+            sample index is drawn for a row, it cannot be drawn again for that row.
+    Example:
+        >>> list(MultinomialSampler([0.1, 0.9, 0.4, 0.7, 3.0, 0.6], 5, replacement=True))
+        [0, 0, 0, 1, 0]
+        >>> list(MultinomialSampler([0.9, 0.4, 0.05, 0.2, 0.3, 0.1], 5, replacement=False))
+        [0, 1, 4, 3, 2]
+    """
+    def __init__(self, weights, num_samples, replacement=False):
+        if not isinstance(num_samples, torch._six.int_classes) or isinstance(num_samples, bool) or \
+                num_samples <= 0:
+            raise ValueError("num_samples should be a positive integer "
+                             "value, but got num_samples={}".format(num_samples))
+        if not isinstance(replacement, bool):
+            raise ValueError("replacement should be a boolean value, but got "
+                             "replacement={}".format(replacement))
+        self.weights = torch.as_tensor(weights, dtype=torch.double)
+        self.num_samples = num_samples
+        self.replacement = replacement
 
+    # def update(self, weights):
+    #     self.weights.copy_(torch.as_tensor(weights, dtype=torch.double))
 
-def cleanup_stop_thread():
-    print('Thread is killed.')
+    def __iter__(self):
+        return iter(torch.multinomial(self.weights, self.num_samples, self.replacement).tolist())
+
+    def __len__(self):
+        return self.num_samples
 
 if __name__ == "__main__":
     try:
