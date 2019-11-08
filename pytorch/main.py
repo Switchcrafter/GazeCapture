@@ -712,11 +712,7 @@ class SamplingMeter(object):
         return size_tuple.columns
 
     ##  colorCodes = {black, VIBGYOR, White}
-    def getCode(self, value, max, s):
-        if value == 0:
-            value = 0.1
-        if s == None or s == '':
-            s = '█'
+    def getCode(self, value=0.1, max=1.0, s='█'):
         colorCodes = ["\033[30m", "\033[1;30m", "\033[35m", "\033[1;35m", "\033[34m", "\033[1;34m", "\033[36m", "\033[32m", "\033[1;32m", "\033[1;33m", "\033[33m",  "\033[1;31m", "\033[31m", "\033[37m", "\033[1;37m"]
         index = int((len(colorCodes)-1) * (value/max))
         return colorCodes[index] + s + "\033[0m"
@@ -776,8 +772,8 @@ class MultinomialSampler(torch.utils.data.Sampler):
         self.num_samples = num_samples
         self.replacement = replacement
 
-    # def update(self, weights):
-    #     self.weights.copy_(torch.as_tensor(weights, dtype=torch.double))
+    def update(self, weights):
+        self.weights.copy_(torch.as_tensor(weights, dtype=torch.double))
 
     def __iter__(self):
         return iter(torch.multinomial(self.weights, self.num_samples, self.replacement).tolist())
