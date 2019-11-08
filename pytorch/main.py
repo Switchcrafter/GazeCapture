@@ -270,7 +270,7 @@ def main():
                 time_elapsed = datetime.now() - start_time
                 print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
-        if args.hsm:
+        if args.hsm and not args.verbose:
             sampling_meter = SamplingMeter('HSM')
 
         # now start training from last best epoch
@@ -280,7 +280,7 @@ def main():
             adjust_learning_rate(optimizer, epoch)
 
             # train for one epoch
-            print('\nEpoch:{} [device:{}, lr:{}]'.format(epoch, args.device, lr))
+            print('\nEpoch:{} [device:{}:{}, lr:{}, best_prec:{:2.4f}, hcm:{}, adv:{}]'.format(epoch, args.device, deviceId, lr, best_prec1, args.hsm, args.adv))
             train_error = train(train_loader, model, criterion, optimizer, epoch)
 
             # evaluate on validation set
@@ -345,16 +345,18 @@ def train(train_loader, model, criterion, optimizer, epoch):
     end = time.time()
 
     # HSM Update - Every epoch
-    # Todo: Reset mechanishm
     if args.hsm:
+        # Reset every 15th epoch
         if epoch%15 == 0:
             multinomial_weights = torch.ones(len(data_train), dtype=torch.double)
         # update dataloader and sampler
-        sampler = torch.utils.data.WeightedRandomSampler(multinomial_weights, int(len(multinomial_weights)))
+        sampler = torch.utils.data.WeightedRandomSampler(multinomial_weights, int(len(multinomial_weights)), replacement=True)
         train_loader = torch.utils.data.DataLoader(
             data_train,
             batch_size=batch_size, sampler=sampler,
             num_workers=workers)
+        # Line-space for HSM meter
+        print('')
 
     # load data samples and train
     for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(train_loader):
@@ -390,10 +392,12 @@ def train(train_loader, model, criterion, optimizer, epoch):
             # update sample weights to be the loss, so that harder samples have larger chances to be drawn in the next epoch
             # normalize and threshold prob values at max value '1'
             batch_loss = lossLin.detach().cpu().div_(10.0)
+            # batch_loss = lossLin.detach().cpu().div_(best_prec1*2)
             batch_loss[batch_loss>1.0] = 1.0
             multinomial_weights.scatter_(0, indices, batch_loss.type_as(torch.DoubleTensor()))
-            # sampling_meter.display(multinomial_weights)
             # print([idx for idx in indices if idx > len(data_train)])
+            if not args.verbose:
+                sampling_meter.display(multinomial_weights)
 
         # average over the batch
         lossLin = torch.sum(lossLin)
@@ -447,7 +451,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
                     epoch, batchNum, len(train_loader), batch_time=batch_time,
                     data_time=data_time, loss=losses, lossLin=lossesLin))
         else:
-            sampling_meter.display(multinomial_weights)
             progress_meter.update(num_samples, lossesLin.avg)
 
         if 0 < dataset_size < batchNum:
