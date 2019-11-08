@@ -76,18 +76,28 @@ parser.add_argument('--workers', type=int, default=16)
 parser.add_argument('--batch_size', type=int, default=100)
 parser.add_argument('--dataset_size', type=int, default=0)
 parser.add_argument('--exportONNX', type=str2bool, nargs='?', const=True, default=False)
+# GPU Settings options
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-parser.add_argument('--verbose', type=str2bool, nargs='?', const=True, default=False,
-                    help="verbose mode - print details every batch")
+parser.add_argument('--deviceId', type=int, default=0)
+parser.add_argument('--verbose', type=str2bool, nargs='?', const=True, default=False, help="verbose mode: print every batch")
+# Advanced experimental options
 parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
+parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="")
 args = parser.parse_args()
+
 args.device = None
 usingCuda = False
 if not args.disable_cuda and torch.cuda.is_available():
     args.device = torch.device('cuda')
     usingCuda = True
+    if 0 <= args.deviceId < torch.cuda.device_count():
+        torch.cuda.set_device(args.deviceId)
+    else:
+        print("Device id can't exeed {}, default to currently set device gpu{}.".format(torch.cuda.device_count()-1), torch.cuda.current_device())
+    deviceId = torch.cuda.current_device()
 else:
     args.device = torch.device('cpu')
+    deviceId = 0
 
 # Change there flags to control what happens.
 doLoad = not args.reset  # Load checkpoint at the beginning
@@ -200,20 +210,11 @@ def main():
     data_size = {'train':len(data_train.indices), 'val':len(data_val.indices), 'test':len(data_test.indices)}
 
     # Sampling Strategy
-    # sampler = torch.utils.data.RandomSampler(data_train, replacement=False, num_samples=None)
-    # sampler = torch.utils.data.SequentialSampler(data_train)
-    # sampler = torch.utils.data.WeightedRandomSampler(samples_weight, int(len(samples_weight)))
+    sampler = torch.utils.data.RandomSampler(data_train, replacement=False, num_samples=None)
+    if args.hsm:
+        multinomial_weights = torch.ones(len(data_train), dtype=torch.double)*0.1
 
-    #approach-1
-    multinomial_weights = torch.ones(len(data_train), dtype=torch.double)*100
-
-    # #approach-2
-    # multinomial_weights = torch.ones(len(data_train), dtype=torch.double)
-
-    sampler = torch.utils.data.WeightedRandomSampler(multinomial_weights, int(len(multinomial_weights)))
-    
-    # sampler = MultinomialSampler(multinomial_weights, int(len(multinomial_weights)))
-    # Batch sampling
+    # TODO: Batch sampling - Will implement in future
     # batch_sampler = torch.utils.data.BatchSampler(sampler, batch_size, drop_last=False)
     # Dataloader using the sampling strategy
     # train_loader = torch.utils.data.DataLoader(
@@ -225,11 +226,6 @@ def main():
         data_train,
         batch_size=batch_size, sampler=sampler,
         num_workers=workers)
-
-    # train_loader = torch.utils.data.DataLoader(
-    #     data_train,
-    #     batch_size=batch_size, shuffle=True,
-    #     num_workers=workers)
 
     val_loader = torch.utils.data.DataLoader(
         data_val,
@@ -284,7 +280,7 @@ def main():
             adjust_learning_rate(optimizer, epoch)
 
             # train for one epoch
-            print('\nEpoch:{} [device:{}, id:{}, lr:{}]'.format(epoch, args.device, torch.cuda.current_device(), lr))
+            print('\nEpoch:{} [device:{}, lr:{}]'.format(epoch, args.device, lr))
             train_error = train(train_loader, model, criterion, optimizer, epoch)
 
             # evaluate on validation set
@@ -313,11 +309,22 @@ def main():
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
 
+# adversarial attack code
+# Fast Gradient Sign Attack (FGSA)
+def adversarial_attack(image, data_grad, epsilon=0.1):
+    # Collect the element-wise sign of the data gradient
+    sign_data_grad = data_grad.sign()
+    # Create the perturbed image by adjusting each pixel of the input image
+    perturbed_image = image + epsilon*sign_data_grad
+    # Adding clipping to maintain [0,1] range
+    perturbed_image = torch.clamp(perturbed_image, 0, 1)
+    # Return the perturbed image
+    return perturbed_image
 
 def train(train_loader, model, criterion, optimizer, epoch):
     global count
     global dataset_size
-    # global multinomial_weights
+    global multinomial_weights
     global sampler
     global data_train
     global sampling_meter
@@ -337,8 +344,11 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
     end = time.time()
 
+    # HSM Update - Every epoch
+    # Todo: Reset mechanishm
     if args.hsm:
-        sampling_meter.display(multinomial_weights)
+        if epoch%15 == 0:
+            multinomial_weights = torch.ones(len(data_train), dtype=torch.double)
         # update dataloader and sampler
         sampler = torch.utils.data.WeightedRandomSampler(multinomial_weights, int(len(multinomial_weights)))
         train_loader = torch.utils.data.DataLoader(
@@ -346,9 +356,11 @@ def train(train_loader, model, criterion, optimizer, epoch):
             batch_size=batch_size, sampler=sampler,
             num_workers=workers)
 
+    # load data samples and train
     for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(train_loader):
         batchNum = i+1
-        num_samples += imFace.size(0)
+        actual_batch_size = imFace.size(0)
+        num_samples += actual_batch_size
 
         # measure data loading time
         data_time.update(time.time() - end)
@@ -376,37 +388,48 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         if args.hsm:
             # update sample weights to be the loss, so that harder samples have larger chances to be drawn in the next epoch
-            seq_indices = torch.arange(i, i+indices.size(0)).type_as(torch.LongTensor())
-
-            # Approach-1
-            multinomial_weights[seq_indices] = lossLin.detach().cpu()
-
-            # Approach-2
-            # # normalize and threshold prob at max value '1'
-            # batch_loss = lossLin.detach().cpu().div_(10.0)
-            # batch_loss[batch_loss>1.0] = 1.0
-            # multinomial_weights[seq_indices] = batch_loss
-
-            # print(lossLin.detach().cpu())
-            # print(len(multinomial_weights))
-            # print(indices)
-            # print([idx for idx in indices if idx > len(multinomial_weights)])
-            # print(multinomial_weights[indices])
-            # print(len(data_train))
+            # normalize and threshold prob values at max value '1'
+            batch_loss = lossLin.detach().cpu().div_(10.0)
+            batch_loss[batch_loss>1.0] = 1.0
+            multinomial_weights.scatter_(0, indices, batch_loss.type_as(torch.DoubleTensor()))
+            # sampling_meter.display(multinomial_weights)
             # print([idx for idx in indices if idx > len(data_train)])
-            # print(len(data_train), indices)
-            # if i != indices.detach().cpu():
-            #     print(i, indices)
 
         # average over the batch
         lossLin = torch.sum(lossLin)
-
         losses.update(loss.data.item(), imFace.size(0))
         lossesLin.update(lossLin.item()/batch_size, imFace.size(0))
+
+        # # compute gradient and do SGD step
+        # optimizer.zero_grad()
+        # loss.backward()
+        # optimizer.step()
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
+        if args.adv:
+            # Collect gradInput
+            imFace_grad = imFace.grad.data
+            imEyeL_grad = imEyeL.grad.data
+            imEyeR_grad = imEyeR.grad.data
+            faceGrid_grad = faceGrid.grad.data
+
+            # Call Adversarial Attack
+            perturbed_imFace = adversarial_attack(imFace, imFace_grad)
+            perturbed_imEyeL = adversarial_attack(imEyeL, imEyeL_grad)
+            perturbed_imEyeR = adversarial_attack(imEyeR, imEyeR_grad)
+            perturbed_faceGrid = adversarial_attack(faceGrid, faceGrid_grad)
+
+            # Re-classify the perturbed image
+            output_adv = model(perturbed_imFace, perturbed_imEyeL, perturbed_imEyeR, perturbed_faceGrid)
+            loss_adv = criterion(output_adv, gaze)
+            loss_adv.backward()
+            # concatenate both real and adversarial loss functions
+            loss = loss + loss_adv
+
+
+        # optimize
         optimizer.step()
 
         # measure elapsed time
@@ -424,18 +447,11 @@ def train(train_loader, model, criterion, optimizer, epoch):
                     epoch, batchNum, len(train_loader), batch_time=batch_time,
                     data_time=data_time, loss=losses, lossLin=lossesLin))
         else:
+            sampling_meter.display(multinomial_weights)
             progress_meter.update(num_samples, lossesLin.avg)
 
         if 0 < dataset_size < batchNum:
             break
-
-    if args.hsm:
-        # update dataloader and sampler
-        sampler = torch.utils.data.WeightedRandomSampler(multinomial_weights, int(len(multinomial_weights)))
-        train_loader = torch.utils.data.DataLoader(
-            data_train,
-            batch_size=batch_size, sampler=sampler,
-            num_workers=workers)
 
     return lossesLin.avg
 
@@ -675,7 +691,8 @@ class ProgressMeter(object):
         infoString = ' {val:d}/{max:d} ({percent:d}%) '.format(val=value, max=self.max_value, percent=int(value/self.max_value*100))
         index = (len(marker)-len(infoString))//2
         marker = marker[:index] + infoString + marker[index + len(infoString):]
-        print('\r'+self.label + marker + metric + time_elapsed, end= '' if value < self.max_value else '\n\n')
+        # print('\r'+self.label + marker + metric + time_elapsed, end= '' if value < self.max_value else '\n')
+        print(self.label + marker + metric + time_elapsed, end= '\r' if value < self.max_value else '\n')
 
 import math
 import shutil
@@ -730,7 +747,8 @@ class SamplingMeter(object):
         code = ''
         for i in range(1, len(bucketData)):
             code = code + self.getCode(bucketData[i], maxValue, '█')
-        print(self.label + self.left + code + self.right)
+        # For Live Heatmap: print in previous line and comeback
+        print('\033[F'+self.label + self.left + code + self.right, end='\n')
 
 class MultinomialSampler(torch.utils.data.Sampler):
     r"""Samples elements from ``[0,..,len(weights)-1]`` with given probabilities (weights).
