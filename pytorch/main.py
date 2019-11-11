@@ -7,6 +7,7 @@ import time
 from collections import OrderedDict
 from datetime import datetime  # for timing
 import shutil
+import math
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -121,8 +122,8 @@ base_lr = 0.001
 momentum = 0.9
 weight_decay = 1e-4
 print_freq = 10
-prec1 = 0
-best_prec1 = 1e20
+eval_MSELoss = math.inf
+best_MSELoss = math.inf
 lr = base_lr
 
 count_test = 0
@@ -131,7 +132,7 @@ count = 0
 dataset_size = args.dataset_size
 
 def main():
-    global args, best_prec1, weight_decay, momentum
+    global args, best_MSELoss, weight_decay, momentum
     global data_size, data_train, sampler, sampling_meter
     global multinomial_weights
 
@@ -177,8 +178,8 @@ def main():
         saved = load_checkpoint()
         if saved:
             print(
-                'Loading checkpoint for epoch %05d with loss %.5f (which is the mean squared error not the actual linear error)...' % (
-                    saved['epoch'], saved['best_prec1']))
+                'Loading checkpoint [ Epoch:%05d => RMSError %.5f | MSError %.5f ].' % (
+                    saved['epoch'], saved['best_RMSError'], saved['best_MSELoss']))
             state = saved['state_dict']
 
             if not usingCuda:
@@ -191,7 +192,8 @@ def main():
 
             model.load_state_dict(state)
             epoch = saved['epoch']
-            best_prec1 = saved['best_prec1']
+            best_RMSError = saved['best_RMSError']
+            best_MSELoss = saved['best_MSELoss']
         else:
             print('Warning: Could not read checkpoint!')
 
@@ -212,7 +214,7 @@ def main():
     # Sampling Strategy
     sampler = torch.utils.data.RandomSampler(data_train, replacement=False, num_samples=None)
     if args.hsm:
-        multinomial_weights = torch.ones(len(data_train), dtype=torch.double)*0.1
+        multinomial_weights = torch.ones(len(data_train), dtype=torch.double)
 
     # TODO: Batch sampling - Will implement in future
     # batch_sampler = torch.utils.data.BatchSampler(sampler, batch_size, drop_last=False)
@@ -243,18 +245,21 @@ def main():
                                 momentum=momentum,
                                 weight_decay=weight_decay)
 
+    # optimizer = torch.optim.Adam(model.parameters(), lr,
+    #                             weight_decay=weight_decay)
+
     # Quick test
     if doTest:
         start_time = datetime.now()
-        precision = test(test_loader, model, criterion, epoch=1)
+        eval_MSELoss, eval_RMSError = test(test_loader, model, criterion, epoch=1)
         time_elapsed = datetime.now() - start_time
-        print('Testing loss %.5f' % (precision))
+        print('Testing MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
         print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif doValidate:
         start_time = datetime.now()
-        precision = validate(val_loader, model, criterion, epoch=1)
+        eval_MSELoss, eval_RMSError = validate(val_loader, model, criterion, epoch=1)
         time_elapsed = datetime.now() - start_time
-        print('Validation loss %.5f' % (precision))
+        print('Validation MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
         print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif exportONNX:
         export_onnx_model(val_loader, model)
@@ -280,30 +285,30 @@ def main():
             adjust_learning_rate(optimizer, epoch)
 
             # train for one epoch
-            print('\nEpoch:{} [device:{}:{}, lr:{}, best_prec:{:2.4f}, hcm:{}, adv:{}]'.format(epoch, args.device, deviceId, lr, best_prec1, args.hsm, args.adv))
-            train_error = train(train_loader, model, criterion, optimizer, epoch)
+            print('\nEpoch:{} [device:{}{}, lr:{}, best_MSELoss:{:2.4f}, hcm:{}, adv:{}]'.format(epoch, args.device, deviceId, lr, best_MSELoss, args.hsm, args.adv))
+            train_MSELoss, train_RMSError = train(train_loader, model, criterion, optimizer, epoch)
 
             # evaluate on validation set
-            prec1 = validate(val_loader, model, criterion, epoch)
+            eval_MSELoss, eval_RMSError = validate(val_loader, model, criterion, epoch)
 
-            # remember best prec@1 and save checkpoint
-            is_best = prec1 < best_prec1
-            best_prec1 = min(prec1, best_prec1)
+            # remember best MSELoss and save checkpoint
+            is_best = eval_MSELoss < best_MSELoss
+            best_MSELoss = min(eval_MSELoss, best_MSELoss)
 
             time_elapsed = datetime.now() - start_time
 
             if Run:
-                run.log('precision', prec1)
-                run.log('best precision', best_prec1)
+                run.log('MSELoss', eval_MSELoss)
+                run.log('best MSELoss', best_MSELoss)
                 run.log('epoch time', time_elapsed)
 
             save_checkpoint({
                 'epoch': epoch,
                 'state_dict': model.state_dict(),
-                'best_prec1': best_prec1,
+                'best_MSELoss': best_MSELoss,
             }, is_best)
 
-            print('Epoch %05d with loss %.5f' % (epoch, best_prec1))
+            print('Epoch %05d with loss %.5f' % (epoch, best_MSELoss))
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
     totaltime_elapsed = datetime.now() - totalstart_time
@@ -332,11 +337,12 @@ def train(train_loader, model, criterion, optimizer, epoch):
     stage = 'train'
     batch_time = AverageMeter()
     data_time = AverageMeter()
-    losses = AverageMeter()
-    lossesLin = AverageMeter()
+    MSELosses = AverageMeter()
+    RMSErrors = AverageMeter()
 
     # todo: init only for verbose disabled
-    progress_meter = ProgressMeter(max_value=data_size[stage], label=stage)
+    if not args.verbose:
+        progress_meter = ProgressMeter(max_value=data_size[stage], label=stage)
     num_samples = 0
 
     # switch to train mode
@@ -357,6 +363,8 @@ def train(train_loader, model, criterion, optimizer, epoch):
             num_workers=workers)
         # Line-space for HSM meter
         print('')
+        if not args.verbose:
+            sampling_meter.display(multinomial_weights)
 
     # load data samples and train
     for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(train_loader):
@@ -383,26 +391,25 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         loss = criterion(output, gaze)
 
-        lossLin = output - gaze
-        lossLin = torch.mul(lossLin, lossLin)
-        lossLin = torch.sum(lossLin, 1) #MSDistance
-        lossLin = torch.sqrt(lossLin) #RMSDistance
+        error = output - gaze
+        error = torch.mul(error, error)
+        error = torch.sum(error, 1)
+        error = torch.sqrt(error) #Batch Eucledean Distance sqrt(dx^2 + dy^2)
 
         if args.hsm:
             # update sample weights to be the loss, so that harder samples have larger chances to be drawn in the next epoch
             # normalize and threshold prob values at max value '1'
-            batch_loss = lossLin.detach().cpu().div_(10.0)
-            # batch_loss = lossLin.detach().cpu().div_(best_prec1*2)
+            batch_loss = error.detach().cpu().div_(10.0)
+            # batch_loss = error.detach().cpu().div_(best_MSELoss*2)
             batch_loss[batch_loss>1.0] = 1.0
             multinomial_weights.scatter_(0, indices, batch_loss.type_as(torch.DoubleTensor()))
-            # print([idx for idx in indices if idx > len(data_train)])
-            if not args.verbose:
-                sampling_meter.display(multinomial_weights)
+            # if not args.verbose:
+            #     sampling_meter.display(multinomial_weights)
 
         # average over the batch
-        lossLin = torch.sum(lossLin)
-        losses.update(loss.data.item(), imFace.size(0))
-        lossesLin.update(lossLin.item()/batch_size, imFace.size(0))
+        error = torch.mean(error)
+        MSELosses.update(loss.data.item(), actual_batch_size)
+        RMSErrors.update(error.item(), actual_batch_size)
 
         # # compute gradient and do SGD step
         # optimizer.zero_grad()
@@ -428,10 +435,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
             # Re-classify the perturbed image
             output_adv = model(perturbed_imFace, perturbed_imEyeL, perturbed_imEyeR, perturbed_faceGrid)
             loss_adv = criterion(output_adv, gaze)
-            loss_adv.backward()
+            # loss_adv.backward()
             # concatenate both real and adversarial loss functions
             loss = loss + loss_adv
-
+            loss.backward()
 
         # optimize
         optimizer.step()
@@ -446,25 +453,25 @@ def train(train_loader, model, criterion, optimizer, epoch):
             print('Epoch (train): [{}][{}/{}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'MSELoss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'RMSErr {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
+                  'MSELoss {MSELosses.val:.4f} ({MSELosses.avg:.4f})\t'
+                  'RMSError {RMSErrors.val:.4f} ({RMSErrors.avg:.4f})\t'.format(
                     epoch, batchNum, len(train_loader), batch_time=batch_time,
-                    data_time=data_time, loss=losses, lossLin=lossesLin))
+                    data_time=data_time, MSELosses=MSELosses, RMSErrors=RMSErrors))
         else:
-            progress_meter.update(num_samples, lossesLin.avg)
+            progress_meter.update(num_samples, MSELosses.avg, RMSErrors.avg)
 
         if 0 < dataset_size < batchNum:
             break
 
-    return lossesLin.avg
+    return MSELosses.avg, RMSErrors.avg
 
 def evaluate(eval_loader, model, criterion, epoch, stage):
     global count_test
     global dataset_size
     batch_time = AverageMeter()
     data_time = AverageMeter()
-    losses = AverageMeter()
-    lossesLin = AverageMeter()
+    MSELosses = AverageMeter()
+    RMSErrors = AverageMeter()
     progress_meter = ProgressMeter(max_value=data_size[stage], label=stage)
     num_samples = 0
 
@@ -476,7 +483,8 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
 
     for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(eval_loader):
         batchNum = i+1
-        num_samples += imFace.size(0)
+        actual_batch_size = imFace.size(0)
+        num_samples += actual_batch_size
 
         # measure data loading time
         data_time.update(time.time() - end)
@@ -509,15 +517,15 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
         results += list(map(convertResult, r1))
         loss = criterion(output, gaze)
 
-        lossLin = output - gaze
-        lossLin = torch.mul(lossLin, lossLin)
-        lossLin = torch.sum(lossLin, 1)
-        # MSE vs RMS error
-#         lossLin = torch.sum(lossLin)
-        lossLin = torch.sum(torch.sqrt(lossLin))
+        error = output - gaze
+        error = torch.mul(error, error)
+        error = torch.sum(error, 1) #Batch MSDistance
+        error = torch.sqrt(error) #Batch RMSDistance
 
-        losses.update(loss.data.item(), imFace.size(0))
-        lossesLin.update(lossLin.item()/batch_size, imFace.size(0))
+        # average over the batch
+        error = torch.mean(error)
+        MSELosses.update(loss.data.item(), actual_batch_size)
+        RMSErrors.update(error.item(), actual_batch_size)
 
         # compute gradient and do SGD step
         # measure elapsed time
@@ -527,12 +535,12 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
         if args.verbose:
             print('Epoch ({}): [{}][{}/{}]\t'
               'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-              'MSELoss {loss.val:.4f} ({loss.avg:.4f})\t'
-              'RMSErr {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
+              'MSELoss {MSELosses.val:.4f} ({MSELosses.avg:.4f})\t'
+              'RMSError {RMSErrors.val:.4f} ({RMSErrors.avg:.4f})\t'.format(
                 stage, epoch, batchNum, len(eval_loader), batch_time=batch_time,
-                loss=losses, lossLin=lossesLin))
+                MSELosses=MSELosses, RMSErrors=RMSErrors))
         else:
-            progress_meter.update(num_samples, lossesLin.avg)
+            progress_meter.update(num_samples, MSELosses.avg, RMSErrors.avg)
 
         if 0 < dataset_size < batchNum:
             break
@@ -541,7 +549,7 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
     with open(resultsFileName, 'w+') as outfile:
         json.dump(results, outfile)
 
-    return lossesLin.avg
+    return MSELosses.avg, RMSErrors.avg
 
 def validate(val_loader, model, criterion, epoch):
     return evaluate(val_loader, model, criterion, epoch, 'val')
@@ -678,16 +686,15 @@ class ProgressMeter(object):
         size_tuple = shutil.get_terminal_size((default_width, default_height))  # pass fallback
         return size_tuple.columns
 
-    def update(self, value, metric):
+    def update(self, value, metric, error):
         '''Updates the progress bar and its subcomponents'''
-        if metric:
-            metric = '{metric:.4f}'.format(metric=metric)
-        else:
-            metric = ''
+
+        metric = '[{metric:.4f}]'.format(metric=metric) if metric else ''
+        error = '[{error:.4f}]'.format(error=error) if error else ''
 
         time_elapsed = ' [Time: '+str(datetime.now() - self.start_time)+']'
         assert( value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value ('+ str(self.max_value)+').'
-        width = self.getTerminalWidth() - (len(self.label)+len(self.left)+len(self.right)+len(metric)+len(time_elapsed))
+        width = self.getTerminalWidth() - (len(self.label)+len(self.left)+len(self.right)+len(metric)+len(error)+len(time_elapsed))
         marker = self.create_marker(value, width).ljust(width, self.fill)
         marker = self.left + marker + self.right
         # append infoString at the center
@@ -695,10 +702,8 @@ class ProgressMeter(object):
         index = (len(marker)-len(infoString))//2
         marker = marker[:index] + infoString + marker[index + len(infoString):]
         # print('\r'+self.label + marker + metric + time_elapsed, end= '' if value < self.max_value else '\n')
-        print(self.label + marker + metric + time_elapsed, end= '\r' if value < self.max_value else '\n')
+        print(self.label + marker + metric + error + time_elapsed, end= '\r' if value < self.max_value else '\n')
 
-import math
-import shutil
 class SamplingMeter(object):
     '''A sampling hotness bar which stretches to fill the line.'''
     def __init__(self, label='', left='|', right='|'):
@@ -749,40 +754,6 @@ class SamplingMeter(object):
         # For Live Heatmap: print in previous line and comeback
         print('\033[F'+self.label + self.left + code + self.right, end='\n')
 
-class MultinomialSampler(torch.utils.data.Sampler):
-    r"""Samples elements from ``[0,..,len(weights)-1]`` with given probabilities (weights).
-    Args:
-        weights (sequence)   : a sequence of weights, not necessary summing up to one
-        num_samples (int): number of samples to draw
-        replacement (bool): if ``True``, samples are drawn with replacement.
-            If not, they are drawn without replacement, which means that when a
-            sample index is drawn for a row, it cannot be drawn again for that row.
-    Example:
-        >>> list(MultinomialSampler([0.1, 0.9, 0.4, 0.7, 3.0, 0.6], 5, replacement=True))
-        [0, 0, 0, 1, 0]
-        >>> list(MultinomialSampler([0.9, 0.4, 0.05, 0.2, 0.3, 0.1], 5, replacement=False))
-        [0, 1, 4, 3, 2]
-    """
-    def __init__(self, weights, num_samples, replacement=False):
-        if not isinstance(num_samples, torch._six.int_classes) or isinstance(num_samples, bool) or \
-                num_samples <= 0:
-            raise ValueError("num_samples should be a positive integer "
-                             "value, but got num_samples={}".format(num_samples))
-        if not isinstance(replacement, bool):
-            raise ValueError("replacement should be a boolean value, but got "
-                             "replacement={}".format(replacement))
-        self.weights = torch.as_tensor(weights, dtype=torch.double)
-        self.num_samples = num_samples
-        self.replacement = replacement
-
-    def update(self, weights):
-        self.weights.copy_(torch.as_tensor(weights, dtype=torch.double))
-
-    def __iter__(self):
-        return iter(torch.multinomial(self.weights, self.num_samples, self.replacement).tolist())
-
-    def __len__(self):
-        return self.num_samples
 
 if __name__ == "__main__":
     try:
