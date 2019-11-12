@@ -195,7 +195,6 @@ def main():
 
             model.load_state_dict(state)
             epoch = saved['epoch']
-            # best_RMSError = saved['best_RMSError']
             best_MSELoss = saved['best_MSELoss']
         else:
             print('Warning: Could not read checkpoint!')
