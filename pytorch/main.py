@@ -175,11 +175,14 @@ def main():
 
     epoch = 1
     if doLoad:
-        saved = load_checkpoint()
+        if args.validate or args.test:
+            saved = load_checkpoint(filename='best_checkpoint.pth.tar')
+        else:
+            saved = load_checkpoint()
         if saved:
             print(
-                'Loading checkpoint [ Epoch:%05d => RMSError %.5f | MSError %.5f ].' % (
-                    saved['epoch'], saved['best_RMSError'], saved['best_MSELoss']))
+                'Loading checkpoint [ Epoch:%05d => MSELoss %.5f ].' % (
+                    saved['epoch'], saved['best_MSELoss']))
             state = saved['state_dict']
 
             if not usingCuda:
@@ -192,7 +195,7 @@ def main():
 
             model.load_state_dict(state)
             epoch = saved['epoch']
-            best_RMSError = saved['best_RMSError']
+            # best_RMSError = saved['best_RMSError']
             best_MSELoss = saved['best_MSELoss']
         else:
             print('Warning: Could not read checkpoint!')
