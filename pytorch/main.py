@@ -326,6 +326,12 @@ def adversarial_attack(image, data_grad, epsilon=0.1):
     # Return the perturbed image
     return perturbed_image
 
+def euclideanBatchError(output, target):
+    """ For a batch of output and target returns corresponding batch of euclidean errors
+    """
+    # Batch Euclidean Distance sqrt(dx^2 + dy^2)
+    return torch.sqrt(torch.sum(torch.pow(output - target, 2),1))
+
 def train(train_loader, model, criterion, optimizer, epoch):
     global count
     global dataset_size
@@ -390,11 +396,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         output = model(imFace, imEyeL, imEyeR, faceGrid)
 
         loss = criterion(output, gaze)
-
-        error = output - gaze
-        error = torch.mul(error, error)
-        error = torch.sum(error, 1)
-        error = torch.sqrt(error) #Batch Eucledean Distance sqrt(dx^2 + dy^2)
+        error = euclideanBatchError(output, gaze)
 
         if args.hsm:
             # update sample weights to be the loss, so that harder samples have larger chances to be drawn in the next epoch
@@ -516,11 +518,7 @@ def evaluate(eval_loader, model, criterion, epoch, stage):
 
         results += list(map(convertResult, r1))
         loss = criterion(output, gaze)
-
-        error = output - gaze
-        error = torch.mul(error, error)
-        error = torch.sum(error, 1) #Batch MSDistance
-        error = torch.sqrt(error) #Batch RMSDistance
+        error = euclideanBatchError(output, gaze)
 
         # average over the batch
         error = torch.mean(error)
