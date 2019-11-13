@@ -33,6 +33,7 @@ class ItrackerImageModel(nn.Module):
         super(ItrackerImageModel, self).__init__()
         self.features = nn.Sequential(
             nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=0),  # CONV-1
+            nn.BatchNorm2d(96),
             nn.ReLU(inplace=True),
             nn.Dropout(0.1),
             nn.MaxPool2d(kernel_size=3, stride=2),
@@ -40,6 +41,7 @@ class ItrackerImageModel(nn.Module):
             # should be CrossMapLRN2d, but swapping for LocalResponseNorm for ONNX export
 
             nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2, groups=2),  # CONV-2
+            nn.BatchNorm2d(256),
             nn.ReLU(inplace=True),
             nn.Dropout(0.1),
             nn.MaxPool2d(kernel_size=3, stride=2),
@@ -47,10 +49,12 @@ class ItrackerImageModel(nn.Module):
             # should be CrossMapLRN2d, but swapping for LocalResponseNorm for ONNX export
 
             nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1),  # CONV-3
+            nn.BatchNorm2d(384),
             nn.ReLU(inplace=True),
             nn.Dropout(0.1),
 
             nn.Conv2d(384, 64, kernel_size=1, stride=1, padding=0),  # CONV-4
+            nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             nn.Dropout(0.1),
         )

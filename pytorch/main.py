@@ -1,13 +1,12 @@
 import argparse
 import json
+import math
 import os
 import shutil
-import math
 import sys  # for command line argument dumping
 import time
 from collections import OrderedDict
 from datetime import datetime  # for timing
-import math
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -605,14 +604,14 @@ def parse_commandline_arguments():
     args = parser.parse_args()
 
     args.device = None
-    usingCuda = False
+    using_cuda = False
     if not args.disable_cuda and torch.cuda.is_available():
         args.device = torch.device('cuda')
-        usingCuda = True
+        using_cuda = True
         if 0 <= args.deviceId < torch.cuda.device_count():
             torch.cuda.set_device(args.deviceId)
         else:
-            print("Device id can't exeed {}, default to currently set device gpu{}.".format(torch.cuda.device_count()-1), torch.cuda.current_device())
+            print("Device id can't exceed {}, default to currently set device gpu{}.".format(torch.cuda.device_count()-1), torch.cuda.current_device())
         deviceId = torch.cuda.current_device()
     else:
         args.device = torch.device('cpu')
@@ -643,7 +642,6 @@ def parse_commandline_arguments():
     checkpointsPath = args.output_path
     exportONNX = args.exportONNX
     saveCheckpoints = args.save_checkpoints
-    using_cuda = not args.disable_cuda
     verbose = args.verbose
     workers = args.workers
     epochs = args.epochs
