@@ -14,6 +14,9 @@ from ITrackerData import NormalizeImage
 from ITrackerModel import ITrackerModel
 from cam2screen import cam2screen
 
+from skimage import exposure
+from skimage import feature
+
 MEAN_PATH = '.'
 
 
@@ -69,12 +72,12 @@ def main():
                 (x, y, w, h) = cv2.boundingRect(shape_np[leftEyeLandmarksStart:leftEyeLandmarksEnd])
                 left_eye_image = image.copy()
                 left_eye_image = left_eye_image[y - 15:y + h + 15, x - 5:x + w + 5]
-                left_eye_image = imutils.resize(left_eye_image, width=61, inter=cv2.INTER_CUBIC)
+                left_eye_image = imutils.resize(left_eye_image, width=225, inter=cv2.INTER_CUBIC)
 
                 (x, y, w, h) = cv2.boundingRect(shape_np[rightEyeLandmarksStart:rightEyeLandmarksEnd])
                 right_eye_image = image.copy()
                 right_eye_image = right_eye_image[y - 15:y + h + 15, x - 5:x + w + 5]
-                right_eye_image = imutils.resize(right_eye_image, width=61, inter=cv2.INTER_CUBIC)
+                right_eye_image = imutils.resize(right_eye_image, width=225, inter=cv2.INTER_CUBIC)
 
                 if rect.tl_corner().x < 0 or rect.tl_corner().y < 0:
                     is_valid = False
@@ -90,7 +93,7 @@ def main():
                 faceGridW = int((rect.br_corner().x / image_width) * 25) - faceGridX
                 faceGridH = int((rect.br_corner().y / image_height) * 25) - faceGridY
 
-                faceGridImage = np.zeros((25, 25, 1), dtype=np.uint8)
+                faceGridImage = np.zeros((25, 25, 3), dtype=np.uint8)
                 face_grid = np.zeros((25, 25, 1), dtype=np.uint8)
                 faceGridImage.fill(255)
                 for m in range(faceGridW):
@@ -109,10 +112,19 @@ def main():
 
         cv2.imshow("WebCam", image)
         if is_valid:
-            cv2.imshow("face", face_image)
-            cv2.imshow("right_eye", right_eye_image)
-            cv2.imshow("left_eye", left_eye_image)
-            cv2.imshow("face_grid", faceGridImage)
+            faceGridImage = imutils.resize(faceGridImage, width=225, inter=cv2.INTER_CUBIC)
+            input_images = np.concatenate((face_image,
+                                           right_eye_image,
+                                           left_eye_image,
+                                           faceGridImage),
+                                          axis=0)
+            cv2.imshow("input images", input_images)
+
+            hog_images = np.concatenate((hogImage(face_image),
+                                                   hogImage(right_eye_image),
+                                                   hogImage(left_eye_image)),
+                                                  axis=0)
+            cv2.imshow("HoG images", hog_images)
 
             # Run inference using face, right_eye_image, left_eye_image and face_grid
             imFace = Image.fromarray(face_image, 'RGB')
@@ -166,6 +178,16 @@ def main():
 
     cv2.destroyAllWindows()
     cap.release()
+
+
+def hogImage(image):
+    (H, hogImage) = feature.hog(image, orientations=9, pixels_per_cell=(10, 10),
+                                cells_per_block=(3, 3), transform_sqrt=True, block_norm="L1",
+                                visualize=True)
+    hogImage = exposure.rescale_intensity(hogImage, out_range=(0, 255))
+    hogImage = hogImage.astype("uint8")
+
+    return hogImage
 
 
 def remove_module_from_state(saved_state):
