@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import shutil
+import math
 import sys  # for command line argument dumping
 import time
 from collections import OrderedDict
@@ -63,11 +64,11 @@ def main():
         device = torch.device('cpu')
 
     if using_cuda and torch.cuda.device_count() > 0:
-        batch_size = torch.cuda.device_count() * 100  # Change if out of cuda memory
+        batch_size = torch.cuda.device_count() * 256  # Change if out of cuda memory
     else:
-        batch_size = 5
+        batch_size = 1
 
-    best_prec1 = 1e20
+    best_prec1 = math.inf
     lr = BASE_LR
 
     if verbose:
@@ -88,13 +89,6 @@ def main():
     if doLoad:
         saved = load_checkpoint(checkpointsPath, device)
         if saved:
-            print(
-                'Loading checkpoint for epoch %05d with loss %.5f '
-                '(which is the mean squared error not the actual linear error)...' % (
-                    saved['epoch'],
-                    saved['best_prec1'])
-            )
-
             try:
                 state = saved['state_dict']
                 model.load_state_dict(state)
@@ -107,6 +101,12 @@ def main():
 
             epoch = saved['epoch']
             best_prec1 = saved['best_prec1']
+            print(
+                'Loaded checkpoint for epoch %05d with loss %.5f '
+                '(which is the mean squared error not the actual linear error)...' % (
+                    epoch,
+                    best_prec1)
+            )
         else:
             print('Warning: Could not read checkpoint!')
 
