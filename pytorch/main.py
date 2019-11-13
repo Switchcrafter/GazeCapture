@@ -543,14 +543,13 @@ def load_data(split, path, image_size, workers, batch_size, verbose):
         'loader': loader
     }
 
-def centeredPrint(infoString, marker='-', length=20):
+def centeredText(infoString, marker='-', length=40):
     marker = marker*length
     index = (len(marker)-len(infoString))//2
-    marker = marker[index] + infoString + marker[index + len(infoString):]
+    return marker[:index] + infoString + marker[index + len(infoString):]
 
 def load_all_data(path, image_size, workers, batch_size, verbose):
-    print('---------------- Loading Data ----------------')
-    
+    print(centeredText('Loading Data'))
     all_data = {
         # training data : model sees and learns from this data
         'train': load_data('train', path, image_size, workers, batch_size, verbose),
@@ -559,7 +558,6 @@ def load_all_data(path, image_size, workers, batch_size, verbose):
         # test data : model never sees or learns from this data
         'test': load_data('test', path, image_size, workers, batch_size, verbose)
     }
-    print('---------------- Loading Data ----------------')
     return all_data
 
 def adjust_learning_rate(optimizer, epoch):
