@@ -11,7 +11,7 @@ import numpy as np
 Data loader for the iTracker.
 Use prepareDataset.py to convert the dataset from http://gazecapture.csail.mit.edu/ to proper format.
 
-Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018. 
+Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018.
 
 Website: http://gazecapture.csail.mit.edu/
 
@@ -148,8 +148,8 @@ class ITrackerData(data.Dataset):
         grid[cond] = 1
         return grid
 
-    def __getitem__(self, index):
-        index = self.indices[index]
+    def __getitem__(self, real_index):
+        index = self.indices[real_index]
 
         imFacePath = os.path.join(self.dataPath,
                                   '%05d/appleFace/%05d.jpg' % (self.metadata['labelRecNum'][index],
@@ -179,7 +179,7 @@ class ITrackerData(data.Dataset):
         faceGrid = torch.FloatTensor(faceGrid)
         gaze = torch.FloatTensor(gaze)
 
-        return row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame
+        return row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, real_index
 
     def __len__(self):
         return len(self.indices)

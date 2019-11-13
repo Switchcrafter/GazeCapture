@@ -7,6 +7,7 @@ import sys  # for command line argument dumping
 import time
 from collections import OrderedDict
 from datetime import datetime  # for timing
+import math
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -14,27 +15,23 @@ import torch.nn as nn
 import torch.nn.parallel
 import torch.optim
 import torch.utils.data
-import progressbar
 
 from ITrackerData import ITrackerData
 from ITrackerModel import ITrackerModel
+from Utilities import AverageMeter, ProgressBar, SamplingBar
 
 try:
     from azureml.core.run import Run
-
     run = Run.get_context()
 except ImportError:
     run = None
 
 '''
 Train/test code for iTracker.
-
-Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018. 
-
+Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018.
 Website: http://gazecapture.csail.mit.edu/
 
 Cite:
-
 Eye Tracking for Everyone
 K.Krafka*, A. Khosla*, P. Kellnhofer, H. Kannan, S. Bhandarkar, W. Matusik and A. Torralba
 IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2016
@@ -45,30 +42,25 @@ Title = {Eye Tracking for Everyone},
 Year = {2016},
 Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 }
-
 '''
 
 BASE_LR = 0.001
 MOMENTUM = 0.9
 WEIGHT_DECAY = 1e-4
 
-
 def main():
     args, doLoad, doTest, doValidate, dataPath, checkpointsPath, \
-    exportONNX, saveCheckpoints, using_cuda, workers, epochs, dataset_limit, verbose = parse_commandline_arguments()
-
-    if using_cuda and torch.cuda.is_available():
-        device = torch.device('cuda')
-        using_cuda = True
-    else:
-        device = torch.device('cpu')
+    exportONNX, saveCheckpoints, using_cuda, workers, epochs, \
+    dataset_limit, verbose, device, deviceId = parse_commandline_arguments()
 
     if using_cuda and torch.cuda.device_count() > 0:
-        batch_size = torch.cuda.device_count() * 256  # Change if out of cuda memory
+        # Change batch_size in commandLine args if out of cuda memory
+        batch_size = torch.cuda.device_count() * args.batch_size
     else:
         batch_size = 1
 
-    best_prec1 = math.inf
+    eval_MSELoss = math.inf
+    best_MSELoss = math.inf
     lr = BASE_LR
 
     if verbose:
@@ -77,8 +69,8 @@ def main():
             print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
         print('')
 
+    # Retrieve model
     model = ITrackerModel().to(device=device)
-
     if using_cuda:
         model = torch.nn.DataParallel(model).to(device=device)
 
@@ -89,6 +81,15 @@ def main():
     if doLoad:
         saved = load_checkpoint(checkpointsPath, device)
         if saved:
+            epoch = saved['epoch']
+            # backward compatible to old saved states
+            best_MSELoss = saved['best_MSELoss'] if 'best_MSELoss' in saved.keys() else saved['best_prec1']
+            print(
+                'Loading checkpoint : [Epoch: %d | MSELoss: %.5f].' % (
+                    epoch,
+                    best_MSELoss)
+            )
+
             try:
                 state = saved['state_dict']
                 model.load_state_dict(state)
@@ -98,15 +99,6 @@ def main():
                 # removed.
                 state = remove_module_from_state(saved)
                 model.load_state_dict(state)
-
-            epoch = saved['epoch']
-            best_prec1 = saved['best_prec1']
-            print(
-                'Loaded checkpoint for epoch %05d with loss %.5f '
-                '(which is the mean squared error not the actual linear error)...' % (
-                    epoch,
-                    best_prec1)
-            )
         else:
             print('Warning: Could not read checkpoint!')
 
@@ -115,8 +107,6 @@ def main():
     totalstart_time = datetime.now()
 
     datasets = load_all_data(dataPath, image_size, workers, batch_size, verbose)
-
-    print('')  # print blank line after loading data
 
     #     criterion = nn.MSELoss(reduction='sum').to(device=device)
     criterion = nn.MSELoss(reduction='mean').to(device=device)
@@ -128,18 +118,17 @@ def main():
     if doTest:
         # Quick test
         start_time = datetime.now()
-        precision = test(datasets, model, criterion, 1, checkpointsPath, batch_size, device, dataset_limit, verbose)
+        eval_MSELoss, eval_RMSError = test(datasets, model, criterion, 1, checkpointsPath, batch_size, device, dataset_limit, verbose)
         time_elapsed = datetime.now() - start_time
         print('')
-        print('Testing loss %.5f' % precision)
+        print('Testing MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
         print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif doValidate:
-        # Validation of saved checkpoint
         start_time = datetime.now()
-        precision = validate(datasets, model, criterion, 1, checkpointsPath, batch_size, device, dataset_limit, verbose)
+        eval_MSELoss, eval_RMSError = validate(datasets, model, criterion, 1, checkpointsPath, batch_size, device, dataset_limit, verbose)
         time_elapsed = datetime.now() - start_time
         print('')  # print blank line after loading data
-        print('Validation loss %.5f' % precision)
+        print('Validation MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
         print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif exportONNX:
         # export the model for use in other frameworks
@@ -156,6 +145,11 @@ def main():
                 time_elapsed = datetime.now() - start_time
                 print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
+        if args.hsm:
+            args.multinomial_weights = torch.ones(datasets['train']['size'], dtype=torch.double)
+            if not verbose:
+                args.sampling_bar = SamplingBar('HSM')
+
         # now start training from last best epoch
         for epoch in range(epoch, epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
@@ -163,62 +157,97 @@ def main():
             adjust_learning_rate(optimizer, epoch)
 
             # train for one epoch
-            print('\nEpoch:{} [device:{}, lr:{}]'.format(epoch, device, lr))
-            train_error = train(datasets['train'], model, criterion, optimizer, epoch, batch_size, device, dataset_limit, verbose)
+            print('\nEpoch:{} [device:{}{}, lr:{}, best_MSELoss:{:2.4f}, hsm:{}, adv:{}]'.format(epoch, device, deviceId, lr, best_MSELoss, args.hsm, args.adv))
+            train_MSELoss, train_RMSError = train(datasets['train'], model, criterion, optimizer, epoch, batch_size, device, dataset_limit, verbose, args)
 
             # evaluate on validation set
-            prec1 = validate(datasets, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose)
+            eval_MSELoss, eval_RMSError = validate(datasets, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose)
 
-            # remember best prec1 and save checkpoint
-            is_best = prec1 < best_prec1
-            best_prec1 = min(prec1, best_prec1)
+            # remember best MSELoss and save checkpoint
+            is_best = eval_MSELoss < best_MSELoss
+            best_MSELoss = min(eval_MSELoss, best_MSELoss)
 
             time_elapsed = datetime.now() - start_time
 
             if run:
-                run.log('precision', prec1)
-                run.log('best precision', best_prec1)
+                run.log('MSELoss', eval_MSELoss)
+                run.log('best MSELoss', best_MSELoss)
                 run.log('epoch time', time_elapsed)
 
             save_checkpoint({
                 'epoch': epoch,
                 'state_dict': model.state_dict(),
-                'best_prec1': best_prec1
+                'best_MSELoss': best_MSELoss,
             },
                 is_best,
                 checkpointsPath,
                 saveCheckpoints)
 
             print('')
-            print('Epoch %05d with loss %.5f' % (epoch, best_prec1))
+            print('Epoch %05d with loss %.5f' % (epoch, best_MSELoss))
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
 
+# Fast Gradient Sign Attack (FGSA)
+def adversarialAttack(image, data_grad, epsilon=0.1):
+    # Collect the element-wise sign of the data gradient
+    sign_data_grad = data_grad.sign()
+    # Create the perturbed image by adjusting each pixel of the input image
+    perturbed_image = image + epsilon*sign_data_grad
+    # Adding clipping to maintain [0,1] range
+    perturbed_image = torch.clamp(perturbed_image, 0, 1)
+    # Return the perturbed image
+    return perturbed_image
 
-def train(dataset, model, criterion, optimizer, epoch, batch_size, device, dataset_limit=None, verbose=False):
+def euclideanBatchError(output, target):
+    """ For a batch of output and target returns corresponding batch of euclidean errors
+    """
+    # Batch Euclidean Distance sqrt(dx^2 + dy^2)
+    return torch.sqrt(torch.sum(torch.pow(output - target, 2),1))
+
+
+def train(dataset, model, criterion, optimizer, epoch, batch_size, device, dataset_limit=None, verbose=False, args=None):
     data_size = dataset['size']
     loader = dataset['loader']
     split = dataset['split']
 
     batch_time = AverageMeter()
     data_time = AverageMeter()
-    losses = AverageMeter()
-    lossesLin = AverageMeter()
+    MSELosses = AverageMeter()
+    RMSErrors = AverageMeter()
     num_samples = 0
 
     if not verbose:
-        progress_meter = ProgressMeter()
+        progress_bar = ProgressBar(max_value=data_size, label=split)
 
     # switch to train mode
     model.train()
 
     end = time.time()
 
-    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame) in enumerate(loader):
+	# HSM Update - Every epoch
+    if args.hsm:
+        # Reset every 15th epoch
+        if epoch%15 == 0:
+            args.multinomial_weights = torch.ones(len(data_size), dtype=torch.double)
+        # update dataloader and sampler
+        sampler = torch.utils.data.WeightedRandomSampler(args.multinomial_weights, int(len(args.multinomial_weights)), replacement=True)
+        loader = torch.utils.data.DataLoader(
+            loader.dataset,
+            batch_size=batch_size, sampler=sampler,
+            num_workers=args.workers)
+        # Line-space for HSM meter
+        print('')
+        if not verbose:
+            args.sampling_bar.display(args.multinomial_weights)
+
+	# load data samples and train
+    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(loader):
         batchNum = i + 1
-        num_samples += imFace.size(0)
+        actual_batch_size = imFace.size(0)
+        num_samples += actual_batch_size
 
         # measure data loading time
         data_time.update(time.time() - end)
@@ -238,20 +267,51 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
         output = model(imFace, imEyeL, imEyeR, faceGrid)
 
         loss = criterion(output, gaze)
+        error = euclideanBatchError(output, gaze)
 
-        lossLin = output - gaze
-        lossLin = torch.mul(lossLin, lossLin)
-        lossLin = torch.sum(lossLin, 1)
-        # MSE vs RMS error
-        #         lossLin = torch.sum(lossLin)
-        lossLin = torch.sum(torch.sqrt(lossLin))
+        if args.hsm:
+            # update sample weights to be the loss, so that harder samples have larger chances to be drawn in the next epoch
+            # normalize and threshold prob values at max value '1'
+            batch_loss = error.detach().cpu().div_(10.0)
+            # batch_loss = error.detach().cpu().div_(best_MSELoss*2)
+            batch_loss[batch_loss>1.0] = 1.0
+            args.multinomial_weights.scatter_(0, indices, batch_loss.type_as(torch.DoubleTensor()))
 
-        losses.update(loss.data.item(), imFace.size(0))
-        lossesLin.update(lossLin.item() / batch_size, imFace.size(0))
+        # average over the batch
+        error = torch.mean(error)
+        MSELosses.update(loss.data.item(), actual_batch_size)
+        RMSErrors.update(error.item(), actual_batch_size)
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
+
+        if args.adv:
+            # Backprop the loss while retaining the graph to backprop again
+            loss.backward(retain_graph=True)
+
+            # Collect gradInput
+            imFace_grad = imFace.grad.data
+            imEyeL_grad = imEyeL.grad.data
+            imEyeR_grad = imEyeR.grad.data
+            faceGrid_grad = faceGrid.grad.data
+
+            # Generate perturbed input for Adversarial Attack
+            perturbed_imFace = adversarialAttack(imFace, imFace_grad)
+            perturbed_imEyeL = adversarialAttack(imEyeL, imEyeL_grad)
+            perturbed_imEyeR = adversarialAttack(imEyeR, imEyeR_grad)
+            perturbed_faceGrid = adversarialAttack(faceGrid, faceGrid_grad)
+
+            # Regenerate output for the perturbed input
+            output_adv = model(perturbed_imFace, perturbed_imEyeL, perturbed_imEyeR, perturbed_faceGrid)
+            loss_adv = criterion(output_adv, gaze)
+
+            # concatenate both real and adversarial loss functions
+            loss = loss + loss_adv
+
+        # backprop the loss
         loss.backward()
+
+        # optimize
         optimizer.step()
 
         # measure elapsed time
@@ -262,20 +322,19 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
             print('Epoch (train): [{}][{}/{}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'MSELoss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'RMSErr {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
-                epoch, batchNum, len(loader), batch_time=batch_time,
-                data_time=data_time, loss=losses, lossLin=lossesLin))
+                  'MSELoss {MSELosses.val:.4f} ({MSELosses.avg:.4f})\t'
+                  'RMSError {RMSErrors.val:.4f} ({RMSErrors.avg:.4f})\t'.format(
+                    epoch, batchNum, len(loader), batch_time=batch_time,
+                    data_time=data_time, MSELosses=MSELosses, RMSErrors=RMSErrors))
         else:
-            progress_meter.update(num_samples, data_size, split, lossesLin.avg)
+            progress_bar.update(num_samples, MSELosses.avg, RMSErrors.avg)
 
         if dataset_limit and dataset_limit <= batchNum:
             break
 
     print('')
 
-    return lossesLin.avg
-
+    return MSELosses.avg, RMSErrors.avg
 
 def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit=None, verbose=False):
     data_size = dataset['size']
@@ -284,12 +343,12 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
 
     batch_time = AverageMeter()
     data_time = AverageMeter()
-    losses = AverageMeter()
-    lossesLin = AverageMeter()
+    MSELosses = AverageMeter()
+    RMSErrors = AverageMeter()
     num_samples = 0
 
     if not verbose:
-        progress_meter = ProgressMeter()
+        progress_bar = ProgressBar(max_value=data_size, label=split)
 
     # switch to evaluate mode
     model.eval()
@@ -298,9 +357,10 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
 
     results = []
 
-    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame) in enumerate(loader):
+    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(loader):
         batchNum = i + 1
-        num_samples += imFace.size(0)
+        actual_batch_size = imFace.size(0)
+        num_samples += actual_batch_size
 
         # measure data loading time
         data_time.update(time.time() - end)
@@ -332,16 +392,12 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
 
         results += list(map(convertResult, r1))
         loss = criterion(output, gaze)
+        error = euclideanBatchError(output, gaze)
 
-        lossLin = output - gaze
-        lossLin = torch.mul(lossLin, lossLin)
-        lossLin = torch.sum(lossLin, 1)
-        # MSE vs RMS error
-        #         lossLin = torch.sum(lossLin)
-        lossLin = torch.sum(torch.sqrt(lossLin))
-
-        losses.update(loss.data.item(), imFace.size(0))
-        lossesLin.update(lossLin.item() / batch_size, imFace.size(0))
+        # average over the batch
+        error = torch.mean(error)
+        MSELosses.update(loss.data.item(), actual_batch_size)
+        RMSErrors.update(error.item(), actual_batch_size)
 
         # compute gradient and do SGD step
         # measure elapsed time
@@ -350,13 +406,13 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
 
         if verbose:
             print('Epoch ({}): [{}][{}/{}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'MSELoss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'RMSErr {lossLin.val:.4f} ({lossLin.avg:.4f})\t'.format(
-                split, epoch, batchNum, len(loader), batch_time=batch_time,
-                loss=losses, lossLin=lossesLin))
+              'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+              'MSELoss {MSELosses.val:.4f} ({MSELosses.avg:.4f})\t'
+              'RMSError {RMSErrors.val:.4f} ({RMSErrors.avg:.4f})\t'.format(
+                stage, epoch, batchNum, len(eval_loader), batch_time=batch_time,
+                MSELosses=MSELosses, RMSErrors=RMSErrors))
         else:
-            progress_meter.update(num_samples, data_size, split, lossesLin.avg)
+            progress_bar.update(num_samples, MSELosses.avg, RMSErrors.avg)
 
         if dataset_limit and dataset_limit <= batchNum:
             break
@@ -367,7 +423,7 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
 
     print('')
 
-    return lossesLin.avg
+    return MSELosses.avg, RMSErrors.avg
 
 
 def validate(datasets,
@@ -473,10 +529,11 @@ def remove_module_from_state(saved_state):
 def load_data(split, path, image_size, workers, batch_size, verbose):
     data = ITrackerData(path, split=split, imSize=image_size, silent=not verbose)
     size = len(data.indices)
+    shuffle = True if split == 'train' else False
     loader = torch.utils.data.DataLoader(
         data,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=shuffle,
         num_workers=workers,
         pin_memory=True)
 
@@ -487,9 +544,14 @@ def load_data(split, path, image_size, workers, batch_size, verbose):
         'loader': loader
     }
 
+def centeredText(infoString, marker='-', length=40):
+    marker = marker*length
+    index = (len(marker)-len(infoString))//2
+    return marker[:index] + infoString + marker[index + len(infoString):]
 
 def load_all_data(path, image_size, workers, batch_size, verbose):
-    return {
+    print(centeredText('Loading Data'))
+    all_data = {
         # training data : model sees and learns from this data
         'train': load_data('train', path, image_size, workers, batch_size, verbose),
         # validation data : model sees but never learns from this data
@@ -497,60 +559,7 @@ def load_all_data(path, image_size, workers, batch_size, verbose):
         # test data : model never sees or learns from this data
         'test': load_data('test', path, image_size, workers, batch_size, verbose)
     }
-
-
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-
-class ProgressMeter(object):
-    def __init__(self):
-        self.widgets = [
-            'Progress',  # 0
-            ' ',  # 1
-            progressbar.Bar(marker='X', left='|', right='|', fill='-'),  # 2
-            '[', progressbar.SimpleProgress(), ']',  # 4
-            '[', progressbar.ETA(), ']',  # 7
-            '[', 'RMSError', ']',  # 10
-        ]
-        self.bar = progressbar.ProgressBar(maxval=0, widgets=self.widgets)
-        self.bar.start()
-
-    def update(self, value, maxval, label, error):
-        # update label
-        label = '{:5}'.format(label)
-        if self.bar.widgets[0] != label:
-            self.bar.widgets[0] = label
-
-        # update metric
-        metric = '{metric:.4f}'.format(metric=error)
-        if self.bar.widgets[10] != metric:
-            self.bar.widgets[10] = metric
-
-        # update max_value
-        if self.bar.maxval != maxval:
-            self.bar.maxval = maxval
-        # update value
-        self.bar.update(value)
-        # update finish
-        if value >= self.bar.maxval:
-            self.bar.finish()
-
+    return all_data
 
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
@@ -588,8 +597,26 @@ def parse_commandline_arguments():
     parser.add_argument('--disable-cuda', action='store_true', default=False, help='Disable CUDA')
     parser.add_argument('--verbose', type=str2bool, nargs='?', const=True, default=False,
                         help="verbose mode - print details every batch")
-
+    # Experimental options
+    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--deviceId', type=int, default=0)
+    parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
+    parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="")
     args = parser.parse_args()
+
+    args.device = None
+    usingCuda = False
+    if not args.disable_cuda and torch.cuda.is_available():
+        args.device = torch.device('cuda')
+        usingCuda = True
+        if 0 <= args.deviceId < torch.cuda.device_count():
+            torch.cuda.set_device(args.deviceId)
+        else:
+            print("Device id can't exeed {}, default to currently set device gpu{}.".format(torch.cuda.device_count()-1), torch.cuda.current_device())
+        deviceId = torch.cuda.current_device()
+    else:
+        args.device = torch.device('cpu')
+        deviceId = 0
 
     if args.verbose:
         print('Number of arguments:', len(sys.argv), 'arguments.')
@@ -621,6 +648,7 @@ def parse_commandline_arguments():
     workers = args.workers
     epochs = args.epochs
     dataset_limit = args.dataset_limit
+    device = args.device
 
     if verbose:
         print('===================================================')
@@ -634,13 +662,16 @@ def parse_commandline_arguments():
         print('epochs                = %d' % epochs)
         print('exportONNX            = %d' % exportONNX)
         print('===================================================')
-
     return args, doLoad, doTest, doValidate, dataPath, checkpointsPath, exportONNX, saveCheckpoints, \
-           using_cuda, workers, epochs, dataset_limit, verbose
+        using_cuda, workers, epochs, dataset_limit, verbose, device, deviceId
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (KeyboardInterrupt, SystemExit):
+        print('Thread is killed.')
+        sys.exit()
     print('')
     print('DONE')
     print('')
