@@ -307,8 +307,8 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
             # concatenate both real and adversarial loss functions
             loss = loss + loss_adv
 
-        # backprop the loss
-        loss.backward()
+            # backprop the loss
+            loss.backward()
 
         # optimize
         optimizer.step()
