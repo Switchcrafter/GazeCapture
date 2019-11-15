@@ -43,10 +43,9 @@ class ItrackerImageModel(nn.Module):
             # The first convolutional layer filters the 224×224×3 input image with 96 kernels of size 11×11×3 with a
             # stride of 4 pixels (this is the distance between the receptive field centers of neighboring neurons in a
             # kernel map).
-            # nn.BatchNorm2d(3),                                              # Added based on best practices
-            # nn.Dropout(0.1),                                                # Added based on best practices
             nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=0),
             nn.ReLU(inplace=True),
+            nn.Dropout(0.1),  # Added based on best practices
             nn.MaxPool2d(kernel_size=3, stride=2),
             nn.LocalResponseNorm(size=5, alpha=0.0001, beta=0.75, k=1.0),   # should be CrossMapLRN2d, but swapping for
                                                                             # LocalResponseNorm for ONNX export
@@ -54,10 +53,9 @@ class ItrackerImageModel(nn.Module):
             # CONV-2
             # The second convolutional layer takes as input the (response-normalized and pooled) output of the first
             # convolutional layer and filters it with 256 kernels of size 5×5×48.
-            nn.BatchNorm2d(96),                                             # Added based on best practices
-            nn.Dropout(0.1),                                                # Added based on best practices
             nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2, groups=2),
             nn.ReLU(inplace=True),
+            nn.Dropout(0.1),                                                # Added based on best practices
             nn.MaxPool2d(kernel_size=3, stride=2),
             nn.LocalResponseNorm(size=5, alpha=0.0001, beta=0.75, k=1.0),   # should be CrossMapLRN2d, but swapping for
                                                                             # LocalResponseNorm for ONNX export
@@ -66,18 +64,17 @@ class ItrackerImageModel(nn.Module):
             # The third and fourth convolutional layers are connected to one another without any intervening pooling or
             # normalization layers. The third convolutional layer has 384 kernels of size 3×3×256 connected to the
             # (normalized, pooled) outputs of the second convolutional layer.
-            nn.BatchNorm2d(256),                                            # Added based on best practices
-            nn.Dropout(0.1),                                                # Added based on best practices
             nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1),
             nn.ReLU(inplace=True),
+            nn.Dropout(0.1),                                                # Added based on best practices
+
 
             # CONV-4
             # The fourth convolutional layer has 384 kernels of size 1×1×64. This layer is differs from the AlexNet
             # paper (which an additional 5th layer, where layers 4 and 5 were 3x3x192)
-            nn.BatchNorm2d(384),                                            # Added based on best practices
-            nn.Dropout(0.1),                                                # Added based on best practices
             nn.Conv2d(384, 64, kernel_size=1, stride=1, padding=0),
             nn.ReLU(inplace=True),
+            nn.Dropout(0.1),                                                # Added based on best practices
         )
 
     def forward(self, x):
