@@ -58,8 +58,9 @@ def main():
     else:
         batch_size = 5
 
-    eval_MSELoss = math.inf
-    best_MSELoss = math.inf
+    # eval_MSELoss = math.inf
+    eval_RMSError= math.inf
+    best_RMSError = math.inf
     lr = BASE_LR
 
     if verbose:
@@ -81,12 +82,11 @@ def main():
         saved = load_checkpoint(checkpointsPath, device)
         if saved:
             epoch = saved['epoch']
-            # backward compatible to old saved states
-            best_MSELoss = saved['best_MSELoss'] if 'best_MSELoss' in saved.keys() else saved['best_prec1']
+            best_RMSError = saved['best_RMSError']
             print(
-                'Loading checkpoint : [Epoch: %d | MSELoss: %.5f].' % (
+                'Loading checkpoint : [Epoch: %d | RMSError: %.5f].' % (
                     epoch,
-                    best_MSELoss)
+                    best_RMSError)
             )
 
             try:
@@ -156,34 +156,35 @@ def main():
             adjust_learning_rate(optimizer, epoch)
 
             # train for one epoch
-            print('\nEpoch:{} [device:{}{}, lr:{}, best_MSELoss:{:2.4f}, hsm:{}, adv:{}]'.format(epoch, device, deviceId, lr, best_MSELoss, args.hsm, args.adv))
+            print('\nEpoch:{} [device:{}{}, lr:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch, device, deviceId, lr, best_RMSError, args.hsm, args.adv))
             train_MSELoss, train_RMSError = train(datasets['train'], model, criterion, optimizer, epoch, batch_size, device, dataset_limit, verbose, args)
 
             # evaluate on validation set
             eval_MSELoss, eval_RMSError = validate(datasets, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose)
 
-            # remember best MSELoss and save checkpoint
-            is_best = eval_MSELoss < best_MSELoss
-            best_MSELoss = min(eval_MSELoss, best_MSELoss)
+            # remember best RMSError and save checkpoint
+            is_best = eval_RMSError < best_RMSError
+            best_RMSError = min(eval_RMSError, best_RMSError)
 
             time_elapsed = datetime.now() - start_time
 
             if run:
                 run.log('MSELoss', eval_MSELoss)
-                run.log('best MSELoss', best_MSELoss)
+                run.log('RMSLoss', eval_RMSError)
+                run.log('best MSELoss', best_RMSError)
                 run.log('epoch time', time_elapsed)
 
             save_checkpoint({
                 'epoch': epoch,
                 'state_dict': model.state_dict(),
-                'best_MSELoss': best_MSELoss,
+                'best_RMSError': best_RMSError,
             },
                 is_best,
                 checkpointsPath,
                 saveCheckpoints)
 
             print('')
-            print('Epoch %05d with loss %.5f' % (epoch, best_MSELoss))
+            print('Epoch %05d with RMSError %.5f' % (epoch, best_RMSError))
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
     totaltime_elapsed = datetime.now() - totalstart_time
@@ -331,8 +332,6 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
         if dataset_limit and dataset_limit <= batchNum:
             break
 
-    print('')
-
     return MSELosses.avg, RMSErrors.avg
 
 def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit=None, verbose=False):
@@ -419,8 +418,6 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
     resultsFileName = os.path.join(checkpointsPath, 'results.json')
     with open(resultsFileName, 'w+') as outfile:
         json.dump(results, outfile)
-
-    print('')
 
     return MSELosses.avg, RMSErrors.avg
 

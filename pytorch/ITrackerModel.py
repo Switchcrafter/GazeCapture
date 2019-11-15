@@ -6,13 +6,10 @@ import torch.utils.data
 
 '''
 Pytorch model for the iTracker.
-
 Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018. 
-
 Website: http://gazecapture.csail.mit.edu/
 
 Cite:
-
 Eye Tracking for Everyone
 K.Krafka*, A. Khosla*, P. Kellnhofer, H. Kannan, S. Bhandarkar, W. Matusik and A. Torralba
 IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2016
@@ -23,9 +20,7 @@ Title = {Eye Tracking for Everyone},
 Year = {2016},
 Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 }
-
 '''
-
 
 class ItrackerImageModel(nn.Module):
     # Used for both eyes (with shared weights) and the face (with unqiue weights)
@@ -33,26 +28,24 @@ class ItrackerImageModel(nn.Module):
         super(ItrackerImageModel, self).__init__()
         self.features = nn.Sequential(
             nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=0),  # CONV-1
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
             nn.MaxPool2d(kernel_size=3, stride=2),
-            nn.LocalResponseNorm(size=5, alpha=0.0001, beta=0.75, k=1.0),
-            # should be CrossMapLRN2d, but swapping for LocalResponseNorm for ONNX export
-
+            nn.ReLU(inplace=True),
+            
+            nn.BatchNorm2d(96),
+            nn.Dropout(0.1),
             nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2, groups=2),  # CONV-2
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
             nn.MaxPool2d(kernel_size=3, stride=2),
-            nn.LocalResponseNorm(size=5, alpha=0.0001, beta=0.75, k=1.0),
-            # should be CrossMapLRN2d, but swapping for LocalResponseNorm for ONNX export
+            nn.ReLU(inplace=True),
 
+            nn.BatchNorm2d(256),
+            nn.Dropout(0.1),
             nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1),  # CONV-3
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
 
+            nn.BatchNorm2d(384),
+            nn.Dropout(0.1),
             nn.Conv2d(384, 64, kernel_size=1, stride=1, padding=0),  # CONV-4
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
         )
 
     def forward(self, x):
@@ -67,13 +60,13 @@ class FaceImageModel(nn.Module):
         super(FaceImageModel, self).__init__()
         self.conv = ItrackerImageModel()
         self.fc = nn.Sequential(
+            nn.Dropout(0.1),
             nn.Linear(12 * 12 * 64, 128),  # FC-F1
             nn.ReLU(inplace=True),
+            
             nn.Dropout(0.1),
-
             nn.Linear(128, 64),  # FC-F2
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
         )
 
     def forward(self, x):
@@ -89,11 +82,10 @@ class FaceGridModel(nn.Module):
         self.fc = nn.Sequential(
             nn.Linear(gridSize * gridSize, 256),  # FC-FG1
             nn.ReLU(inplace=True),
+            
             nn.Dropout(0.1),
-
             nn.Linear(256, 128),  # FC-FG2
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
         )
 
     def forward(self, x):
@@ -111,16 +103,17 @@ class ITrackerModel(nn.Module):
         self.gridModel = FaceGridModel()
         # Joining both eyes
         self.eyesFC = nn.Sequential(
+            nn.Dropout(0.1),
             nn.Linear(2 * 12 * 12 * 64, 128),  # FC-E1
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
         )
         # Joining everything
         self.fc = nn.Sequential(
+            nn.Dropout(0.1),
             nn.Linear(128 + 64 + 128, 128),  # FC1
             nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
-
+            
+            nn.Dropout(0.1),
             nn.Linear(128, 2),  # FC2
         )
 
