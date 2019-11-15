@@ -173,11 +173,19 @@ def main():
                 run.log('best MSELoss', best_MSELoss)
                 run.log('epoch time', time_elapsed)
 
-            save_checkpoint({
-                'epoch': epoch,
-                'state_dict': model.state_dict(),
-                'best_MSELoss': best_MSELoss,
-            },
+            save_checkpoint(
+                {
+                    'epoch': epoch,
+                    'state_dict': model.state_dict(),
+                    'best_MSELoss': best_MSELoss,
+                    'is_best': is_best,
+                    'train_MSELoss': train_MSELoss,
+                    'train_RMSError': train_RMSError,
+                    'eval_MSELoss': eval_MSELoss,
+                    'eval_RMSError': eval_RMSError,
+                    'lr': lr,
+                    'time_elapsed': time_elapsed,
+                },
                 is_best,
                 checkpointsPath,
                 saveCheckpoints)
@@ -226,7 +234,7 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
 
     end = time.time()
 
-	# HSM Update - Every epoch
+    # HSM Update - Every epoch
     if args.hsm:
         # Reset every 15th epoch
         if epoch%15 == 0:
@@ -242,7 +250,7 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
         if not verbose:
             args.sampling_bar.display(args.multinomial_weights)
 
-	# load data samples and train
+    # load data samples and train
     for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(loader):
         batchNum = i + 1
         actual_batch_size = imFace.size(0)
@@ -504,6 +512,7 @@ def save_checkpoint(state, is_best, checkpointsPath, saveCheckpoints, filename='
         shutil.copyfile(checkpointFilename,
                         os.path.join(checkpointsPath, 'checkpoint' + str(state['epoch']) + '.pth.tar'))
         shutil.copyfile(resultsFilename, os.path.join(checkpointsPath, 'results' + str(state['epoch']) + '.json'))
+        shutil.copyfile('iTrackerModel.py', checkpointsPath)
 
     bestFilename = os.path.join(checkpointsPath, 'best_' + filename)
     bestResultsFilename = os.path.join(checkpointsPath, 'best_results.json')
@@ -581,7 +590,9 @@ def parse_commandline_arguments():
     parser.add_argument('--data_path',
                         help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.",
                         default='/data/gc-data-prepped/')
-    parser.add_argument('--output_path', help="Path to checkpoint", default=os.path.dirname(os.path.realpath(__file__)))
+    parser.add_argument('--output_path',
+                        help="Path to checkpoint",
+                        default=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'checkpoints'))
     parser.add_argument('--save_checkpoints', type=str2bool, nargs='?', const=True, default=False,
                         help="Save each of the checkpoints as the run progresses.")
     parser.add_argument('--test', type=str2bool, nargs='?', const=True, default=False, help="Just test and terminate.")
