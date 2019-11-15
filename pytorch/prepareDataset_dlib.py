@@ -1,3 +1,5 @@
+import json
+
 import cv2
 import os
 
@@ -16,54 +18,62 @@ def main():
     recordings = os.listdir(dataset_path)
 
     for recording in sorted(recordings):
-        recording_path = os.path.join(dataset_path, recording, 'frames')
+        recording_path = os.path.join(dataset_path, recording)
+        print('Processing recording %s' % recording_path)
 
         face_dict = {
+            'H': [],
+            'W': [],
             'X': [],
             'Y': [],
-            'W': [],
-            'H': [],
-            'isValid': []
+            'IsValid': []
         }
 
         left_eye_dict = {
+            'H': [],
+            'W': [],
             'X': [],
             'Y': [],
-            'W': [],
-            'H': [],
-            'isValid': []
+            'IsValid': []
         }
 
         right_eye_dict = {
+            'H': [],
+            'W': [],
             'X': [],
             'Y': [],
-            'W': [],
-            'H': [],
-            'isValid': []
+            'IsValid': []
         }
 
-        for image_name in sorted(os.listdir(recording_path)):
+        for image_name in sorted(os.listdir(os.path.join(recording_path, 'frames'))):
+            print(image_name)
+
             face_rect, left_eye_rect, right_eye_rect, isValid = \
-                find_face_dlib(os.path.join(recording_path, image_name))
-            face_dict['X'].append(face_rect['x'])
-            face_dict['Y'].append(face_rect['y'])
-            face_dict['W'].append(face_rect['w'])
-            face_dict['H'].append(face_rect['h'])
-            face_dict['isValid'].append(isValid)
+                find_face_dlib(os.path.join(recording_path, 'frames', image_name))
+            face_dict['X'].append(face_rect[0])
+            face_dict['Y'].append(face_rect[1])
+            face_dict['W'].append(face_rect[2])
+            face_dict['H'].append(face_rect[3])
+            face_dict['IsValid'].append(isValid)
 
-            left_eye_dict['X'].append(left_eye_rect['x'])
-            left_eye_dict['Y'].append(left_eye_rect['y'])
-            left_eye_dict['W'].append(left_eye_rect['w'])
-            left_eye_dict['H'].append(left_eye_rect['h'])
-            left_eye_dict['isValid'].append(isValid)
+            left_eye_dict['X'].append(left_eye_rect[0])
+            left_eye_dict['Y'].append(left_eye_rect[1])
+            left_eye_dict['W'].append(left_eye_rect[2])
+            left_eye_dict['H'].append(left_eye_rect[3])
+            left_eye_dict['IsValid'].append(isValid)
 
-            right_eye_dict['X'].append(right_eye_rect['x'])
-            right_eye_dict['Y'].append(right_eye_rect['y'])
-            right_eye_dict['W'].append(right_eye_rect['w'])
-            right_eye_dict['H'].append(right_eye_rect['h'])
-            right_eye_dict['isValid'].append(isValid)
+            right_eye_dict['X'].append(right_eye_rect[0])
+            right_eye_dict['Y'].append(right_eye_rect[1])
+            right_eye_dict['W'].append(right_eye_rect[2])
+            right_eye_dict['H'].append(right_eye_rect[3])
+            right_eye_dict['IsValid'].append(isValid)
 
-        # do something with dictionaries
+        with open(os.path.join(recording_path, 'dlibFace.json'), "w") as write_file:
+            json.dump(face_dict, write_file)
+        with open(os.path.join(recording_path, 'dlibLeftEye.json'), "w") as write_file:
+            json.dump(left_eye_dict, write_file)
+        with open(os.path.join(recording_path, 'dlibRightEye.json'), "w") as write_file:
+            json.dump(right_eye_dict, write_file)
 
 
 def find_face_dlib(image_path):
