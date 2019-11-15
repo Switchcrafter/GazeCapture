@@ -44,37 +44,34 @@ class ItrackerImageModel(nn.Module):
             # stride of 4 pixels (this is the distance between the receptive field centers of neighboring neurons in a
             # kernel map).
             nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=0),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.1),  # Added based on best practices
             nn.MaxPool2d(kernel_size=3, stride=2),
-            nn.LocalResponseNorm(size=5, alpha=0.0001, beta=0.75, k=1.0),   # should be CrossMapLRN2d, but swapping for
-                                                                            # LocalResponseNorm for ONNX export
+            nn.ReLU(inplace=True),
 
             # CONV-2
             # The second convolutional layer takes as input the (response-normalized and pooled) output of the first
             # convolutional layer and filters it with 256 kernels of size 5×5×48.
-            nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2, groups=2),
-            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(96),                                             # Added based on best practices
             nn.Dropout(0.1),                                                # Added based on best practices
+            nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2, groups=2),
             nn.MaxPool2d(kernel_size=3, stride=2),
-            nn.LocalResponseNorm(size=5, alpha=0.0001, beta=0.75, k=1.0),   # should be CrossMapLRN2d, but swapping for
-                                                                            # LocalResponseNorm for ONNX export
+            nn.ReLU(inplace=True),
 
             # CONV-3
             # The third and fourth convolutional layers are connected to one another without any intervening pooling or
             # normalization layers. The third convolutional layer has 384 kernels of size 3×3×256 connected to the
             # (normalized, pooled) outputs of the second convolutional layer.
+            nn.BatchNorm2d(256),                                            # Added based on best practices
+            nn.Dropout(0.1),                                                # Added based on best practices
             nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),                                                # Added based on best practices
-
 
             # CONV-4
             # The fourth convolutional layer has 384 kernels of size 1×1×64. This layer is differs from the AlexNet
             # paper (which an additional 5th layer, where layers 4 and 5 were 3x3x192)
+            nn.BatchNorm2d(384),                                            # Added based on best practices
+            nn.Dropout(0.1),                                                # Added based on best practices
             nn.Conv2d(384, 64, kernel_size=1, stride=1, padding=0),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),                                                # Added based on best practices
         )
 
     def forward(self, x):
@@ -89,14 +86,14 @@ class FaceImageModel(nn.Module):
         self.conv = ItrackerImageModel()
         self.fc = nn.Sequential(
             # FC-F1
+            nn.Dropout(0.1),                                            # Added based on best practices
             nn.Linear(12 * 12 * 64, 128),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
 
             # FC-F2
+            nn.Dropout(0.1),                                            # Added based on best practices
             nn.Linear(128, 64),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
         )
 
     def forward(self, x):
@@ -113,12 +110,11 @@ class FaceGridModel(nn.Module):
             # FC-FG1
             nn.Linear(gridSize * gridSize, 256),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
 
             # FC-FG2
+            nn.Dropout(0.1),                                            # Added based on best practices
             nn.Linear(256, 128),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
         )
 
     def forward(self, x):
@@ -137,19 +133,20 @@ class ITrackerModel(nn.Module):
         # Joining both eyes
         self.eyesFC = nn.Sequential(
             # FC-E1
+            nn.Dropout(0.1),                                            # Added based on best practices
             nn.Linear(2 * 12 * 12 * 64, 128),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
         )
 
         # Joining everything
         self.fc = nn.Sequential(
             # FC1
+            nn.Dropout(0.1),                                            # Added based on best practices
             nn.Linear(128 + 64 + 128, 128),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
 
             # FC2
+            nn.Dropout(0.1),
             nn.Linear(128, 2),
         )
 
