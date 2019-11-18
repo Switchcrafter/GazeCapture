@@ -45,7 +45,10 @@ def main():
             'IsValid': []
         }
 
-        for image_name in sorted(os.listdir(os.path.join(recording_path, 'frames'))):
+        with open(os.path.join(recording_path, 'frames.json'), "r") as read_file:
+            frames = json.load(read_file)
+
+        for image_name in frames:
             print(image_name)
 
             face_rect, left_eye_rect, right_eye_rect, isValid = \
