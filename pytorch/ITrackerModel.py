@@ -24,33 +24,47 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 
 class ItrackerImageModel(nn.Module):
     # Used for both eyes (with shared weights) and the face (with unqiue weights)
+    # output = (input-k+2p)/s + 1
+    # ZeroPad = (k-1)/2
     def __init__(self):
         super(ItrackerImageModel, self).__init__()
         self.features = nn.Sequential(
+            # 3C x 224H x 224W
             nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=0),  # CONV-1
+            # 96C x 54H x 54W
             nn.MaxPool2d(kernel_size=3, stride=2),
+            # 96C x 26H x 26W
             nn.ReLU(inplace=True),
             
+            # 96C x 26H x 26W
             nn.BatchNorm2d(96),
-            nn.Dropout(0.1),
+            nn.Dropout2d(0.1),
             nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2, groups=2),  # CONV-2
+            # 256C x 26H x 26W
             nn.MaxPool2d(kernel_size=3, stride=2),
+            # 256C x 12H x 12W
             nn.ReLU(inplace=True),
 
+            # 256C x 12H x 12W
             nn.BatchNorm2d(256),
-            nn.Dropout(0.1),
+            nn.Dropout2d(0.1),
             nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1),  # CONV-3
+            # 384C x 12H x 12W
             nn.ReLU(inplace=True),
 
+            # 384C x 12H x 12W
             nn.BatchNorm2d(384),
-            nn.Dropout(0.1),
+            nn.Dropout2d(0.1),
             nn.Conv2d(384, 64, kernel_size=1, stride=1, padding=0),  # CONV-4
+            # 64C x 12H x 12W
             nn.ReLU(inplace=True),
         )
 
     def forward(self, x):
         x = self.features(x)
+        # 64C x 12H x 12W
         x = x.view(x.size(0), -1)
+        # 9216 (64x12x12)
         return x
 
 
@@ -60,18 +74,24 @@ class FaceImageModel(nn.Module):
         super(FaceImageModel, self).__init__()
         self.conv = ItrackerImageModel()
         self.fc = nn.Sequential(
+            # 9216 (64x12x12)
             nn.Dropout(0.1),
-            nn.Linear(12 * 12 * 64, 128),  # FC-F1
+            nn.Linear(12 * 12 * 64, 256),  # FC-F1
+            # 256
             nn.ReLU(inplace=True),
             
             nn.Dropout(0.1),
-            nn.Linear(128, 64),  # FC-F2
+            nn.Linear(256, 128),  # FC-F2
+            # 128
             nn.ReLU(inplace=True),
         )
 
     def forward(self, x):
+        # 3C x 224H x 224W
         x = self.conv(x)
+        # 9216 (64x12x12)
         x = self.fc(x)
+        # 64
         return x
 
 
@@ -80,17 +100,22 @@ class FaceGridModel(nn.Module):
     def __init__(self, gridSize=25):
         super(FaceGridModel, self).__init__()
         self.fc = nn.Sequential(
+            # 625 (25x25)
             nn.Linear(gridSize * gridSize, 256),  # FC-FG1
+            # 256
             nn.ReLU(inplace=True),
             
             nn.Dropout(0.1),
             nn.Linear(256, 128),  # FC-FG2
+            # 128
             nn.ReLU(inplace=True),
         )
 
     def forward(self, x):
+        # 25x25
         x = x.view(x.size(0), -1)
         x = self.fc(x)
+        # 128
         return x
 
 
@@ -98,8 +123,11 @@ class ITrackerModel(nn.Module):
 
     def __init__(self):
         super(ITrackerModel, self).__init__()
+        # 3Cx224Hx224W --> 9216 (64x12x12)
         self.eyeModel = ItrackerImageModel()
+        # 3Cx224Hx224W --> 128
         self.faceModel = FaceImageModel()
+        # 1Cx25Hx25W --> 128
         self.gridModel = FaceGridModel()
         # Joining both eyes
         self.eyesFC = nn.Sequential(
@@ -110,7 +138,7 @@ class ITrackerModel(nn.Module):
         # Joining everything
         self.fc = nn.Sequential(
             nn.Dropout(0.1),
-            nn.Linear(128 + 64 + 128, 128),  # FC1
+            nn.Linear(128 + 128 + 128, 128),  # FC1
             nn.ReLU(inplace=True),
             
             nn.Dropout(0.1),
