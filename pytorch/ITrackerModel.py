@@ -6,13 +6,10 @@ import torch.utils.data
 
 '''
 Pytorch model for the iTracker.
-
 Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018. 
-
 Website: http://gazecapture.csail.mit.edu/
 
 Cite:
-
 Eye Tracking for Everyone
 K.Krafka*, A. Khosla*, P. Kellnhofer, H. Kannan, S. Bhandarkar, W. Matusik and A. Torralba
 IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2016
@@ -23,9 +20,7 @@ Title = {Eye Tracking for Everyone},
 Year = {2016},
 Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 }
-
 '''
-
 
 class ItrackerImageModel(nn.Module):
     # Used for both eyes (with shared weights) and the face (with unique weights)
