@@ -1,6 +1,7 @@
 /pytorch/__pycache__/*.pyc
 /pytorch/__pycache__
 /venv*
+/pytorch/checkpoints/
 
 .idea/
 .vscode/
