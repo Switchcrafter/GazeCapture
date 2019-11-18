@@ -179,7 +179,7 @@ def main():
                     'epoch': epoch,
                     'state_dict': model.state_dict(),
                     'best_RMSError': best_RMSError,
-                    'best_MSELoss': best_MSELoss,
+                    #'best_MSELoss': best_MSELoss,
                     'is_best': is_best,
                     'train_MSELoss': train_MSELoss,
                     'train_RMSError': train_RMSError,
