@@ -56,9 +56,8 @@ def main():
         # Change batch_size in commandLine args if out of cuda memory
         batch_size = torch.cuda.device_count() * args.batch_size
     else:
-        batch_size = 5
+        batch_size = 1
 
-    # eval_MSELoss = math.inf
     eval_RMSError= math.inf
     best_RMSError = math.inf
     lr = BASE_LR
@@ -229,8 +228,8 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
 
 	# HSM Update - Every epoch
     if args.hsm:
-        # Reset every 8th epoch
-        if epoch%8 == 0:
+        # Reset every few epoch (hsm_cycle)
+        if epoch%args.hsm_cycle == 0:
             args.multinomial_weights = torch.ones(data_size, dtype=torch.double)
         # update dataloader and sampler
         sampler = torch.utils.data.WeightedRandomSampler(args.multinomial_weights, int(len(args.multinomial_weights)), replacement=True)
@@ -597,6 +596,7 @@ def parse_commandline_arguments():
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--deviceId', type=int, default=0)
     parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
+    parser.add_argument('--hsm_cycle', type=int, default=8)
     parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="")
     args = parser.parse_args()
 
