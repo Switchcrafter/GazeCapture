@@ -53,8 +53,11 @@ def main():
     dataset_limit, verbose, device, deviceId = parse_commandline_arguments()
 
     if using_cuda and torch.cuda.device_count() > 0:
-        # Change batch_size in commandLine args if out of cuda memory
-        batch_size = torch.cuda.device_count() * args.batch_size
+         # Change batch_size in commandLine args if out of cuda memory
+        if args.deviceId < 0:
+            batch_size = torch.cuda.device_count() * args.batch_size
+        else:
+            batch_size = args.batch_size
     else:
         batch_size = 1
 
@@ -70,7 +73,7 @@ def main():
 
     # Retrieve model
     model = ITrackerModel().to(device=device)
-    if using_cuda:
+    if using_cuda and args.deviceId < 0:
         model = torch.nn.DataParallel(model).to(device=device)
 
     image_size = (224, 224)
@@ -155,7 +158,7 @@ def main():
             adjust_learning_rate(optimizer, epoch)
 
             # train for one epoch
-            print('\nEpoch:{} [device:{}{}, lr:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch, device, deviceId, lr, best_RMSError, args.hsm, args.adv))
+            print('\nEpoch:{} [device:{}, lr:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch, device, lr, best_RMSError, args.hsm, args.adv))
             train_MSELoss, train_RMSError = train(datasets['train'], model, criterion, optimizer, epoch, batch_size, device, dataset_limit, verbose, args)
 
             # evaluate on validation set
@@ -603,13 +606,18 @@ def parse_commandline_arguments():
     args.device = None
     usingCuda = False
     if not args.disable_cuda and torch.cuda.is_available():
-        args.device = torch.device('cuda')
         usingCuda = True
-        if 0 <= args.deviceId < torch.cuda.device_count():
-            torch.cuda.set_device(args.deviceId)
+        if args.deviceId < 0:
+            deviceId = -1
+            args.device = torch.device('cuda')
         else:
-            print("Device id can't exeed {}, default to currently set device gpu{}.".format(torch.cuda.device_count()-1), torch.cuda.current_device())
-        deviceId = torch.cuda.current_device()
+            if 0 <= args.deviceId < torch.cuda.device_count():
+                torch.cuda.set_device(args.deviceId)
+            else:
+                print("Device id can't exeed {}, default to currently set device gpu{}.".format(torch.cuda.device_count()-1), torch.cuda.current_device())
+
+            deviceId = torch.cuda.current_device()
+            args.device = torch.device('cuda:'+str(deviceId)) 
     else:
         args.device = torch.device('cpu')
         deviceId = 0
