@@ -46,8 +46,11 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 BASE_LR = 0.001
 MOMENTUM = 0.9
 WEIGHT_DECAY = 1e-4
-IMAGE_SIZE = (227, 227)
-FACE_GRID_SIZE = (25, 25)
+IMAGE_WIDTH = 227
+IMAGE_HEIGHT = 227
+GRID_SIZE = 25
+IMAGE_SIZE = (IMAGE_WIDTH, IMAGE_HEIGHT)
+FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
 
 
 def main():
@@ -470,13 +473,11 @@ def export_onnx_model(model, device, verbose):
 
     batch_size = 1
     color_depth = 3  # 3 bytes for RGB color space
-    dim_width = 224
-    dim_height = 224
-    face_grid_size = 25 * 25
+    face_grid_size = GRID_SIZE * GRID_SIZE
 
-    imFace = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=device).float()
-    imEyeL = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=device).float()
-    imEyeR = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=device).float()
+    imFace = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
+    imEyeL = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
+    imEyeR = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
     faceGrid = torch.zeros((batch_size, face_grid_size)).to(device=device).float()
 
     dummy_in = (imFace, imEyeL, imEyeR, faceGrid)
@@ -617,9 +618,9 @@ def parse_commandline_arguments():
     # Experimental options
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--deviceId', type=int, default=0)
-    parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
+    parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="Enables Hard Sample Mining")
     parser.add_argument('--hsm_cycle', type=int, default=8)
-    parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="")
+    parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="Enables Adversarial Attack")
     args = parser.parse_args()
 
     args.device = None
