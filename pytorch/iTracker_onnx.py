@@ -29,7 +29,7 @@ def main():
 
     cap = cv2.VideoCapture(0)
 
-    normalize_image = NormalizeImage()
+    normalize_image = NormalizeImage(image_size=(224, 224))
 
     while True:
         _, image = cap.read()

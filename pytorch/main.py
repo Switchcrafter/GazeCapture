@@ -46,6 +46,9 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 BASE_LR = 0.001
 MOMENTUM = 0.9
 WEIGHT_DECAY = 1e-4
+IMAGE_SIZE = (224, 224)
+FACEGRID_SIZE = (25, 25)
+
 
 def main():
     args, doLoad, doTest, doValidate, dataPath, checkpointsPath, \
@@ -74,7 +77,6 @@ def main():
     if using_cuda:
         model = torch.nn.DataParallel(model).to(device=device)
 
-    image_size = (224, 224)
     cudnn.benchmark = False
 
     epoch = 1
@@ -105,7 +107,7 @@ def main():
 
     totalstart_time = datetime.now()
 
-    datasets = load_all_data(dataPath, image_size, workers, batch_size, verbose)
+    datasets = load_all_data(dataPath, IMAGE_SIZE, FACEGRID_SIZE, workers, batch_size, verbose)
 
     #     criterion = nn.MSELoss(reduction='sum').to(device=device)
     criterion = nn.MSELoss(reduction='mean').to(device=device)
@@ -416,7 +418,7 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
               'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
               'MSELoss {MSELosses.val:.4f} ({MSELosses.avg:.4f})\t'
               'RMSError {RMSErrors.val:.4f} ({RMSErrors.avg:.4f})\t'.format(
-                stage, epoch, batchNum, len(eval_loader), batch_time=batch_time,
+                split, epoch, batchNum, data_size, batch_time=batch_time,
                 MSELosses=MSELosses, RMSErrors=RMSErrors))
         else:
             progress_bar.update(num_samples, MSELosses.avg, RMSErrors.avg)
@@ -532,8 +534,8 @@ def remove_module_from_state(saved_state):
     return state
 
 
-def load_data(split, path, image_size, workers, batch_size, verbose):
-    data = ITrackerData(path, split=split, imSize=image_size, silent=not verbose)
+def load_data(split, path, image_size, grid_size, workers, batch_size, verbose):
+    data = ITrackerData(path, image_size, grid_size, split=split, silent=not verbose)
     size = len(data.indices)
     shuffle = True if split == 'train' else False
     loader = torch.utils.data.DataLoader(
@@ -555,15 +557,15 @@ def centeredText(infoString, marker='-', length=40):
     index = (len(marker)-len(infoString))//2
     return marker[:index] + infoString + marker[index + len(infoString):]
 
-def load_all_data(path, image_size, workers, batch_size, verbose):
+def load_all_data(path, image_size, grid_size, workers, batch_size, verbose):
     print(centeredText('Loading Data'))
     all_data = {
         # training data : model sees and learns from this data
-        'train': load_data('train', path, image_size, workers, batch_size, verbose),
+        'train': load_data('train', path, image_size, grid_size, workers, batch_size, verbose),
         # validation data : model sees but never learns from this data
-        'val': load_data('val', path, image_size, workers, batch_size, verbose),
+        'val': load_data('val', path, image_size, grid_size, workers, batch_size, verbose),
         # test data : model never sees or learns from this data
-        'test': load_data('test', path, image_size, workers, batch_size, verbose)
+        'test': load_data('test', path, image_size, grid_size, workers, batch_size, verbose)
     }
     return all_data
 

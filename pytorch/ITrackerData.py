@@ -63,7 +63,7 @@ class SubtractMean(object):
 
 
 class NormalizeImage:
-    def __init__(self, image_size=(224, 224)):
+    def __init__(self, image_size):
         self.image_size = image_size
 
         self.mean_face = loadMetadata(os.path.join(MEAN_PATH, 'mean_face_224.mat'), silent=True)['image_mean']
@@ -97,7 +97,7 @@ class NormalizeImage:
 
 
 class ITrackerData(data.Dataset):
-    def __init__(self, dataPath, split='train', imSize=(224, 224), gridSize=(25, 25), silent=False):
+    def __init__(self, dataPath, imSize, gridSize, split='train', silent=False):
 
         self.dataPath = dataPath
         self.imSize = imSize
