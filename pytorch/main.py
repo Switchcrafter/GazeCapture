@@ -47,7 +47,7 @@ BASE_LR = 0.001
 MOMENTUM = 0.9
 WEIGHT_DECAY = 1e-4
 IMAGE_SIZE = (227, 227)
-FACEGRID_SIZE = (25, 25)
+FACE_GRID_SIZE = (25, 25)
 
 
 def main():
@@ -64,7 +64,7 @@ def main():
     else:
         batch_size = 1
 
-    eval_RMSError= math.inf
+    eval_RMSError = math.inf
     best_RMSError = math.inf
     lr = BASE_LR
 
@@ -73,6 +73,11 @@ def main():
         if using_cuda:
             print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
         print('')
+
+    # make sure checkpoints directory exists
+    if not os.path.exists(checkpointsPath):
+        print('{0} does not exist, creating...'.format(checkpointsPath))
+        os.mkdir(checkpointsPath)
 
     # Retrieve model
     model = ITrackerModel().to(device=device)
@@ -109,7 +114,7 @@ def main():
 
     totalstart_time = datetime.now()
 
-    datasets = load_all_data(dataPath, IMAGE_SIZE, FACEGRID_SIZE, workers, batch_size, verbose)
+    datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose)
 
     #     criterion = nn.MSELoss(reduction='sum').to(device=device)
     criterion = nn.MSELoss(reduction='mean').to(device=device)
@@ -243,7 +248,7 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
     # HSM Update - Every epoch
     if args.hsm:
         # Reset every few epoch (hsm_cycle)
-        if epoch%args.hsm_cycle == 0:
+        if epoch > 0 and epoch % args.hsm_cycle == 0:
             args.multinomial_weights = torch.ones(data_size, dtype=torch.double)
         # update dataloader and sampler
         sampler = torch.utils.data.WeightedRandomSampler(args.multinomial_weights, int(len(args.multinomial_weights)), replacement=True)

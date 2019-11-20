@@ -30,7 +30,7 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 
 '''
 
-MEAN_PATH = os.path.dirname(os.path.realpath(__file__))
+# MEAN_PATH = os.path.dirname(os.path.realpath(__file__))
 
 
 def loadMetadata(filename, silent=False):
