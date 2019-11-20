@@ -45,45 +45,45 @@ def loadMetadata(filename, silent=False):
     return metadata
 
 
-class SubtractMean(object):
-    """Normalize an tensor image with mean.
-    """
-
-    def __init__(self, mean_image):
-        self.meanImg = transforms.ToTensor()(mean_image / 255)
-
-    def __call__(self, tensor):
-        """
-        Args:
-            tensor (Tensor): Tensor image of size (C, H, W) to be normalized.
-        Returns:
-            Tensor: Normalized image.
-        """
-        return tensor.sub(self.meanImg)
+# class SubtractMean(object):
+#     """Normalize an tensor image with mean.
+#     """
+#
+#     def __init__(self, mean_image):
+#         self.meanImg = transforms.ToTensor()(mean_image / 255)
+#
+#     def __call__(self, tensor):
+#         """
+#         Args:
+#             tensor (Tensor): Tensor image of size (C, H, W) to be normalized.
+#         Returns:
+#             Tensor: Normalized image.
+#         """
+#         return tensor.sub(self.meanImg)
 
 
 class NormalizeImage:
     def __init__(self, image_size):
         self.image_size = image_size
 
-        self.mean_face = loadMetadata(os.path.join(MEAN_PATH, 'mean_face_224.mat'), silent=True)['image_mean']
-        self.mean_left = loadMetadata(os.path.join(MEAN_PATH, 'mean_left_224.mat'), silent=True)['image_mean']
-        self.mean_right = loadMetadata(os.path.join(MEAN_PATH, 'mean_right_224.mat'), silent=True)['image_mean']
+        # self.mean_face = loadMetadata(os.path.join(MEAN_PATH, 'mean_face_224.mat'), silent=True)['image_mean']
+        # self.mean_left = loadMetadata(os.path.join(MEAN_PATH, 'mean_left_224.mat'), silent=True)['image_mean']
+        # self.mean_right = loadMetadata(os.path.join(MEAN_PATH, 'mean_right_224.mat'), silent=True)['image_mean']
 
         self.transform_face = transforms.Compose([
             transforms.Resize(self.image_size),
             transforms.ToTensor(),
-            SubtractMean(mean_image=self.mean_face),
+            # SubtractMean(mean_image=self.mean_face),
         ])
         self.transform_eye_left = transforms.Compose([
             transforms.Resize(self.image_size),
             transforms.ToTensor(),
-            SubtractMean(mean_image=self.mean_left),
+            # SubtractMean(mean_image=self.mean_left),
         ])
         self.transform_eye_right = transforms.Compose([
             transforms.Resize(self.image_size),
             transforms.ToTensor(),
-            SubtractMean(mean_image=self.mean_right),
+            # SubtractMean(mean_image=self.mean_right),
         ])
 
     def face(self, image):
