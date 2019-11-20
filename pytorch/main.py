@@ -46,7 +46,7 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 BASE_LR = 0.001
 MOMENTUM = 0.9
 WEIGHT_DECAY = 1e-4
-IMAGE_SIZE = (224, 224)
+IMAGE_SIZE = (227, 227)
 FACEGRID_SIZE = (25, 25)
 
 
