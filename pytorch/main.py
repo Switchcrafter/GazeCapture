@@ -232,7 +232,7 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
 	# HSM Update - Every epoch
     if args.hsm:
         # Reset every few epoch (hsm_cycle)
-        if epoch%args.hsm_cycle == 0:
+        if epoch > 0 and epoch%args.hsm_cycle == 0:
             args.multinomial_weights = torch.ones(data_size, dtype=torch.double)
         # update dataloader and sampler
         sampler = torch.utils.data.WeightedRandomSampler(args.multinomial_weights, int(len(args.multinomial_weights)), replacement=True)
