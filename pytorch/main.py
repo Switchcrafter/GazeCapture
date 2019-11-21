@@ -634,7 +634,7 @@ def parse_commandline_arguments():
             if 0 <= args.deviceId < torch.cuda.device_count():
                 torch.cuda.set_device(args.deviceId)
             else:
-                print("Device id can't exeed {}, default to currently set device gpu{}.".format(torch.cuda.device_count()-1), torch.cuda.current_device())
+                print("Device id can't exceed {}, default to currently set device gpu{}.".format(torch.cuda.device_count()-1), torch.cuda.current_device())
 
             deviceId = torch.cuda.current_device()
             args.device = torch.device('cuda:'+str(deviceId)) 
