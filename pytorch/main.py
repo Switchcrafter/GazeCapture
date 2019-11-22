@@ -46,8 +46,11 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 BASE_LR = 0.001
 MOMENTUM = 0.9
 WEIGHT_DECAY = 1e-4
-IMAGE_SIZE = (224, 224)
-FACEGRID_SIZE = (25, 25)
+IMAGE_WIDTH = 224
+IMAGE_HEIGHT = 224
+IMAGE_SIZE = (IMAGE_WIDTH, IMAGE_HEIGHT)
+GRID_SIZE = 25
+FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
 
 
 def main():
@@ -109,7 +112,7 @@ def main():
 
     totalstart_time = datetime.now()
 
-    datasets = load_all_data(dataPath, IMAGE_SIZE, FACEGRID_SIZE, workers, batch_size, verbose)
+    datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose)
 
     #     criterion = nn.MSELoss(reduction='sum').to(device=device)
     criterion = nn.MSELoss(reduction='mean').to(device=device)
@@ -243,7 +246,7 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
     # HSM Update - Every epoch
     if args.hsm:
         # Reset every few epoch (hsm_cycle)
-        if epoch%args.hsm_cycle == 0:
+        if epoch > 0 and epoch % args.hsm_cycle == 0:
             args.multinomial_weights = torch.ones(data_size, dtype=torch.double)
         # update dataloader and sampler
         sampler = torch.utils.data.WeightedRandomSampler(args.multinomial_weights, int(len(args.multinomial_weights)), replacement=True)
@@ -570,6 +573,7 @@ def load_all_data(path, image_size, grid_size, workers, batch_size, verbose):
         'test': load_data('test', path, image_size, grid_size, workers, batch_size, verbose)
     }
     return all_data
+
 
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
