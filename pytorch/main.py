@@ -48,8 +48,8 @@ MOMENTUM = 0.9
 WEIGHT_DECAY = 1e-4
 IMAGE_WIDTH = 227
 IMAGE_HEIGHT = 227
-GRID_SIZE = 25
 IMAGE_SIZE = (IMAGE_WIDTH, IMAGE_HEIGHT)
+GRID_SIZE = 25
 FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
 
 
@@ -151,7 +151,7 @@ def main():
             if verbose:
                 print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
                 start_time = datetime.now()
-            adjust_learning_rate(optimizer, epoch)
+            lr = adjust_learning_rate(optimizer, epoch)
             if verbose:
                 time_elapsed = datetime.now() - start_time
                 print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
@@ -165,7 +165,7 @@ def main():
         for epoch in range(epoch, epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
             start_time = datetime.now()
-            adjust_learning_rate(optimizer, epoch)
+            lr = adjust_learning_rate(optimizer, epoch)
 
             # train for one epoch
             print('\nEpoch:{} [device:{}, lr:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch, device, lr, best_RMSError, args.hsm, args.adv))
@@ -577,11 +577,14 @@ def load_all_data(path, image_size, grid_size, workers, batch_size, verbose):
     }
     return all_data
 
+
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
     lr = BASE_LR * (0.1 ** (epoch // 30))
     for param_group in optimizer.state_dict()['param_groups']:
         param_group['lr'] = lr
+
+    return lr
 
 
 def str2bool(v):
