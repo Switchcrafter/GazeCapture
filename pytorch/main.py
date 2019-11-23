@@ -146,6 +146,8 @@ def main():
         export_onnx_model(model, device, verbose)
     else:  # Train
         learning_rates = [0] * epochs
+        best_RMSErrors = [0] * epochs
+        RMSErrors = [0] * epochs
 
         # first make a learning_rate correction suitable for epoch from saved checkpoint
         # epoch will be non-zero if a checkpoint was loaded
@@ -185,6 +187,9 @@ def main():
             is_best = eval_RMSError < best_RMSError
             best_RMSError = min(eval_RMSError, best_RMSError)
 
+            best_RMSErrors[epoch - 1] = best_RMSError
+            RMSErrors[epoch - 1] = eval_RMSError
+
             time_elapsed = datetime.now() - start_time
 
             if run:
@@ -198,7 +203,6 @@ def main():
                     'epoch': epoch,
                     'state_dict': model.state_dict(),
                     'best_RMSError': best_RMSError,
-                    #'best_MSELoss': best_MSELoss,
                     'is_best': is_best,
                     'train_MSELoss': train_MSELoss,
                     'train_RMSError': train_RMSError,
@@ -212,8 +216,15 @@ def main():
                 saveCheckpoints)
 
             print('')
-            print('Epoch %05d with RMSError %.5f' % (epoch, best_RMSError))
+            print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
+            print('')
+            print('RMS Errors')
+            print(*(map('{0[0]}: {0[1]:7.4f}'.format, enumerate(RMSErrors))), sep=', ')
+            print('')
+            print('Best RMS Errors')
+            print(*(map('{0[0]}: {0[1]:7.4f}'.format, enumerate(best_RMSErrors))), sep=', ')
+            print('')
 
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
