@@ -50,14 +50,11 @@ WEIGHT_DECAY = 1e-4
 def main():
     args, doLoad, doTest, doValidate, dataPath, checkpointsPath, \
     exportONNX, saveCheckpoints, using_cuda, workers, epochs, \
-    dataset_limit, verbose, device, deviceId = parse_commandline_arguments()
+    dataset_limit, verbose, device = parse_commandline_arguments()
 
     if using_cuda and torch.cuda.device_count() > 0:
-         # Change batch_size in commandLine args if out of cuda memory
-        if args.deviceId < 0:
-            batch_size = torch.cuda.device_count() * args.batch_size
-        else:
-            batch_size = args.batch_size
+        # Change batch_size in commandLine args if out of cuda memory
+        batch_size = len(args.deviceIds) * args.batch_size
     else:
         batch_size = 1
 
@@ -68,14 +65,15 @@ def main():
     if verbose:
         print('')
         if using_cuda:
-            print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
+            print('Using cuda devices:', args.deviceIds)
+            # print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
         print('')
 
     # Retrieve model
-    model = ITrackerModel().to(device=device)
-    if using_cuda and args.deviceId < 0:
-        model = torch.nn.DataParallel(model).to(device=device)
-
+    model = ITrackerModel().to(device=device)    
+    if using_cuda and len(args.deviceIds) > 1:
+        model = torch.nn.DataParallel(model, device_ids=args.deviceIds).to(device=device)
+    
     image_size = (224, 224)
     cudnn.benchmark = False
 
@@ -533,7 +531,7 @@ def load_data(split, path, image_size, workers, batch_size, verbose):
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=workers,
-        pin_memory=True)
+        pin_memory=False)
 
     return {
         'split': split,
@@ -597,7 +595,7 @@ def parse_commandline_arguments():
                         help="verbose mode - print details every batch")
     # Experimental options
     parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--deviceId', type=int, default=0)
+    parser.add_argument('--deviceIds', help="delimited gpu ids e.g. --deviceIds 1 3 4", nargs='+', default=[0])
     parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
     parser.add_argument('--hsm_cycle', type=int, default=8)
     parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="")
@@ -605,22 +603,16 @@ def parse_commandline_arguments():
 
     args.device = None
     usingCuda = False
-    if not args.disable_cuda and torch.cuda.is_available():
+    if not args.disable_cuda and torch.cuda.is_available() and len(args.deviceIds) > 0:
         usingCuda = True
-        if args.deviceId < 0:
-            deviceId = -1
-            args.device = torch.device('cuda')
-        else:
-            if 0 <= args.deviceId < torch.cuda.device_count():
-                torch.cuda.set_device(args.deviceId)
-            else:
-                print("Device id can't exeed {}, default to currently set device gpu{}.".format(torch.cuda.device_count()-1), torch.cuda.current_device())
-
-            deviceId = torch.cuda.current_device()
-            args.device = torch.device('cuda:'+str(deviceId)) 
+        # remove any device which doesn't exists
+        args.deviceIds = [int(d) for d in args.deviceIds if 0 <= int(d) < torch.cuda.device_count()] 
+        # set args.deviceIds[0] (the master node) as the current device
+        torch.cuda.set_device(args.deviceIds[0])
+        args.device = torch.device("cuda:{}".format(args.deviceIds[0])) if len(args.deviceIds) == 1 else torch.device("cuda") 
     else:
         args.device = torch.device('cpu')
-        deviceId = 0
+        # args.deviceIds = '[0]'
 
     if args.verbose:
         print('Number of arguments:', len(sys.argv), 'arguments.')
@@ -667,7 +659,7 @@ def parse_commandline_arguments():
         print('exportONNX            = %d' % exportONNX)
         print('===================================================')
     return args, doLoad, doTest, doValidate, dataPath, checkpointsPath, exportONNX, saveCheckpoints, \
-        using_cuda, workers, epochs, dataset_limit, verbose, device, deviceId
+        using_cuda, workers, epochs, dataset_limit, verbose, device
 
 
 if __name__ == "__main__":
