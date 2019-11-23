@@ -204,7 +204,7 @@ def load_data(split, path, image_size, grid_size, workers, batch_size, verbose):
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=workers,
-        pin_memory=True)
+        pin_memory=False)
 
     return Dataset(split, data, size, loader)
 

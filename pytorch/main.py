@@ -56,14 +56,11 @@ FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
 def main():
     args, doLoad, doTest, doValidate, dataPath, checkpointsPath, \
     exportONNX, saveCheckpoints, using_cuda, workers, epochs, \
-    dataset_limit, verbose, device, deviceId = parse_commandline_arguments()
+    dataset_limit, verbose, device = parse_commandline_arguments()
 
     if using_cuda and torch.cuda.device_count() > 0:
-         # Change batch_size in commandLine args if out of cuda memory
-        if args.deviceId < 0:
-            batch_size = torch.cuda.device_count() * args.batch_size
-        else:
-            batch_size = args.batch_size
+        # Change batch_size in commandLine args if out of cuda memory
+        batch_size = len(args.local_rank) * args.batch_size
     else:
         batch_size = 1
 
@@ -74,7 +71,8 @@ def main():
     if verbose:
         print('')
         if using_cuda:
-            print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
+            print('Using cuda devices:', args.local_rank)
+            # print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
         print('')
 
     # make sure checkpoints directory exists
@@ -83,10 +81,12 @@ def main():
         os.mkdir(checkpointsPath)
 
     # Retrieve model
-    model = ITrackerModel().to(device=device)
-    if using_cuda and args.deviceId < 0:
-        model = torch.nn.DataParallel(model).to(device=device)
-
+    model = ITrackerModel().to(device=device)    
+    if using_cuda and len(args.local_rank) > 1:
+        # model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=device)
+        torch.distributed.init_process_group(backend="nccl")
+        model = torch.nn.DistributedDataParallel(model, device_ids=args.local_rank)
+    
     cudnn.benchmark = False
 
     epoch = 1
@@ -146,6 +146,8 @@ def main():
         export_onnx_model(model, device, verbose)
     else:  # Train
         learning_rates = [0] * epochs
+        best_RMSErrors = [0] * epochs
+        RMSErrors = [0] * epochs
 
         # first make a learning_rate correction suitable for epoch from saved checkpoint
         # epoch will be non-zero if a checkpoint was loaded
@@ -185,6 +187,9 @@ def main():
             is_best = eval_RMSError < best_RMSError
             best_RMSError = min(eval_RMSError, best_RMSError)
 
+            best_RMSErrors[epoch - 1] = best_RMSError
+            RMSErrors[epoch - 1] = eval_RMSError
+
             time_elapsed = datetime.now() - start_time
 
             if run:
@@ -198,7 +203,6 @@ def main():
                     'epoch': epoch,
                     'state_dict': model.state_dict(),
                     'best_RMSError': best_RMSError,
-                    #'best_MSELoss': best_MSELoss,
                     'is_best': is_best,
                     'train_MSELoss': train_MSELoss,
                     'train_RMSError': train_RMSError,
@@ -212,8 +216,15 @@ def main():
                 saveCheckpoints)
 
             print('')
-            print('Epoch %05d with RMSError %.5f' % (epoch, best_RMSError))
+            print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
+            print('')
+            print('RMS Errors')
+            print(*(map('{0[0]}: {0[1]:7.4f}'.format, enumerate(RMSErrors))), sep=', ')
+            print('')
+            print('Best RMS Errors')
+            print(*(map('{0[0]}: {0[1]:7.4f}'.format, enumerate(best_RMSErrors))), sep=', ')
+            print('')
 
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
@@ -337,8 +348,8 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
             # concatenate both real and adversarial loss functions
             loss = loss + loss_adv
 
-            # backprop the loss
-            loss.backward()
+        # backprop the loss
+        loss.backward()
 
         # optimize
         optimizer.step()
@@ -606,30 +617,23 @@ def parse_commandline_arguments():
                         help="verbose mode - print details every batch")
     # Experimental options
     parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--deviceId', type=int, default=0)
-    parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="Enables Hard Sample Mining")
+    parser.add_argument('--local_rank', help="", nargs='+', default=[0])
+    parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
     parser.add_argument('--hsm_cycle', type=int, default=8)
     parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="Enables Adversarial Attack")
     args = parser.parse_args()
 
     args.device = None
-    using_cuda = False
-    if not args.disable_cuda and torch.cuda.is_available():
+    usingCuda = False
+    if not args.disable_cuda and torch.cuda.is_available() and len(args.local_rank) > 0:
         usingCuda = True
-        if args.deviceId < 0:
-            deviceId = -1
-            args.device = torch.device('cuda')
-        else:
-            if 0 <= args.deviceId < torch.cuda.device_count():
-                torch.cuda.set_device(args.deviceId)
-            else:
-                print("Device id can't exceed {}, default to currently set device gpu{}.".format(torch.cuda.device_count()-1), torch.cuda.current_device())
-
-            deviceId = torch.cuda.current_device()
-            args.device = torch.device('cuda:'+str(deviceId)) 
+        # remove any device which doesn't exists
+        args.local_rank = [int(d) for d in args.local_rank if 0 <= int(d) < torch.cuda.device_count()] 
+        # # set args.local_rank[0] (the master node) as the current device
+        torch.cuda.set_device(args.local_rank[0])
+        args.device = torch.device("cuda")
     else:
         args.device = torch.device('cpu')
-        deviceId = 0
 
     if args.verbose:
         print('Number of arguments:', len(sys.argv), 'arguments.')
@@ -675,7 +679,7 @@ def parse_commandline_arguments():
         print('exportONNX            = %d' % exportONNX)
         print('===================================================')
     return args, doLoad, doTest, doValidate, dataPath, checkpointsPath, exportONNX, saveCheckpoints, \
-        using_cuda, workers, epochs, dataset_limit, verbose, device, deviceId
+        usingCuda, workers, epochs, dataset_limit, verbose, device
 
 
 if __name__ == "__main__":
