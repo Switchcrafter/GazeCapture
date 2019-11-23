@@ -54,7 +54,7 @@ def main():
 
     if using_cuda and torch.cuda.device_count() > 0:
         # Change batch_size in commandLine args if out of cuda memory
-        batch_size = len(args.deviceIds) * args.batch_size
+        batch_size = len(args.local_rank) * args.batch_size
     else:
         batch_size = 1
 
@@ -65,14 +65,16 @@ def main():
     if verbose:
         print('')
         if using_cuda:
-            print('Using cuda devices:', args.deviceIds)
+            print('Using cuda devices:', args.local_rank)
             # print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
         print('')
 
     # Retrieve model
     model = ITrackerModel().to(device=device)    
-    if using_cuda and len(args.deviceIds) > 1:
-        model = torch.nn.DataParallel(model, device_ids=args.deviceIds).to(device=device)
+    if using_cuda and len(args.local_rank) > 1:
+        # model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=device)
+        torch.distributed.init_process_group(backend="nccl")
+        model = torch.nn.DistributedDataParallel(model, device_ids=args.local_rank)
     
     image_size = (224, 224)
     cudnn.benchmark = False
@@ -595,7 +597,7 @@ def parse_commandline_arguments():
                         help="verbose mode - print details every batch")
     # Experimental options
     parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--deviceIds', help="delimited gpu ids e.g. --deviceIds 1 3 4", nargs='+', default=[0])
+    parser.add_argument('--local_rank', help="", nargs='+', default=[0])
     parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
     parser.add_argument('--hsm_cycle', type=int, default=8)
     parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="")
@@ -603,12 +605,12 @@ def parse_commandline_arguments():
 
     args.device = None
     usingCuda = False
-    if not args.disable_cuda and torch.cuda.is_available() and len(args.deviceIds) > 0:
+    if not args.disable_cuda and torch.cuda.is_available() and len(args.local_rank) > 0:
         usingCuda = True
         # remove any device which doesn't exists
-        args.deviceIds = [int(d) for d in args.deviceIds if 0 <= int(d) < torch.cuda.device_count()] 
-        # # set args.deviceIds[0] (the master node) as the current device
-        torch.cuda.set_device(args.deviceIds[0])
+        args.local_rank = [int(d) for d in args.local_rank if 0 <= int(d) < torch.cuda.device_count()] 
+        # # set args.local_rank[0] (the master node) as the current device
+        torch.cuda.set_device(args.local_rank[0])
         args.device = torch.device("cuda")
     else:
         args.device = torch.device('cpu')
