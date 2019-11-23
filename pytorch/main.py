@@ -607,12 +607,11 @@ def parse_commandline_arguments():
         usingCuda = True
         # remove any device which doesn't exists
         args.deviceIds = [int(d) for d in args.deviceIds if 0 <= int(d) < torch.cuda.device_count()] 
-        # set args.deviceIds[0] (the master node) as the current device
+        # # set args.deviceIds[0] (the master node) as the current device
         torch.cuda.set_device(args.deviceIds[0])
-        args.device = torch.device("cuda:{}".format(args.deviceIds[0])) if len(args.deviceIds) == 1 else torch.device("cuda") 
+        args.device = torch.device("cuda")
     else:
         args.device = torch.device('cpu')
-        # args.deviceIds = '[0]'
 
     if args.verbose:
         print('Number of arguments:', len(sys.argv), 'arguments.')
