@@ -7,6 +7,8 @@ import torchvision.transforms as transforms
 import torch
 import numpy as np
 
+from Utilities import centeredText
+
 '''
 Data loader for the iTracker.
 Use prepareDataset.py to convert the dataset from http://gazecapture.csail.mit.edu/ to proper format.
@@ -183,3 +185,38 @@ class ITrackerData(data.Dataset):
 
     def __len__(self):
         return len(self.indices)
+
+
+class Dataset:
+    def __init__(self, split, data, size, loader):
+        self.split = split
+        self.data = data
+        self.size = size
+        self.loader = loader
+
+
+def load_data(split, path, image_size, grid_size, workers, batch_size, verbose):
+    data = ITrackerData(path, image_size, grid_size, split=split, silent=not verbose)
+    size = len(data.indices)
+    shuffle = True if split == 'train' else False
+    loader = torch.utils.data.DataLoader(
+        data,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=workers,
+        pin_memory=True)
+
+    return Dataset(split, data, size, loader)
+
+
+def load_all_data(path, image_size, grid_size, workers, batch_size, verbose):
+    print(centeredText('Loading Data'))
+    all_data = {
+        # training data : model sees and learns from this data
+        'train': load_data('train', path, image_size, grid_size, workers, batch_size, verbose),
+        # validation data : model sees but never learns from this data
+        'val': load_data('val', path, image_size, grid_size, workers, batch_size, verbose),
+        # test data : model never sees or learns from this data
+        'test': load_data('test', path, image_size, grid_size, workers, batch_size, verbose)
+    }
+    return all_data

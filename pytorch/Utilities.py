@@ -1,7 +1,8 @@
-import math
 import shutil
 from datetime import datetime
+
 import torch
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -21,6 +22,7 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
+
 class Bar(object):
     def __init__(self):
         pass
@@ -30,6 +32,7 @@ class Bar(object):
         default_height = 20
         size_tuple = shutil.get_terminal_size((default_width, default_height))  # pass fallback
         return size_tuple.columns
+
 
 class ProgressBar(Bar):
     '''A progress bar which stretches to fill the line.'''
@@ -129,3 +132,9 @@ class SamplingBar(Bar):
             code = code + self.getCode(bucketData[i], maxValue, '█')
         # For Live Heatmap: print in previous line and comeback
         print('\033[F'+self.label + self.left + code + self.right, end='\n')
+
+
+def centeredText(infoString, marker='-', length=40):
+    marker = marker*length
+    index = (len(marker)-len(infoString))//2
+    return marker[:index] + infoString + marker[index + len(infoString):]
