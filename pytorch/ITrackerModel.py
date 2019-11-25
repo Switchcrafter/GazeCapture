@@ -67,8 +67,9 @@ class ItrackerImageModel(nn.Module):
         # 9216 (64x12x12)
         return x
 
+
 class FaceImageModel(nn.Module):
-    
+
     def __init__(self):
         super(FaceImageModel, self).__init__()
         self.conv = ItrackerImageModel()
@@ -76,15 +77,15 @@ class FaceImageModel(nn.Module):
             # 9216 (64x12x12)
             nn.Dropout(0.1),
             nn.Linear(12 * 12 * 64, 128),  # FC-F1
-            # 256
+            # 128
             nn.ReLU(inplace=True),
             
             nn.Dropout(0.1),
             nn.Linear(128, 64),  # FC-F2
-            # 128
+            # 64
             nn.ReLU(inplace=True),
         )
-        
+
     def forward(self, x):
         # 3C x 224H x 224W
         x = self.conv(x)
