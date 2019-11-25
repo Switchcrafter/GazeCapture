@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from datetime import datetime  # for timing
 
 import cv2
@@ -9,13 +8,12 @@ import torch
 from PIL import Image
 from imutils import face_utils
 from screeninfo import get_monitors
+from skimage import exposure
+from skimage import feature
 
 from ITrackerData import NormalizeImage
 from ITrackerModel import ITrackerModel
 from cam2screen import cam2screen
-
-from skimage import exposure
-from skimage import feature
 
 MEAN_PATH = '.'
 

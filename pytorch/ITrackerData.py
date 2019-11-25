@@ -73,16 +73,25 @@ class NormalizeImage:
         # self.mean_right = loadMetadata(os.path.join(MEAN_PATH, 'mean_right_224.mat'), silent=True)['image_mean']
 
         self.transform_face = transforms.Compose([
+            transforms.Resize(240),
+            transforms.ColorJitter(),
+            transforms.RandomCrop(self.image_size[0]),
             transforms.Resize(self.image_size),
             transforms.ToTensor(),
             # SubtractMean(mean_image=self.mean_face),
         ])
         self.transform_eye_left = transforms.Compose([
+            transforms.Resize(240),
+            transforms.ColorJitter(),
+            transforms.RandomCrop(self.image_size[0]),
             transforms.Resize(self.image_size),
             transforms.ToTensor(),
             # SubtractMean(mean_image=self.mean_left),
         ])
         self.transform_eye_right = transforms.Compose([
+            transforms.Resize(240),
+            transforms.ColorJitter(),
+            transforms.RandomCrop(self.image_size[0]),
             transforms.Resize(self.image_size),
             transforms.ToTensor(),
             # SubtractMean(mean_image=self.mean_right),
