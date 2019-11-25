@@ -122,11 +122,11 @@ def main():
                                           axis=0)
             cv2.imshow("input images", input_images)
 
-            hog_images = np.concatenate((hogImage(face_image),
-                                                   hogImage(right_eye_image),
-                                                   hogImage(left_eye_image)),
-                                                  axis=0)
-            cv2.imshow("HoG images", hog_images)
+            # hog_images = np.concatenate((hogImage(face_image),
+            #                                        hogImage(right_eye_image),
+            #                                        hogImage(left_eye_image)),
+            #                                       axis=0)
+            # cv2.imshow("HoG images", hog_images)
 
             # Run inference using face, right_eye_image, left_eye_image and face_grid
             imFace = Image.fromarray(face_image, 'RGB')

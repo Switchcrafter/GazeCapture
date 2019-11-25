@@ -37,39 +37,34 @@ class ItrackerImageModel(nn.Module):
             # https://people.csail.mit.edu/khosla/papers/cvpr2016_Khosla.pdf
 
             # CONV-1
-            # The first convolutional layer filters the 224×224×3 input image with 96 kernels of size 11×11×3 with a
-            # stride of 4 pixels (this is the distance between the receptive field centers of neighboring neurons in a
-            # kernel map).
-            #
-            # Note that per https://www.learnopencv.com/understanding-alexnet/, perhaps we should feed in 227x227 images
-            # Which would make the math work out better
             # 3C x 224H x 224W
             nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=0),
-            # (224 - 11) / 4 + 1 ~= 54
+            # (<input dimension> + <padding> * <groups> - <kernel size>) / <stride> + 1 = <output dimension>
+            # (224 + 0 * 1 - 11) / 4 + 1 ~= 54
+            #
+            # <output channels> x <output dimension> x <output dimension>
             # 96C x 54H x 54W
             nn.MaxPool2d(kernel_size=3, stride=2),
+            # (<input dimension> - <kernel size>) / <stride> + 1 = <output dimension>
             # (54 - 3) / 2 + 1 ~= 26
             # 96C x 26H x 26W
             nn.ReLU(inplace=True),
+            # 96C x 26H x 26W
 
             # CONV-2
-            # The second convolutional layer takes as input the (response-normalized and pooled) output of the first
-            # convolutional layer and filters it with 256 kernels of size 5×5×48.
             # 96C x 26H x 26W
             nn.BatchNorm2d(96),
             nn.Dropout2d(0.1),
             nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2, groups=2),
-            # (26 + 2 * 2 - 5) / 1 + 1 = 26
+            # (26 + 2 * 2 - 5) / 1 + 1 ~= 26
             # 256C x 26H x 26W
             nn.MaxPool2d(kernel_size=3, stride=2),
             # (26 - 3) / 2 + 1 ~= 12
             # 256C x 12H x 12W
             nn.ReLU(inplace=True),
+            # 256C x 12H x 12W
 
             # CONV-3
-            # The third and fourth convolutional layers are connected to one another without any intervening pooling or
-            # normalization layers. The third convolutional layer has 384 kernels of size 3×3×256 connected to the
-            # (normalized, pooled) outputs of the second convolutional layer.
             # 256C x 12H x 12W
             nn.BatchNorm2d(256),
             nn.Dropout2d(0.1),
@@ -77,10 +72,9 @@ class ItrackerImageModel(nn.Module):
             # (12 + 2 * 1 - 3) / 1 + 1 ~= 12
             # 384C x 12H x 12W
             nn.ReLU(inplace=True),
+            # 384C x 12H x 12W
 
             # CONV-4
-            # The fourth convolutional layer has 384 kernels of size 1×1×64. This layer is differs from the AlexNet
-            # paper (which an additional 5th layer, where layers 4 and 5 were 3x3x192)
             # 384C x 12H x 12W
             nn.BatchNorm2d(384),
             nn.Dropout2d(0.1),
@@ -88,13 +82,14 @@ class ItrackerImageModel(nn.Module):
             # (12 + 2 * 1 - 3) / 1 + 1 ~= 12
             # 64C x 12H x 12W
             nn.ReLU(inplace=True),
+            # 64C x 12H x 12W
         )
 
     def forward(self, x):
         x = self.features(x)
         # 64C x 12H x 12W
         x = x.view(x.size(0), -1)
-        # 9216 (64x12x12)
+        # 9,216 (64x12x12)
         return x
 
 class FaceImageModel(nn.Module):
@@ -103,7 +98,7 @@ class FaceImageModel(nn.Module):
         self.conv = ItrackerImageModel()
         self.fc = nn.Sequential(
             # FC-F1
-            # 9216 (64x12x12)
+            # 9,216 (64x12x12)
             nn.Dropout(0.1),
             nn.Linear(12 * 12 * 64, 128),
             # 128
@@ -114,12 +109,13 @@ class FaceImageModel(nn.Module):
             nn.Linear(128, 64),
             # 64
             nn.ReLU(inplace=True),
+            # 64
         )
         
     def forward(self, x):
         # 3C x 224H x 224W
         x = self.conv(x)
-        # 9216 (64x12x12)
+        # 9,216 (64x12x12)
         x = self.fc(x)
         # 64
         return x
@@ -135,8 +131,10 @@ class FaceGridModel(nn.Module):
             nn.Linear(gridSize * gridSize, 256),
             # 256
             nn.ReLU(inplace=True),
+            # 256
 
             # FC-FG2
+            # 256
             nn.Dropout(0.1),
             nn.Linear(256, 128),
             # 128
@@ -155,7 +153,7 @@ class FaceGridModel(nn.Module):
 class ITrackerModel(nn.Module):
     def __init__(self):
         super(ITrackerModel, self).__init__()
-        # 3Cx224Hx224W --> 9216 (64x12x12)
+        # 3Cx224Hx224W --> 9,216 (64x12x12)
         self.eyeModel = ItrackerImageModel()
         # 3Cx224Hx224W --> 64
         self.faceModel = FaceImageModel()
@@ -170,6 +168,7 @@ class ITrackerModel(nn.Module):
             nn.Linear(2 * 12 * 12 * 64, 128),
             # 128
             nn.ReLU(inplace=True),
+            # 128
         )
 
         # Joining everything
@@ -180,10 +179,11 @@ class ITrackerModel(nn.Module):
             nn.Linear(128 + 64 + 128, 128),
             # 128
             nn.ReLU(inplace=True),
+            # 128
 
             # FC2
-            nn.Dropout(0.1),
             # 128
+            nn.Dropout(0.1),
             nn.Linear(128, 2),
             # 2
         )

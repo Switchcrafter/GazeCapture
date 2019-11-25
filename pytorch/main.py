@@ -500,13 +500,11 @@ def export_onnx_model(model, device, verbose):
 
     batch_size = 1
     color_depth = 3  # 3 bytes for RGB color space
-    dim_width = 224
-    dim_height = 224
-    face_grid_size = 25 * 25
+    face_grid_size = GRID_SIZE * GRID_SIZE
 
-    imFace = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=device).float()
-    imEyeL = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=device).float()
-    imEyeR = torch.randn(batch_size, color_depth, dim_width, dim_height).to(device=device).float()
+    imFace = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
+    imEyeL = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
+    imEyeR = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
     faceGrid = torch.zeros((batch_size, face_grid_size)).to(device=device).float()
 
     dummy_in = (imFace, imEyeL, imEyeR, faceGrid)
@@ -622,7 +620,7 @@ def parse_commandline_arguments():
     parser.add_argument('--local_rank', help="", nargs='+', default=[0])
     parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
     parser.add_argument('--hsm_cycle', type=int, default=8)
-    parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="")
+    parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="Enables Adversarial Attack")
     args = parser.parse_args()
 
     args.device = None
