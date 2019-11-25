@@ -77,7 +77,7 @@ def main():
         model = torch.nn.DataParallel(model).to(device=device)
 
     image_size = (224, 224)
-    cudnn.benchmark = False
+    cudnn.benchmark = True
 
     epoch = 1
     if doLoad:
