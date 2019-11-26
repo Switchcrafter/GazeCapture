@@ -83,7 +83,6 @@ def main():
     # Retrieve model
     model = ITrackerModel().to(device=device)
 
-    args.world_size = os.environ['WORLD_SIZE']
     # GPU optimizations and modes
     cudnn.benchmark = True
     if using_cuda and len(args.local_rank) > 1:
@@ -98,6 +97,7 @@ def main():
         else:
             print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
             # Multi-Process Single-GPU
+            args.world_size = os.environ.get('WORLD_SIZE') or 1
             # torch.distributed.init_process_group(backend='nccl', world_size=args.world_size, init_method='env://')
             torch.distributed.init_process_group(backend='nccl')
             model = torch.nn.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank[0])
