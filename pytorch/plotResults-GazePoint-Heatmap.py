@@ -1,8 +1,8 @@
 import json
-import math
-import matplotlib.pyplot as plt
+
 import matplotlib.cm as cmx
 import matplotlib.colors as colors
+import matplotlib.pyplot as plt
 
 jsondata = json.load(open("best_results.json", "r"))
 

@@ -7,6 +7,8 @@ import torchvision.transforms as transforms
 import torch
 import numpy as np
 
+from Utilities import centeredText
+
 '''
 Data loader for the iTracker.
 Use prepareDataset.py to convert the dataset from http://gazecapture.csail.mit.edu/ to proper format.
@@ -42,7 +44,7 @@ def loadMetadata(filename, silent=False):
     return metadata
 
 class ITrackerData(data.Dataset):
-    def __init__(self, dataPath, split='train', imSize=(224, 224), gridSize=(25, 25), silent=False):
+    def __init__(self, dataPath, imSize, gridSize, split='train', silent=False):
 
         self.dataPath = dataPath
         self.imSize = imSize
@@ -57,7 +59,10 @@ class ITrackerData(data.Dataset):
         if self.metadata is None:
             raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % metadata_file)
 
-        self.normalize_image = transforms.Compose([
+        self.normalize_image = self.transform_eye_right = transforms.Compose([
+            transforms.Resize(240),
+            transforms.ColorJitter(),
+            transforms.RandomCrop(self.imSize[0]),
             transforms.Resize(self.imSize),
             transforms.ToTensor(),
         ])
@@ -131,3 +136,38 @@ class ITrackerData(data.Dataset):
 
     def __len__(self):
         return len(self.indices)
+
+
+class Dataset:
+    def __init__(self, split, data, size, loader):
+        self.split = split
+        self.data = data
+        self.size = size
+        self.loader = loader
+
+
+def load_data(split, path, image_size, grid_size, workers, batch_size, verbose):
+    data = ITrackerData(path, image_size, grid_size, split=split, silent=not verbose)
+    size = len(data.indices)
+    shuffle = True if split == 'train' else False
+    loader = torch.utils.data.DataLoader(
+        data,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=workers,
+        pin_memory=False)
+
+    return Dataset(split, data, size, loader)
+
+
+def load_all_data(path, image_size, grid_size, workers, batch_size, verbose):
+    print(centeredText('Loading Data'))
+    all_data = {
+        # training data : model sees and learns from this data
+        'train': load_data('train', path, image_size, grid_size, workers, batch_size, verbose),
+        # validation data : model sees but never learns from this data
+        'val': load_data('val', path, image_size, grid_size, workers, batch_size, verbose),
+        # test data : model never sees or learns from this data
+        'test': load_data('test', path, image_size, grid_size, workers, batch_size, verbose)
+    }
+    return all_data

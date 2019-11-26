@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from datetime import datetime  # for timing
 
 import cv2
@@ -9,6 +8,8 @@ import torch
 from PIL import Image
 from imutils import face_utils
 from screeninfo import get_monitors
+from skimage import exposure
+from skimage import feature
 
 from ITrackerData import NormalizeImage
 from ITrackerModel import ITrackerModel
@@ -16,14 +17,18 @@ from cam2screen import cam2screen
 
 MEAN_PATH = '.'
 
+IMAGE_WIDTH = 224
+IMAGE_HEIGHT = 224
+IMAGE_SIZE = (IMAGE_WIDTH, IMAGE_HEIGHT)
+GRID_SIZE = 25
+FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
+
 
 def main():
     model = ITrackerModel().to(device='cpu')
     saved = torch.load('checkpoint.pth.tar', map_location='cpu')
 
-    state = remove_module_from_state(saved)
-
-    model.load_state_dict(state)
+    model.load_state_dict(saved['state_dict'])
     model.eval()
 
     monitor = get_monitors()[0]
@@ -34,7 +39,7 @@ def main():
 
     cap = cv2.VideoCapture(0)
 
-    normalize_image = NormalizeImage()
+    normalize_image = NormalizeImage(image_size=IMAGE_SIZE)
 
     while True:
         _, image = cap.read()
@@ -64,17 +69,17 @@ def main():
                 is_valid = True
                 face_image = image.copy()
                 face_image = face_image[rect.tl_corner().y:rect.br_corner().y, rect.tl_corner().x:rect.br_corner().x]
-                face_image = imutils.resize(face_image, width=225, inter=cv2.INTER_CUBIC)
+                face_image = imutils.resize(face_image, width=IMAGE_WIDTH, inter=cv2.INTER_CUBIC)
 
                 (x, y, w, h) = cv2.boundingRect(shape_np[leftEyeLandmarksStart:leftEyeLandmarksEnd])
                 left_eye_image = image.copy()
                 left_eye_image = left_eye_image[y - 15:y + h + 15, x - 5:x + w + 5]
-                left_eye_image = imutils.resize(left_eye_image, width=61, inter=cv2.INTER_CUBIC)
+                left_eye_image = imutils.resize(left_eye_image, width=IMAGE_WIDTH, inter=cv2.INTER_CUBIC)
 
                 (x, y, w, h) = cv2.boundingRect(shape_np[rightEyeLandmarksStart:rightEyeLandmarksEnd])
                 right_eye_image = image.copy()
                 right_eye_image = right_eye_image[y - 15:y + h + 15, x - 5:x + w + 5]
-                right_eye_image = imutils.resize(right_eye_image, width=61, inter=cv2.INTER_CUBIC)
+                right_eye_image = imutils.resize(right_eye_image, width=IMAGE_WIDTH, inter=cv2.INTER_CUBIC)
 
                 if rect.tl_corner().x < 0 or rect.tl_corner().y < 0:
                     is_valid = False
@@ -85,13 +90,13 @@ def main():
                 image_width = image.shape[1]
                 image_height = image.shape[0]
 
-                faceGridX = int((rect.tl_corner().x / image_width) * 25)
-                faceGridY = int((rect.tl_corner().y / image_height) * 25)
-                faceGridW = int((rect.br_corner().x / image_width) * 25) - faceGridX
-                faceGridH = int((rect.br_corner().y / image_height) * 25) - faceGridY
+                faceGridX = int((rect.tl_corner().x / image_width) * GRID_SIZE)
+                faceGridY = int((rect.tl_corner().y / image_height) * GRID_SIZE)
+                faceGridW = int((rect.br_corner().x / image_width) * GRID_SIZE) - faceGridX
+                faceGridH = int((rect.br_corner().y / image_height) * GRID_SIZE) - faceGridY
 
-                faceGridImage = np.zeros((25, 25, 1), dtype=np.uint8)
-                face_grid = np.zeros((25, 25, 1), dtype=np.uint8)
+                faceGridImage = np.zeros((GRID_SIZE, GRID_SIZE, 3), dtype=np.uint8)
+                face_grid = np.zeros((GRID_SIZE, GRID_SIZE, 1), dtype=np.uint8)
                 faceGridImage.fill(255)
                 for m in range(faceGridW):
                     for n in range(faceGridH):
@@ -109,10 +114,19 @@ def main():
 
         cv2.imshow("WebCam", image)
         if is_valid:
-            cv2.imshow("face", face_image)
-            cv2.imshow("right_eye", right_eye_image)
-            cv2.imshow("left_eye", left_eye_image)
-            cv2.imshow("face_grid", faceGridImage)
+            faceGridImage = imutils.resize(faceGridImage, width=IMAGE_WIDTH, inter=cv2.INTER_CUBIC)
+            input_images = np.concatenate((face_image,
+                                           right_eye_image,
+                                           left_eye_image,
+                                           faceGridImage),
+                                          axis=0)
+            cv2.imshow("input images", input_images)
+
+            # hog_images = np.concatenate((hogImage(face_image),
+            #                                        hogImage(right_eye_image),
+            #                                        hogImage(left_eye_image)),
+            #                                       axis=0)
+            # cv2.imshow("HoG images", hog_images)
 
             # Run inference using face, right_eye_image, left_eye_image and face_grid
             imFace = Image.fromarray(face_image, 'RGB')
@@ -168,16 +182,14 @@ def main():
     cap.release()
 
 
-def remove_module_from_state(saved_state):
-    # when using Cuda for training we use DataParallel. When using DataParallel, there is a
-    # 'module.' added to the namespace of the item in the dictionary.
-    # remove 'module.' from the front of the name to make it compatible with cpu only
-    state = OrderedDict()
+def hogImage(image):
+    (H, hogImage) = feature.hog(image, orientations=9, pixels_per_cell=(10, 10),
+                                cells_per_block=(3, 3), transform_sqrt=True, block_norm="L1",
+                                visualize=True)
+    hogImage = exposure.rescale_intensity(hogImage, out_range=(0, 255))
+    hogImage = hogImage.astype("uint8")
 
-    for key, value in saved_state['state_dict'].items():
-        state[key[7:]] = value.to(device='cpu')
-
-    return state
+    return hogImage
 
 
 if __name__ == "__main__":
