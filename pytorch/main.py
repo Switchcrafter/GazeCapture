@@ -82,12 +82,24 @@ def main():
 
     # Retrieve model
     model = ITrackerModel().to(device=device)
-    if using_cuda and len(args.local_rank) > 1:
-        # model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=device)
-        torch.distributed.init_process_group(backend="nccl")
-        model = torch.nn.DistributedDataParallel(model, device_ids=args.local_rank)
 
+    # GPU optimizations and modes
     cudnn.benchmark = True
+    if using_cuda and len(args.local_rank) > 1:
+        if args.mode == 'dp':
+            print('Using DataParallel Backend')
+            model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=device)
+        elif args.mode == 'ddp1':
+            print('Using DistributedDataParallel Backend - Single-Process Multi-GPU')
+            # Single-Process Multi-GPU
+            torch.distributed.init_process_group(backend="nccl")
+            model = torch.nn.DistributedDataParallel(model)
+        else:
+            print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
+            # Multi-Process Single-GPU
+            # torch.distributed.init_process_group(backend='nccl', world_size=args.world_size, init_method='env://')
+            torch.distributed.init_process_group(backend='nccl')
+            model = torch.nn.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank[0])
 
     epoch = 1
     if doLoad:
@@ -616,6 +628,7 @@ def parse_commandline_arguments():
                         help="verbose mode - print details every batch")
     # Experimental options
     parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--mode', help="Multi-GPU mode: dp, ddp1, [ddp2]", default='ddp2')
     parser.add_argument('--local_rank', help="", nargs='+', default=[0])
     parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
     parser.add_argument('--hsm_cycle', type=int, default=8)
