@@ -219,11 +219,8 @@ def main():
             print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
             print('')
-            print('RMS Errors')
-            print(*(map('{0[0]}: {0[1]:7.4f}'.format, enumerate(RMSErrors))), sep=', ')
-            print('')
-            print('Best RMS Errors')
-            print(*(map('{0[0]}: {0[1]:7.4f}'.format, enumerate(best_RMSErrors))), sep=', ')
+            print('RMS_Errors={0}'.format(RMSErrors))
+            print('Best_RMS_Errors={0}'.format(best_RMSErrors))
             print('')
 
     totaltime_elapsed = datetime.now() - totalstart_time
