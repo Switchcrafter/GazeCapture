@@ -83,6 +83,7 @@ def main():
     # Retrieve model
     model = ITrackerModel().to(device=device)
 
+    args.world_size = os.environ['WORLD_SIZE']
     # GPU optimizations and modes
     cudnn.benchmark = True
     if using_cuda and len(args.local_rank) > 1:
