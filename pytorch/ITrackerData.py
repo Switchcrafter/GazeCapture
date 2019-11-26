@@ -59,13 +59,19 @@ class ITrackerData(data.Dataset):
         if self.metadata is None:
             raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % metadata_file)
 
-        self.normalize_image = transforms.Compose([
-            transforms.Resize(240),
-            transforms.ColorJitter(),
-            transforms.RandomCrop(self.imSize[0]),
-            transforms.Resize(self.imSize),
-            transforms.ToTensor(),
-        ])
+        if split == 'train':
+            self.normalize_image = transforms.Compose([
+                transforms.Resize(240),
+                transforms.ColorJitter(),
+                transforms.RandomCrop(self.imSize),
+                transforms.Resize(self.imSize),
+                transforms.ToTensor(),
+            ])
+        else:
+            self.normalize_image = transforms.Compose([
+                transforms.Resize(self.imSize),
+                transforms.ToTensor(),
+            ])
 
         if split == 'test':
             mask = self.metadata['labelTest']
