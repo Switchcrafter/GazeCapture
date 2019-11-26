@@ -73,8 +73,7 @@ class ProgressBar(Bar):
         metric = '[{metric:.4f}]'.format(metric=metric) if metric else ''
         error = '[{error:.4f}]'.format(error=error) if error else ''
         time = datetime.now() - self.start_time
-        eta = (time/value)*self.max_value
-        time_eta = '[ETA : '+str(eta)+']'
+        time_eta = '[ETA : '+str((time/value)*self.max_value)+']'
         assert( value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value ('+ str(self.max_value)+').'
         width = self.getTerminalWidth() - (len(self.label) + len(self.left) + len(self.right) + len(metric) + len(error) + len(time_eta))
         marker = self.create_marker(value, width).ljust(width, self.fill)
