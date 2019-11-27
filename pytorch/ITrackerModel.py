@@ -36,53 +36,18 @@ class ItrackerImageModel(nn.Module):
             # with adjustments based on the "Eye Gaze for Everyone" paper.
             # https://people.csail.mit.edu/khosla/papers/cvpr2016_Khosla.pdf
 
-            # CONV-1
-            # 3C x 224H x 224W
             nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=0),
-            # (<input dimension> + <padding> * <groups> - <kernel size>) / <stride> + 1 = <output dimension>
-            # (224 + 0 * 1 - 11) / 4 + 1 ~= 54
-            #
-            # <output channels> x <output dimension> x <output dimension>
-            # 96C x 54H x 54W
-            nn.MaxPool2d(kernel_size=3, stride=2),
-            # (<input dimension> - <kernel size>) / <stride> + 1 = <output dimension>
-            # (54 - 3) / 2 + 1 ~= 26
-            # 96C x 26H x 26W
             nn.ReLU(inplace=True),
-            # 96C x 26H x 26W
-
-            # CONV-2
-            # 96C x 26H x 26W
-            nn.BatchNorm2d(96),
-            nn.Dropout2d(0.1),
+            nn.MaxPool2d(kernel_size=3, stride=2),
+            nn.CrossMapLRN2d(size=5, alpha=0.0001, beta=0.75, k=1.0),
             nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2, groups=2),
-            # (26 + 2 * 2 - 5) / 1 + 1 ~= 26
-            # 256C x 26H x 26W
+            nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=3, stride=2),
-            # (26 - 3) / 2 + 1 ~= 12
-            # 256C x 12H x 12W
-            nn.ReLU(inplace=True),
-            # 256C x 12H x 12W
-
-            # CONV-3
-            # 256C x 12H x 12W
-            nn.BatchNorm2d(256),
-            nn.Dropout2d(0.1),
+            nn.CrossMapLRN2d(size=5, alpha=0.0001, beta=0.75, k=1.0),
             nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1),
-            # (12 + 2 * 1 - 3) / 1 + 1 ~= 12
-            # 384C x 12H x 12W
             nn.ReLU(inplace=True),
-            # 384C x 12H x 12W
-
-            # CONV-4
-            # 384C x 12H x 12W
-            nn.BatchNorm2d(384),
-            nn.Dropout2d(0.1),
             nn.Conv2d(384, 64, kernel_size=1, stride=1, padding=0),
-            # (12 + 2 * 1 - 3) / 1 + 1 ~= 12
-            # 64C x 12H x 12W
             nn.ReLU(inplace=True),
-            # 64C x 12H x 12W
         )
 
     def forward(self, x):
@@ -97,19 +62,10 @@ class FaceImageModel(nn.Module):
         super(FaceImageModel, self).__init__()
         self.conv = ItrackerImageModel()
         self.fc = nn.Sequential(
-            # FC-F1
-            # 9,216 (64x12x12)
-            nn.Dropout(0.1),
-            nn.Linear(12 * 12 * 64, 128),
-            # 128
+            nn.Linear(12*12*64, 128),
             nn.ReLU(inplace=True),
-
-            # FC-F2
-            nn.Dropout(0.1),
             nn.Linear(128, 64),
-            # 64
             nn.ReLU(inplace=True),
-            # 64
         )
         
     def forward(self, x):
@@ -126,18 +82,9 @@ class FaceGridModel(nn.Module):
     def __init__(self, gridSize=25):
         super(FaceGridModel, self).__init__()
         self.fc = nn.Sequential(
-            # FC-FG1
-            # 625 (25x25)
             nn.Linear(gridSize * gridSize, 256),
-            # 256
             nn.ReLU(inplace=True),
-            # 256
-
-            # FC-FG2
-            # 256
-            nn.Dropout(0.1),
             nn.Linear(256, 128),
-            # 128
             nn.ReLU(inplace=True),
         )
 
@@ -162,30 +109,15 @@ class ITrackerModel(nn.Module):
 
         # Joining both eyes
         self.eyesFC = nn.Sequential(
-            # FC-E1
-            nn.Dropout(0.1),
-            # 18,432‬ (64x12x12)*2
-            nn.Linear(2 * 12 * 12 * 64, 128),
-            # 128
+            nn.Linear(2*12*12*64, 128),
             nn.ReLU(inplace=True),
-            # 128
         )
 
         # Joining everything
         self.fc = nn.Sequential(
-            # FC1
-            nn.Dropout(0.1),
-            # 384 FC-E1 (128) + FC-F2(64) + FC-FG2(128)
-            nn.Linear(128 + 64 + 128, 128),
-            # 128
+            nn.Linear(128+64+128, 128),
             nn.ReLU(inplace=True),
-            # 128
-
-            # FC2
-            # 128
-            nn.Dropout(0.1),
             nn.Linear(128, 2),
-            # 2
         )
 
     def forward(self, faces, eyesLeft, eyesRight, faceGrids):
