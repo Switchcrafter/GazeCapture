@@ -99,7 +99,7 @@ class NormalizeImage:
 
 
 class ITrackerData(data.Dataset):
-    def __init__(self, dataPath, imSize, gridSize, split='train', silent=False):
+    def __init__(self, dataPath, imSize, gridSize, split, silent):
 
         self.dataPath = dataPath
         self.imSize = imSize
@@ -110,7 +110,7 @@ class ITrackerData(data.Dataset):
 
         if metadata_file is None or not os.path.isfile(metadata_file):
             raise RuntimeError('There is no such file %s! Provide a valid dataset path.' % metadata_file)
-        self.metadata = loadMetadata(metadata_file, silent=True)
+        self.metadata = loadMetadata(metadata_file, silent)
         if self.metadata is None:
             raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % metadata_file)
 
@@ -196,11 +196,11 @@ class Dataset:
 
 
 def load_data(split, path, image_size, grid_size, workers, batch_size, verbose):
-    data = ITrackerData(path, image_size, grid_size, split=split, silent=not verbose)
-    size = len(data.indices)
+    dataset = ITrackerData(path, image_size, grid_size, split, not verbose)
+    size = len(dataset.indices)
     shuffle = True if split == 'train' else False
     loader = torch.utils.data.DataLoader(
-        data,
+        dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=workers,
