@@ -32,9 +32,6 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 
 '''
 
-# MEAN_PATH = os.path.dirname(os.path.realpath(__file__))
-
-
 def loadMetadata(filename, silent=False):
     try:
         # http://stackoverflow.com/questions/6273634/access-array-contents-from-a-mat-file-loaded-using-scipy-io-loadmat-python
@@ -45,67 +42,6 @@ def loadMetadata(filename, silent=False):
         print('\tFailed to read the meta file "%s"!' % filename)
         return None
     return metadata
-
-
-# class SubtractMean(object):
-#     """Normalize an tensor image with mean.
-#     """
-#
-#     def __init__(self, mean_image):
-#         self.meanImg = transforms.ToTensor()(mean_image / 255)
-#
-#     def __call__(self, tensor):
-#         """
-#         Args:
-#             tensor (Tensor): Tensor image of size (C, H, W) to be normalized.
-#         Returns:
-#             Tensor: Normalized image.
-#         """
-#         return tensor.sub(self.meanImg)
-
-
-class NormalizeImage:
-    def __init__(self, image_size):
-        self.image_size = image_size
-
-        # self.mean_face = loadMetadata(os.path.join(MEAN_PATH, 'mean_face_224.mat'), silent=True)['image_mean']
-        # self.mean_left = loadMetadata(os.path.join(MEAN_PATH, 'mean_left_224.mat'), silent=True)['image_mean']
-        # self.mean_right = loadMetadata(os.path.join(MEAN_PATH, 'mean_right_224.mat'), silent=True)['image_mean']
-
-        self.transform_face = transforms.Compose([
-            transforms.Resize(240),
-            transforms.ColorJitter(),
-            transforms.RandomCrop(self.image_size[0]),
-            transforms.Resize(self.image_size),
-            transforms.ToTensor(),
-            # SubtractMean(mean_image=self.mean_face),
-        ])
-        self.transform_eye_left = transforms.Compose([
-            transforms.Resize(240),
-            transforms.ColorJitter(),
-            transforms.RandomCrop(self.image_size[0]),
-            transforms.Resize(self.image_size),
-            transforms.ToTensor(),
-            # SubtractMean(mean_image=self.mean_left),
-        ])
-        self.transform_eye_right = transforms.Compose([
-            transforms.Resize(240),
-            transforms.ColorJitter(),
-            transforms.RandomCrop(self.image_size[0]),
-            transforms.Resize(self.image_size),
-            transforms.ToTensor(),
-            # SubtractMean(mean_image=self.mean_right),
-        ])
-
-    def face(self, image):
-        return self.transform_face(image)
-
-    def eye_left(self, image):
-        return self.transform_eye_left(image)
-
-    def eye_right(self, image):
-        return self.transform_eye_right(image)
-
 
 class ITrackerData(data.Dataset):
     def __init__(self, dataPath, imSize, gridSize, split='train', silent=False):
@@ -123,7 +59,19 @@ class ITrackerData(data.Dataset):
         if self.metadata is None:
             raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % metadata_file)
 
-        self.normalize_image = NormalizeImage(image_size=self.imSize)
+        if split == 'train':
+            self.normalize_image = transforms.Compose([
+                transforms.Resize(240),
+                transforms.ColorJitter(),
+                transforms.RandomCrop(self.imSize),
+                transforms.Resize(self.imSize),
+                transforms.ToTensor(),
+            ])
+        else:
+            self.normalize_image = transforms.Compose([
+                transforms.Resize(self.imSize),
+                transforms.ToTensor(),
+            ])
 
         if split == 'test':
             mask = self.metadata['labelTest']
@@ -139,11 +87,11 @@ class ITrackerData(data.Dataset):
 
     def loadImage(self, path):
         try:
+            # ToDo: Try YCbCr, HSV, LAB format
+            # im = np.array(Image.open(path).convert('YCbCr'))
             im = Image.open(path).convert('RGB')
         except OSError:
             raise RuntimeError('Could not read image: ' + path)
-            # im = Image.new("RGB", self.imSize, "white")
-
         return im
 
     def makeGrid(self, params):
@@ -176,9 +124,9 @@ class ITrackerData(data.Dataset):
         imEyeL = self.loadImage(imEyeLPath)
         imEyeR = self.loadImage(imEyeRPath)
 
-        imFace = self.normalize_image.face(image=imFace)
-        imEyeL = self.normalize_image.eye_left(image=imEyeL)
-        imEyeR = self.normalize_image.eye_right(image=imEyeR)
+        imFace = self.normalize_image(imFace)
+        imEyeL = self.normalize_image(imEyeL)
+        imEyeR = self.normalize_image(imEyeR)
 
         gaze = np.array([self.metadata['labelDotXCam'][index], self.metadata['labelDotYCam'][index]], np.float32)
         frame = np.array([self.metadata['labelRecNum'][index], self.metadata['frameIndex'][index]])
