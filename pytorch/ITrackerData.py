@@ -114,7 +114,7 @@ class ITrackerData(data.Dataset):
         if self.metadata is None:
             raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % metadata_file)
 
-        self.normalize_image = NormalizeImage(image_size=self.imSize)
+        self.normalize_image = NormalizeImage()
 
         if split == 'test':
             mask = self.metadata['labelTest']
@@ -130,11 +130,11 @@ class ITrackerData(data.Dataset):
 
     def loadImage(self, path):
         try:
+            # ToDo: Try YCbCr, HSV, LAB format
+            # im = np.array(Image.open(path).convert('YCbCr'))
             im = Image.open(path).convert('RGB')
         except OSError:
             raise RuntimeError('Could not read image: ' + path)
-            # im = Image.new("RGB", self.imSize, "white")
-
         return im
 
     def makeGrid(self, params):
@@ -167,9 +167,9 @@ class ITrackerData(data.Dataset):
         imEyeL = self.loadImage(imEyeLPath)
         imEyeR = self.loadImage(imEyeRPath)
 
-        imFace = self.normalize_image.face(image=imFace)
-        imEyeL = self.normalize_image.eye_left(image=imEyeL)
-        imEyeR = self.normalize_image.eye_right(image=imEyeR)
+        imFace = self.normalize_image.transform_face(imFace)
+        imEyeL = self.normalize_image.transform_eye_left(imEyeL)
+        imEyeR = self.normalize_image.transform_eye_right(imEyeR)
 
         gaze = np.array([self.metadata['labelDotXCam'][index], self.metadata['labelDotYCam'][index]], np.float32)
         frame = np.array([self.metadata['labelRecNum'][index], self.metadata['frameIndex'][index]])
