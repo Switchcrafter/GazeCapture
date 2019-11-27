@@ -52,7 +52,7 @@ class ProgressBar(Bar):
         self.right = right
         self.fill = fill
         self.max_value = max_value
-        self.start_time = datetime.now()
+        self.start_time = None
 
     def create_marker(self, value, width):
         if self.max_value > 0:
@@ -69,17 +69,17 @@ class ProgressBar(Bar):
 
     def update(self, value, metric, error):
         '''Updates the progress bar and its subcomponents'''
+        self.start_time = self.start_time or datetime.now()
         metric = '[{metric:.4f}]'.format(metric=metric) if metric else ''
         error = '[{error:.4f}]'.format(error=error) if error else ''
         time = datetime.now() - self.start_time
-        eta = (time/value)*self.max_value
-        time_eta = ' [ETA : '+str(eta)+']'
+        time_eta = '[ETA : '+str((time/value)*self.max_value)+']'
         assert( value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value ('+ str(self.max_value)+').'
         width = self.getTerminalWidth() - (len(self.label) + len(self.left) + len(self.right) + len(metric) + len(error) + len(time_eta))
         marker = self.create_marker(value, width).ljust(width, self.fill)
         marker = self.left + marker + self.right
         # append infoString at the center
-        infoString = ' {val:d}/{max:d} ({percent:d}%) '.format(val = value, max = self.max_value, percent = int(value/self.max_value*100))
+        infoString = ' {val:d}/{max:d} @{speed:d}/s ({percent:d}%) '.format(val = value, max = self.max_value, speed=int(value/time.total_seconds()), percent = int(value/self.max_value*100))
         index = (len(marker)-len(infoString))//2
         marker = marker[:index] + infoString + marker[index + len(infoString):]
         if value < self.max_value:
