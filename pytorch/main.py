@@ -46,8 +46,8 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 BASE_LR = 0.001
 MOMENTUM = 0.9
 WEIGHT_DECAY = 1e-4
-IMAGE_WIDTH = 224
-IMAGE_HEIGHT = 224
+IMAGE_WIDTH = 227
+IMAGE_HEIGHT = 227
 IMAGE_SIZE = (IMAGE_WIDTH, IMAGE_HEIGHT)
 GRID_SIZE = 25
 FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
@@ -232,8 +232,8 @@ def main():
             print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
             print('')
-            print('RMS_Errors={0}'.format(RMSErrors))
-            print('Best_RMS_Errors={0}'.format(best_RMSErrors))
+            print('\'RMS_Errors\': {0},'.format(RMSErrors))
+            print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
             print('')
 
     totaltime_elapsed = datetime.now() - totalstart_time

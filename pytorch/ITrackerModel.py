@@ -40,56 +40,56 @@ class ItrackerImageModel(nn.Module):
             # 3C x 224H x 224W
             nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=0),
             # (<input dimension> + <padding> * <groups> - <kernel size>) / <stride> + 1 = <output dimension>
-            # (224 + 0 * 1 - 11) / 4 + 1 ~= 54
+            # (224 + 0 * 1 - 11) / 4 + 1 = 55
             #
             # <output channels> x <output dimension> x <output dimension>
-            # 96C x 54H x 54W
+            # 96C x 55H x 55W
             nn.MaxPool2d(kernel_size=3, stride=2),
             # (<input dimension> - <kernel size>) / <stride> + 1 = <output dimension>
-            # (54 - 3) / 2 + 1 ~= 26
-            # 96C x 26H x 26W
+            # (54 - 3) / 2 + 1 = 27
+            # 96C x 27H x 27W
             nn.ReLU(inplace=True),
-            # 96C x 26H x 26W
+            # 96C x 27H x 27W
 
             # CONV-2
             # 96C x 26H x 26W
             nn.BatchNorm2d(96),
             nn.Dropout2d(0.1),
             nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2, groups=2),
-            # (26 + 2 * 2 - 5) / 1 + 1 ~= 26
-            # 256C x 26H x 26W
+            # (26 + 2 * 2 - 5) / 1 + 1 = 27
+            # 256C x 27H x 27W
             nn.MaxPool2d(kernel_size=3, stride=2),
-            # (26 - 3) / 2 + 1 ~= 12
-            # 256C x 12H x 12W
+            # (26 - 3) / 2 + 1 = 13
+            # 256C x 13H x 13W
             nn.ReLU(inplace=True),
-            # 256C x 12H x 12W
+            # 256C x 13H x 13W
 
             # CONV-3
-            # 256C x 12H x 12W
+            # 256C x 13H x 13W
             nn.BatchNorm2d(256),
             nn.Dropout2d(0.1),
             nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1),
-            # (12 + 2 * 1 - 3) / 1 + 1 ~= 12
-            # 384C x 12H x 12W
+            # (13 + 2 * 1 - 3) / 1 + 1 = 13
+            # 384C x 13H x 13W
             nn.ReLU(inplace=True),
-            # 384C x 12H x 12W
+            # 384C x 13H x 13W
 
             # CONV-4
             # 384C x 12H x 12W
             nn.BatchNorm2d(384),
             nn.Dropout2d(0.1),
             nn.Conv2d(384, 64, kernel_size=1, stride=1, padding=0),
-            # (12 + 2 * 1 - 3) / 1 + 1 ~= 12
-            # 64C x 12H x 12W
+            # (13 + 2 * 1 - 3) / 1 + 1 = 13
+            # 64C x 13H x 13W
             nn.ReLU(inplace=True),
-            # 64C x 12H x 12W
+            # 64C x 13H x 13W
         )
 
     def forward(self, x):
         x = self.features(x)
-        # 64C x 12H x 12W
+        # 64C x 13H x 13W
         x = x.view(x.size(0), -1)
-        # 9,216 (64x12x12)
+        # 10,816 (64x13x13)
         return x
 
 class FaceImageModel(nn.Module):
@@ -98,9 +98,9 @@ class FaceImageModel(nn.Module):
         self.conv = ItrackerImageModel()
         self.fc = nn.Sequential(
             # FC-F1
-            # 9,216 (64x12x12)
+            # 10,816 (64x13x13)
             nn.Dropout(0.1),
-            nn.Linear(12 * 12 * 64, 128),
+            nn.Linear(13 * 13 * 64, 128),
             # 128
             nn.ReLU(inplace=True),
 
@@ -115,7 +115,7 @@ class FaceImageModel(nn.Module):
     def forward(self, x):
         # 3C x 224H x 224W
         x = self.conv(x)
-        # 9,216 (64x12x12)
+        # 10,816 (64x13x13)
         x = self.fc(x)
         # 64
         return x
@@ -164,8 +164,8 @@ class ITrackerModel(nn.Module):
         self.eyesFC = nn.Sequential(
             # FC-E1
             nn.Dropout(0.1),
-            # 18,432‬ (64x12x12)*2
-            nn.Linear(2 * 12 * 12 * 64, 128),
+            # 21,632‬ (64x13x13)*2
+            nn.Linear(2 * 13 * 13 * 64, 128),
             # 128
             nn.ReLU(inplace=True),
             # 128

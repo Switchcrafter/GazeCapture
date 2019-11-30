@@ -36,7 +36,8 @@ class Bar(object):
 
 class ProgressBar(Bar):
     '''A progress bar which stretches to fill the line.'''
-    def __init__(self, max_value=100, label='', marker='=', left='|', right='|', arrow = '>', fill='-'):
+
+    def __init__(self, max_value=100, label='', marker='=', left='|', right='|', arrow='>', fill='-'):
         '''Creates a customizable progress bar.
         max_value - max possible value for the progressbar
         label - title for the progressbar as prefix
@@ -62,7 +63,7 @@ class ProgressBar(Bar):
             elif length == 0:
                 return ''
             else:
-                marker = (self.marker * (length-1)) + self.arrow
+                marker = (self.marker * (length - 1)) + self.arrow
         else:
             marker = self.marker
         return marker
@@ -73,24 +74,29 @@ class ProgressBar(Bar):
         metric = '[{metric:.4f}]'.format(metric=metric) if metric else ''
         error = '[{error:.4f}]'.format(error=error) if error else ''
         time = datetime.now() - self.start_time
-        time_eta = '[ETA : '+str((time/value)*self.max_value)+']'
-        assert( value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value ('+ str(self.max_value)+').'
-        width = self.getTerminalWidth() - (len(self.label) + len(self.left) + len(self.right) + len(metric) + len(error) + len(time_eta))
+        time_eta = '[ETA : ' + str((time / value) * self.max_value) + ']'
+        assert (value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value (' + str(
+            self.max_value) + ').'
+        width = self.getTerminalWidth() - (
+                    len(self.label) + len(self.left) + len(self.right) + len(metric) + len(error) + len(time_eta))
         marker = self.create_marker(value, width).ljust(width, self.fill)
         marker = self.left + marker + self.right
         # append infoString at the center
-        infoString = ' {val:d}/{max:d} @{speed:d}/s ({percent:d}%) '.format(val = value, max = self.max_value, speed=int(value/time.total_seconds()), percent = int(value/self.max_value*100))
-        index = (len(marker)-len(infoString))//2
+        infoString = ' {val:d}/{max:d} @{speed:d}/s ({percent:3d}%) '.format(val=value, max=self.max_value,
+                                                                             speed=int(value / time.total_seconds()),
+                                                                             percent=int(value / self.max_value * 100))
+        index = (len(marker) - len(infoString)) // 2
         marker = marker[:index] + infoString + marker[index + len(infoString):]
         if value < self.max_value:
-            print(self.label + marker + metric + error + time_eta, end = '\r')
+            print(self.label + marker + metric + error + time_eta, end='\r')
         else:
-            time_elapsed = ' [Time: '+str(time)+']'
-            print(self.label + marker + metric + error + time_elapsed, end = '\n')
+            time_elapsed = ' [Time: ' + str(time) + ']'
+            print(self.label + marker + metric + error + time_elapsed, end='\n')
 
 
 class SamplingBar(Bar):
     '''A sampling hotness bar which stretches to fill the line.'''
+
     def __init__(self, label='', left='|', right='|'):
         '''Creates a multinomial sampling hotness bar.
         '''
@@ -100,8 +106,10 @@ class SamplingBar(Bar):
 
     #  colorCodes = {black, VIBGYOR, White}
     def getCode(self, value=0.1, max=1.0, s='█'):
-        colorCodes = ["\033[30m", "\033[1;30m", "\033[35m", "\033[1;35m", "\033[34m", "\033[1;34m", "\033[36m", "\033[32m", "\033[1;32m", "\033[1;33m", "\033[33m",  "\033[1;31m", "\033[31m", "\033[37m", "\033[1;37m"]
-        index = int((len(colorCodes)-1) * (value/max))
+        colorCodes = ["\033[30m", "\033[1;30m", "\033[35m", "\033[1;35m", "\033[34m", "\033[1;34m", "\033[36m",
+                      "\033[32m", "\033[1;32m", "\033[1;33m", "\033[33m", "\033[1;31m", "\033[31m", "\033[37m",
+                      "\033[1;37m"]
+        index = int((len(colorCodes) - 1) * (value / max))
         return colorCodes[index] + s + "\033[0m"
 
     # creates numBins of equal length
@@ -111,12 +119,12 @@ class SamplingBar(Bar):
         dataLength = len(data)
         if dataLength <= numBins:
             return data
-        windowLength = dataLength//numBins
+        windowLength = dataLength // numBins
         limit = numBins * windowLength
         output = torch.Tensor(numBins)
         for i in range(0, numBins):
-            start = i*windowLength
-            stop = (i+1)*windowLength
+            start = i * windowLength
+            stop = (i + 1) * windowLength
             if (stop == limit):
                 stop = dataLength
             output[i] = torch.max(data[start:stop])
@@ -124,17 +132,17 @@ class SamplingBar(Bar):
 
     def display(self, data):
         barLength = self.getTerminalWidth() - 40 - len(self.label)
-        normalizedData = torch.floor((1.0*data*barLength)/torch.max(data))
+        normalizedData = torch.floor((1.0 * data * barLength) / torch.max(data))
         bucketData = self.bucket(normalizedData, barLength)
         maxValue = torch.max(bucketData)
         code = ''
         for i in range(1, len(bucketData)):
             code = code + self.getCode(bucketData[i], maxValue, '█')
         # For Live Heatmap: print in previous line and comeback
-        print('\033[F'+self.label + self.left + code + self.right, end='\n')
+        print('\033[F' + self.label + self.left + code + self.right, end='\n')
 
 
 def centeredText(infoString, marker='-', length=40):
-    marker = marker*length
-    index = (len(marker)-len(infoString))//2
+    marker = marker * length
+    index = (len(marker) - len(infoString)) // 2
     return marker[:index] + infoString + marker[index + len(infoString):]
