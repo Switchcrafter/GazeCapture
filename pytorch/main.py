@@ -232,8 +232,8 @@ def main():
             print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
             print('')
-            print('RMS_Errors={0}'.format(RMSErrors))
-            print('Best_RMS_Errors={0}'.format(best_RMSErrors))
+            print('\'RMS_Errors\': {0},'.format(RMSErrors))
+            print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
             print('')
 
     totaltime_elapsed = datetime.now() - totalstart_time
