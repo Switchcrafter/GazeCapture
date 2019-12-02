@@ -101,7 +101,7 @@ def main():
         else:
             print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
             # Multi-Process Single-GPU
-            # args.world_size = os.environ.get('WORLD_SIZE')
+            # args.world_size = os.environ.get('WORLD_SIZE') or 1
             # torch.distributed.init_process_group(backend='nccl', world_size=args.world_size, init_method='env://')
             torch.distributed.init_process_group(backend='nccl')
             model = torch.nn.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank[0])
@@ -245,11 +245,8 @@ def main():
             print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
             print('')
-            print('RMS Errors')
-            print(*(map('{0[0]}: {0[1]:7.4f}'.format, enumerate(RMSErrors))), sep=', ')
-            print('')
-            print('Best RMS Errors')
-            print(*(map('{0[0]}: {0[1]:7.4f}'.format, enumerate(best_RMSErrors))), sep=', ')
+            print('\'RMS_Errors\': {0},'.format(RMSErrors))
+            print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
             print('')
 
     totaltime_elapsed = datetime.now() - totalstart_time
@@ -399,8 +396,6 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
                     MSELosses=MSELosses,
                     RMSErrors=RMSErrors))
         else:
-            # args.vis.plot_error(error.item(), loss.data.item(), num_samples, dataset.split)
-            # args.vis.plot_error(RMSErrors.avg, MSELosses.avg, num_samples, dataset.split)
             args.vis.plot("loss", dataset.split, "RMSError", num_samples, RMSErrors.avg)
             progress_bar.update(num_samples, MSELosses.avg, RMSErrors.avg)
 
@@ -486,8 +481,6 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
                     MSELosses=MSELosses,
                     RMSErrors=RMSErrors))
         else:
-            # args.vis.plot_error(error.item(), loss.data.item(), num_samples, dataset.split)
-            # args.vis.plot_error(RMSErrors.avg, MSELosses.avg, num_samples, dataset.split)
             args.vis.plot("loss", dataset.split, "RMSError", num_samples, RMSErrors.avg)
             progress_bar.update(num_samples, MSELosses.avg, RMSErrors.avg)
 
@@ -720,7 +713,7 @@ if __name__ == "__main__":
         visdomProcess = subprocess.Popen(["python", "-m", "visdom.server"], stdout=FNULL, stderr=FNULL)
         while visdomProcess.poll() is not None:
             pass
-        time.sleep(3)
+        time.sleep(4)
         main()
     except (KeyboardInterrupt, SystemExit):
         visdomProcess.wait()
