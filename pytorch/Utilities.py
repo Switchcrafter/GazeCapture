@@ -90,7 +90,7 @@ class ProgressBar(Bar):
         if value < self.max_value:
             print(self.label + marker + metric + error + time_eta, end='\r')
         else:
-            time_elapsed = ' [Time: ' + str(time) + ']'
+            time_elapsed = '[Time: ' + str(time) + ']'
             print(self.label + marker + metric + error + time_elapsed, end='\n')
 
 

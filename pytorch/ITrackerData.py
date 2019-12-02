@@ -32,6 +32,7 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 
 '''
 
+
 def loadMetadata(filename, silent=False):
     try:
         # http://stackoverflow.com/questions/6273634/access-array-contents-from-a-mat-file-loaded-using-scipy-io-loadmat-python
@@ -43,8 +44,9 @@ def loadMetadata(filename, silent=False):
         return None
     return metadata
 
+
 class ITrackerData(data.Dataset):
-    def __init__(self, dataPath, imSize, gridSize, split='train', silent=False):
+    def __init__(self, dataPath, imSize, gridSize, split='train', silent=False, jitter=True):
 
         self.dataPath = dataPath
         self.imSize = imSize
@@ -59,7 +61,7 @@ class ITrackerData(data.Dataset):
         if self.metadata is None:
             raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % metadata_file)
 
-        if split == 'train':
+        if jitter and split == 'train':
             self.normalize_image = transforms.Compose([
                 transforms.Resize(240),
                 transforms.ColorJitter(),
