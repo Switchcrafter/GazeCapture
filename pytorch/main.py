@@ -7,6 +7,7 @@ import sys  # for command line argument dumping
 import time
 from collections import OrderedDict
 from datetime import datetime  # for timing
+import subprocess
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -17,7 +18,7 @@ import torch.utils.data
 
 from ITrackerData import load_all_data
 from ITrackerModel import ITrackerModel
-from Utilities import AverageMeter, ProgressBar, SamplingBar
+from Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations
 
 try:
     from azureml.core.run import Run
@@ -58,6 +59,9 @@ def main():
     exportONNX, saveCheckpoints, using_cuda, workers, epochs, \
     dataset_limit, verbose, device = parse_commandline_arguments()
 
+    # Initialize the visualization environment open => http://localhost:8097
+    args.vis = Visualizations()
+
     if using_cuda and torch.cuda.device_count() > 0:
         # Change batch_size in commandLine args if out of cuda memory
         batch_size = len(args.local_rank) * args.batch_size
@@ -97,7 +101,7 @@ def main():
         else:
             print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
             # Multi-Process Single-GPU
-            args.world_size = os.environ.get('WORLD_SIZE') or 1
+            # args.world_size = os.environ.get('WORLD_SIZE') or 1
             # torch.distributed.init_process_group(backend='nccl', world_size=args.world_size, init_method='env://')
             torch.distributed.init_process_group(backend='nccl')
             model = torch.nn.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank[0])
@@ -142,14 +146,14 @@ def main():
     if doTest:
         # Quick test
         start_time = datetime.now()
-        eval_MSELoss, eval_RMSError = test(datasets, model, criterion, 1, checkpointsPath, batch_size, device, dataset_limit, verbose)
+        eval_MSELoss, eval_RMSError = test(datasets, model, criterion, 1, checkpointsPath, batch_size, device, dataset_limit, verbose, args)
         time_elapsed = datetime.now() - start_time
         print('')
         print('Testing MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
         print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif doValidate:
         start_time = datetime.now()
-        eval_MSELoss, eval_RMSError = validate(datasets, model, criterion, 1, checkpointsPath, batch_size, device, dataset_limit, verbose)
+        eval_MSELoss, eval_RMSError = validate(datasets, model, criterion, 1, checkpointsPath, batch_size, device, dataset_limit, verbose, args)
         time_elapsed = datetime.now() - start_time
         print('')  # print blank line after loading data
         print('Validation MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
@@ -181,6 +185,10 @@ def main():
             if not verbose:
                 args.sampling_bar = SamplingBar('HSM')
 
+        # Placeholder for epoch-level visualizations
+        args.vis.plot_epoch('epoch_loss', 'train', "RMSError over Epochs", None, None)
+        args.vis.plot_epoch('epoch_loss', 'valid', "RMSError over Epochs", None, None)
+        args.vis.plot_epoch('best', 'valid', "Best RMSError over Epochs", None, None)
         # now start training from last best epoch
         for epoch in range(epoch, epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
@@ -189,12 +197,13 @@ def main():
 
             learning_rates[epoch - 1] = lr
 
+            args.vis.reset()
             # train for one epoch
             print('\nEpoch:{} [device:{}, lr:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch, device, lr, best_RMSError, args.hsm, args.adv))
             train_MSELoss, train_RMSError = train(datasets['train'], model, criterion, optimizer, epoch, batch_size, device, dataset_limit, verbose, args)
 
             # evaluate on validation set
-            eval_MSELoss, eval_RMSError = validate(datasets, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose)
+            eval_MSELoss, eval_RMSError = validate(datasets, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose, args)
 
             # remember best RMSError and save checkpoint
             is_best = eval_RMSError < best_RMSError
@@ -202,6 +211,10 @@ def main():
 
             best_RMSErrors[epoch - 1] = best_RMSError
             RMSErrors[epoch - 1] = eval_RMSError
+
+            args.vis.plot_epoch('epoch_loss', 'train', "RMSError over Epochs", epoch, train_RMSError)
+            args.vis.plot_epoch('epoch_loss', 'valid', "RMSError over Epochs", epoch, eval_RMSError)
+            args.vis.plot_epoch('best', 'valid', "Best RMSError over Epochs", epoch, best_RMSError)
 
             time_elapsed = datetime.now() - start_time
 
@@ -232,11 +245,8 @@ def main():
             print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
             print('')
-            print('RMS Errors')
-            print(*(map('{0[0]}: {0[1]:7.4f}'.format, enumerate(RMSErrors))), sep=', ')
-            print('')
-            print('Best RMS Errors')
-            print(*(map('{0[0]}: {0[1]:7.4f}'.format, enumerate(best_RMSErrors))), sep=', ')
+            print('\'RMS_Errors\': {0},'.format(RMSErrors))
+            print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
             print('')
 
     totaltime_elapsed = datetime.now() - totalstart_time
@@ -386,6 +396,7 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
                     MSELosses=MSELosses,
                     RMSErrors=RMSErrors))
         else:
+            args.vis.plot("loss", dataset.split, "RMSError", num_samples, RMSErrors.avg)
             progress_bar.update(num_samples, MSELosses.avg, RMSErrors.avg)
 
         if dataset_limit and dataset_limit <= batchNum:
@@ -393,7 +404,7 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
 
     return MSELosses.avg, RMSErrors.avg
 
-def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit=None, verbose=False):
+def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit=None, verbose=False, args=None):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     MSELosses = AverageMeter()
@@ -470,6 +481,7 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
                     MSELosses=MSELosses,
                     RMSErrors=RMSErrors))
         else:
+            args.vis.plot("loss", dataset.split, "RMSError", num_samples, RMSErrors.avg)
             progress_bar.update(num_samples, MSELosses.avg, RMSErrors.avg)
 
         if dataset_limit and dataset_limit <= batchNum:
@@ -490,8 +502,8 @@ def validate(datasets,
              batch_size,
              device,
              dataset_limit=None,
-             verbose=False):
-    return evaluate(datasets['val'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose)
+             verbose=False, args=None):
+    return evaluate(datasets['val'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose, args)
 
 
 def test(datasets,
@@ -502,8 +514,8 @@ def test(datasets,
          batch_size,
          device,
          dataset_limit=None,
-         verbose=False):
-    return evaluate(datasets['test'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose)
+         verbose=False, args=None):
+    return evaluate(datasets['test'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose, args)
 
 
 def export_onnx_model(model, device, verbose):
@@ -697,8 +709,14 @@ def parse_commandline_arguments():
 
 if __name__ == "__main__":
     try:
+        FNULL = open(os.devnull, 'w')
+        visdomProcess = subprocess.Popen(["python", "-m", "visdom.server"], stdout=FNULL, stderr=FNULL)
+        while visdomProcess.poll() is not None:
+            pass
+        time.sleep(4)
         main()
     except (KeyboardInterrupt, SystemExit):
+        visdomProcess.wait()
         print('Thread is killed.')
         sys.exit()
     print('')
