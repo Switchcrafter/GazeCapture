@@ -21,9 +21,11 @@ RUN rm -rf /var/lib/apt/lists/*
 RUN conda install -y pytorch torchvision cudatoolkit=10.0 -c pytorch
 RUN conda install -y scipy
 RUN conda clean -tipsy
+RUN conda install -c conda-forge jsonpatch
+RUN conda install -c conda-forge visdom
 
-# Execute the python 
-ENTRYPOINT [ "python"]
+# Execute the python
+ENTRYPOINT ["python"]
 
 # nvidia-container-runtime
 ENV NVIDIA_VISIBLE_DEVICES all
@@ -35,3 +37,6 @@ ENV NVIDIA_DRIVER_CAPABILITIES all
 # Command to execute this containerworks
 # sudo docker run --ipc=host --runtime=nvidia --gpus '"device=1,3"' -v /data:/data -v `pwd`:`pwd` -w `pwd` --rm -it gazepy main.py --hsm --batch_size 256
 # sudo docker run --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --hsm --batch_size 128
+# sudo docker run --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --hsm --batch_size 256
+# MultiGPU: sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --hsm --batch_size 256
+# SingleGPU: sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v ~/data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=1 main.py --hsm --batch_size 128

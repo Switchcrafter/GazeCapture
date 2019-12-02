@@ -2,6 +2,8 @@ import shutil
 from datetime import datetime
 
 import torch
+import visdom
+import numpy as np
 
 
 class AverageMeter(object):
@@ -139,3 +141,45 @@ def centeredText(infoString, marker='-', length=40):
     marker = marker*length
     index = (len(marker)-len(infoString))//2
     return marker[:index] + infoString + marker[index + len(infoString):]
+
+class Visualizations(object):
+    """Plots to Visdom"""
+    def __init__(self, env_name='main'):
+        try:
+            self.viz = visdom.Visdom()
+            # wait until visdom connection is up
+            while self.viz.check_connection() is not True:
+                pass
+        except:
+            print("Can't initialize visdom")
+        # env_name = str(datetime.now().strftime("%d-%m %Hh%M"))
+        self.env = env_name
+        self.split_plots = {}
+        self.epoch_plots = {}
+
+    def reset(self):
+        for var_name in self.split_plots:
+            self.viz.close(self.split_plots[var_name])
+        self.split_plots = {}
+
+    def plot(self, var_name, split_name, title_name, x, y):
+        if var_name not in self.split_plots:
+            self.split_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
+                legend=[split_name],
+                title=title_name,
+                xlabel='Samples',
+                ylabel=var_name
+            ))
+        else:
+            self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.split_plots[var_name], name=split_name, update = 'append')
+
+    def plot_epoch(self, var_name, split_name, title_name, x, y):
+        if var_name not in self.epoch_plots:
+            self.epoch_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
+                legend=[split_name],
+                title=title_name,
+                xlabel='Epoch',
+                ylabel=var_name
+            ))
+        else:
+            self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.epoch_plots[var_name], name=split_name, update = 'append')
