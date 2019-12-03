@@ -165,6 +165,9 @@ class Visualizations(object):
         self.epoch_plots = {}
         self.closed_windows = []
 
+    def resetAll(self):
+        self.viz.close()
+   
     # def reset(self):
     #     for var_name in self.split_plots:
     #         self.viz.close(self.split_plots[var_name])
@@ -174,15 +177,13 @@ class Visualizations(object):
         for var_name in self.split_plots:
             self.closed_windows.append(self.split_plots[var_name])
         self.split_plots = {}
-
         for window in self.closed_windows:
             if self.viz.win_exists(window):
                 self.viz.close(window)
             else:
                 # Lazy remove - only after verifying that the window is really closed
                 self.closed_windows.remove(window)
-
-
+    
     def plot(self, var_name, split_name, title_name, x, y):
         if var_name not in self.split_plots:
             self.split_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(

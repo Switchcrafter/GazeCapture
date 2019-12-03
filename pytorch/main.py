@@ -61,6 +61,7 @@ def main():
 
     # Initialize the visualization environment open => http://localhost:8097
     args.vis = Visualizations()
+    args.vis.resetAll()
 
     if using_cuda and torch.cuda.device_count() > 0:
         # Change batch_size in commandLine args if out of cuda memory
