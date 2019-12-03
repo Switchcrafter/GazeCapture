@@ -187,9 +187,9 @@ def main():
                 args.sampling_bar = SamplingBar('HSM')
 
         # Placeholder for epoch-level visualizations
-        args.vis.plot_epoch('epoch_loss', 'train', "RMSError over Epochs", None, None)
-        args.vis.plot_epoch('epoch_loss', 'valid', "RMSError over Epochs", None, None)
-        args.vis.plot_epoch('best', 'valid', "Best RMSError over Epochs", None, None)
+        args.vis.plot_epoch('RMSError', 'train', "RMSError (Overall)", None, None)
+        args.vis.plot_epoch('RMSError', 'val', "RMSError (Overall)", None, None)
+        args.vis.plot_epoch('BestRMSError', 'val', "Best RMSError (Overall)", None, None)
         # now start training from last best epoch
         for epoch in range(epoch, epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
@@ -213,10 +213,9 @@ def main():
             best_RMSErrors[epoch - 1] = best_RMSError
             RMSErrors[epoch - 1] = eval_RMSError
 
-            args.vis.plot_epoch('epoch_loss', 'train', "RMSError over Epochs", epoch, train_RMSError)
-            args.vis.plot_epoch('epoch_loss', 'valid', "RMSError over Epochs", epoch, eval_RMSError)
-            args.vis.plot_epoch('best', 'valid', "Best RMSError over Epochs", epoch, best_RMSError)
-
+            args.vis.plot_epoch('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
+            args.vis.plot_epoch('RMSError', 'val', "RMSError (Overall)", epoch, eval_RMSError)
+            args.vis.plot_epoch('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
             time_elapsed = datetime.now() - start_time
 
             if run:
@@ -242,13 +241,14 @@ def main():
                 checkpointsPath,
                 saveCheckpoints)
 
-            print('')
-            print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
-            print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-            print('')
-            print('\'RMS_Errors\': {0},'.format(RMSErrors))
-            print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
-            print('')
+            if(args.verbose):
+                print('')
+                print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
+                print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
+                print('')
+                print('\'RMS_Errors\': {0},'.format(RMSErrors))
+                print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
+                print('')
 
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
@@ -397,7 +397,7 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
                     MSELosses=MSELosses,
                     RMSErrors=RMSErrors))
         else:
-            args.vis.plot("loss", dataset.split, "RMSError", num_samples, RMSErrors.avg)
+            args.vis.plot("loss", dataset.split, "RMSError (epoch: {})".format(epoch), num_samples, RMSErrors.avg)
             progress_bar.update(num_samples, MSELosses.avg, RMSErrors.avg)
 
         if dataset_limit and dataset_limit <= batchNum:
@@ -482,7 +482,7 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
                     MSELosses=MSELosses,
                     RMSErrors=RMSErrors))
         else:
-            args.vis.plot("loss", dataset.split, "RMSError", num_samples, RMSErrors.avg)
+            args.vis.plot("loss", dataset.split, "RMSError (epoch: {})".format(epoch), num_samples, RMSErrors.avg)
             progress_bar.update(num_samples, MSELosses.avg, RMSErrors.avg)
 
         if dataset_limit and dataset_limit <= batchNum:

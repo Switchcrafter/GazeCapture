@@ -165,12 +165,25 @@ class Visualizations(object):
         self.epoch_plots = {}
         self.closed_windows = []
 
+    def getColor(self, split_name):
+        if split_name == "train":
+            return np.array([[0, 0, 255],]) # Blue
+        elif split_name == "val":
+            return np.array([[255, 0, 0],]) # Red
+        elif split_name == "test":
+            return np.array([[255, 0, 0],]) # Green
+        else:
+            return np.array([[0, 0, 0],]) # Black
+
     def resetAll(self):
+        # Close all windows in the environment
         self.viz.close()
-   
+
     # def reset(self):
     #     for var_name in self.split_plots:
-    #         self.viz.close(self.split_plots[var_name])
+    #         # make sure that the window is closed before moving on
+    #         while self.viz.win_exists(self.split_plots[var_name]):
+    #             self.viz.close(self.split_plots[var_name])
     #     self.split_plots = {}
 
     def reset(self):
@@ -178,30 +191,34 @@ class Visualizations(object):
             self.closed_windows.append(self.split_plots[var_name])
         self.split_plots = {}
         for window in self.closed_windows:
-            if self.viz.win_exists(window):
+            # make sure that the window is closed before moving on
+            while self.viz.win_exists(window):
                 self.viz.close(window)
-            else:
-                # Lazy remove - only after verifying that the window is really closed
-                self.closed_windows.remove(window)
-    
+            # remove the closed window
+            self.closed_windows.remove(window)
+
     def plot(self, var_name, split_name, title_name, x, y):
         if var_name not in self.split_plots:
             self.split_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
                 legend=[split_name],
                 title=title_name,
+                linecolor=self.getColor(split_name),
                 xlabel='Samples',
                 ylabel=var_name
             ))
         else:
-            self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.split_plots[var_name], name=split_name, update = 'append')
+            self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.split_plots[var_name], name=split_name,
+            update = 'append', opts=dict(linecolor=self.getColor(split_name)))
 
     def plot_epoch(self, var_name, split_name, title_name, x, y):
         if var_name not in self.epoch_plots:
             self.epoch_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
                 legend=[split_name],
                 title=title_name,
+                linecolor=self.getColor(split_name),
                 xlabel='Epoch',
                 ylabel=var_name
             ))
         else:
-            self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.epoch_plots[var_name], name=split_name, update = 'append')
+            self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.epoch_plots[var_name], name=split_name,
+            update = 'append', opts=dict(linecolor=self.getColor(split_name)))
