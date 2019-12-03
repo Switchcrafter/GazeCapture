@@ -135,9 +135,20 @@ def main():
     #     criterion = nn.MSELoss(reduction='sum').to(device=device)
     criterion = nn.MSELoss(reduction='mean').to(device=device)
 
-    optimizer = torch.optim.SGD(model.parameters(), lr,
+    START_LR = 1E-10
+    END_LR = 0.1
+    lr_find_epochs = epochs
+
+    optimizer = torch.optim.SGD(model.parameters(), START_LR,
                                 momentum=MOMENTUM,
                                 weight_decay=WEIGHT_DECAY)
+
+    batch_count = datasets['train'].size / batch_size
+    if dataset_limit > 0:
+        batch_count = dataset_limit  # The dataset_limit is based on batches
+
+    lr_lambda = lambda x: math.exp(x * math.log(END_LR / START_LR) / (lr_find_epochs * batch_count))
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
     if doTest:
         # Quick test
@@ -185,13 +196,13 @@ def main():
         for epoch in range(epoch, epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
             start_time = datetime.now()
-            lr = adjust_learning_rate(optimizer, epoch)
+            # lr = adjust_learning_rate(optimizer, epoch)
 
-            learning_rates[epoch - 1] = lr
+            # learning_rates[epoch - 1] = lr
 
             # train for one epoch
             print('\nEpoch:{} [device:{}, lr:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch, device, lr, best_RMSError, args.hsm, args.adv))
-            train_MSELoss, train_RMSError = train(datasets['train'], model, criterion, optimizer, epoch, batch_size, device, dataset_limit, verbose, args)
+            train_MSELoss, train_RMSError = train(datasets['train'], model, criterion, optimizer, scheduler, epoch, batch_size, device, dataset_limit, verbose, args)
 
             # evaluate on validation set
             eval_MSELoss, eval_RMSError = validate(datasets, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose)
@@ -259,12 +270,19 @@ def euclideanBatchError(output, target):
     return torch.sqrt(torch.sum(torch.pow(output - target, 2),1))
 
 
-def train(dataset, model, criterion, optimizer, epoch, batch_size, device, dataset_limit=None, verbose=False, args=None):
+def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, device, dataset_limit=None, verbose=False, args=None):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     MSELosses = AverageMeter()
     RMSErrors = AverageMeter()
     num_samples = 0
+
+    lr_find_loss = []
+    lr_find_lr = []
+
+    iter = 0
+
+    smoothing = 0.05
 
     if not verbose:
         progress_bar = ProgressBar(max_value=dataset.size, label=dataset.split)
@@ -364,6 +382,20 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
         # optimize
         optimizer.step()
 
+        # Update LR
+        scheduler.step()
+        lr_step = optimizer.state_dict()["param_groups"][0]["lr"]
+        lr_find_lr.append(lr_step)
+
+        # smooth the loss
+        if iter == 0:
+            lr_find_loss.append(loss.item())
+        else:
+            loss = smoothing * loss.item() + (1 - smoothing) * lr_find_loss[-1]
+            lr_find_loss.append(loss)
+
+        iter += 1
+
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
@@ -388,7 +420,12 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
         if dataset_limit and dataset_limit <= batchNum:
             break
 
+    print('epoch {0}'.format(epoch))
+    print('lr_find_loss={0}'.format(lr_find_loss))
+    print('lr_find_lr={0}'.format(lr_find_lr))
+
     return MSELosses.avg, RMSErrors.avg
+
 
 def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit=None, verbose=False):
     batch_time = AverageMeter()
