@@ -108,11 +108,15 @@ def main():
             model = torch.nn.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank[0])
 
     epoch = 1
+    RMSErrors = None
+    best_RMSErrors = None
     if doLoad:
         saved = load_checkpoint(checkpointsPath, device)
         if saved:
             epoch = saved['epoch']
             best_RMSError = saved['best_RMSError']
+            RMSErrors = saved['RMSErrors']
+            best_RMSErrors = saved['best_RMSErrors']
             print(
                 'Loading checkpoint : [Epoch: %d | RMSError: %.5f].' % (
                     epoch,
@@ -164,8 +168,8 @@ def main():
         export_onnx_model(model, device, verbose)
     else:  # Train
         learning_rates = [0] * epochs
-        best_RMSErrors = [0] * epochs
-        RMSErrors = [0] * epochs
+        best_RMSErrors = best_RMSErrors or [0] * epochs
+        RMSErrors = RMSErrors or [0] * epochs
 
         # first make a learning_rate correction suitable for epoch from saved checkpoint
         # epoch will be non-zero if a checkpoint was loaded
@@ -190,6 +194,15 @@ def main():
         args.vis.plot_epoch('RMSError', 'train', "RMSError (Overall)", None, None)
         args.vis.plot_epoch('RMSError', 'val', "RMSError (Overall)", None, None)
         args.vis.plot_epoch('BestRMSError', 'val', "Best RMSError (Overall)", None, None)
+        # Populate visualizations with checkpoint info
+        for epoch_num in range(1,epoch):
+            args.vis.plot_epoch('RMSError', 'val_history', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num], 'dot')
+            args.vis.plot_epoch('BestRMSError', 'val_history', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num], 'dot')
+            if epoch_num == epoch-1:
+                args.vis.plot_epoch('RMSError', 'val', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num])
+                args.vis.plot_epoch('BestRMSError', 'val', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num])
+
+
         # now start training from last best epoch
         for epoch in range(epoch, epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
@@ -236,6 +249,8 @@ def main():
                     'eval_RMSError': eval_RMSError,
                     'lr': lr,
                     'time_elapsed': time_elapsed,
+                    'RMSErrors': RMSErrors,
+                    'best_RMSErrors': best_RMSErrors,
                 },
                 is_best,
                 checkpointsPath,

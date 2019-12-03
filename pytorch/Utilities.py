@@ -84,7 +84,7 @@ class ProgressBar(Bar):
         marker = self.create_marker(value, width).ljust(width, self.fill)
         marker = self.left + marker + self.right
         # append infoString at the center
-        infoString = ' {val:d}/{max:d} @{speed:d}/s ({percent:3d}%) '.format(val=value, max=self.max_value,
+        infoString = ' {val:d}/{max:d} @{speed:d}/s ({percent:d}%) '.format(val=value, max=self.max_value,
                                                                              speed=int(value / time.total_seconds()),
                                                                              percent=int(value / self.max_value * 100))
         index = (len(marker) - len(infoString)) // 2
@@ -168,12 +168,22 @@ class Visualizations(object):
     def getColor(self, split_name):
         if split_name == "train":
             return np.array([[0, 0, 255],]) # Blue
-        elif split_name == "val":
+        elif split_name == "val" or split_name == "val_history" :
             return np.array([[255, 0, 0],]) # Red
         elif split_name == "test":
             return np.array([[255, 0, 0],]) # Green
         else:
             return np.array([[0, 0, 0],]) # Black
+
+    def getStyle(self, style='solid'):
+        if style == "dash":
+            return np.array(['dash'])
+        elif style == "dashdot":
+            return np.array(['dashdot'])
+        elif style == "dot":
+            return np.array(['dot'])
+        else:
+            return np.array(['solid'])
 
     def resetAll(self):
         # Close all windows in the environment
@@ -210,15 +220,17 @@ class Visualizations(object):
             self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.split_plots[var_name], name=split_name,
             update = 'append', opts=dict(linecolor=self.getColor(split_name)))
 
-    def plot_epoch(self, var_name, split_name, title_name, x, y):
+    def plot_epoch(self, var_name, split_name, title_name, x, y, style='solid'):
         if var_name not in self.epoch_plots:
             self.epoch_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
                 legend=[split_name],
                 title=title_name,
                 linecolor=self.getColor(split_name),
+                dash=self.getStyle(style),
                 xlabel='Epoch',
                 ylabel=var_name
             ))
         else:
             self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.epoch_plots[var_name], name=split_name,
-            update = 'append', opts=dict(linecolor=self.getColor(split_name)))
+            update = 'append', opts=dict(linecolor=self.getColor(split_name), dash=self.getStyle(style)))
+
