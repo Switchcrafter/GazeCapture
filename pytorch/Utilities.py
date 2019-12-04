@@ -185,19 +185,9 @@ class Visualizations(object):
         else:
             return np.array(['solid'])
 
-    # def close(self, win=None, eid=None):
-    #     self.viz.close(win, eid)
-
     def resetAll(self):
         # Close all windows in the given environment
         self.viz.close(None, self.env)
-
-    # def reset(self):
-    #     for var_name in self.split_plots:
-    #         # make sure that the window is closed before moving on
-    #         while self.viz.win_exists(self.split_plots[var_name]):
-    #             self.viz.close(self.split_plots[var_name])
-    #     self.split_plots = {}
 
     def reset(self):
         for var_name in self.split_plots:
