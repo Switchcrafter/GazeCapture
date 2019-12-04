@@ -60,7 +60,7 @@ def main():
     dataset_limit, verbose, device = parse_commandline_arguments()
 
     # Initialize the visualization environment open => http://localhost:8097
-    args.vis = Visualizations()
+    args.vis = Visualizations(args.name)
     args.vis.resetAll()
 
     if using_cuda and torch.cuda.device_count() > 0:
@@ -190,17 +190,17 @@ def main():
             if not verbose:
                 args.sampling_bar = SamplingBar('HSM')
 
-        # Placeholder for epoch-level visualizations
-        args.vis.plot_epoch('RMSError', 'train', "RMSError (Overall)", None, None)
-        args.vis.plot_epoch('RMSError', 'val', "RMSError (Overall)", None, None)
-        args.vis.plot_epoch('BestRMSError', 'val', "Best RMSError (Overall)", None, None)
+        # Placeholder for overall (all epoch) visualizations
+        args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", None, None)
+        args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", None, None)
+        args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", None, None)
         # Populate visualizations with checkpoint info
         for epoch_num in range(1,epoch):
-            args.vis.plot_epoch('RMSError', 'val_history', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num], 'dot')
-            args.vis.plot_epoch('BestRMSError', 'val_history', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num], 'dot')
+            args.vis.plotAll('RMSError', 'val_history', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num], 'dot')
+            args.vis.plotAll('BestRMSError', 'val_history', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num], 'dot')
             if epoch_num == epoch-1:
-                args.vis.plot_epoch('RMSError', 'val', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num])
-                args.vis.plot_epoch('BestRMSError', 'val', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num])
+                args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num])
+                args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num])
 
 
         # now start training from last best epoch
@@ -226,9 +226,9 @@ def main():
             best_RMSErrors[epoch - 1] = best_RMSError
             RMSErrors[epoch - 1] = eval_RMSError
 
-            args.vis.plot_epoch('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
-            args.vis.plot_epoch('RMSError', 'val', "RMSError (Overall)", epoch, eval_RMSError)
-            args.vis.plot_epoch('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
+            args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
+            args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, eval_RMSError)
+            args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
             time_elapsed = datetime.now() - start_time
 
             if run:
@@ -658,6 +658,7 @@ def parse_commandline_arguments():
     # Experimental options
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--mode', help="Multi-GPU mode: dp, ddp1, [ddp2]", default='ddp2')
+    parser.add_argument('--name', help="Provide a name to the experiment", default='main')
     parser.add_argument('--local_rank', help="", nargs='+', default=[0])
     parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
     parser.add_argument('--hsm_cycle', type=int, default=8)

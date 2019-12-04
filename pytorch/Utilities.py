@@ -185,9 +185,12 @@ class Visualizations(object):
         else:
             return np.array(['solid'])
 
+    # def close(self, win=None, eid=None):
+    #     self.viz.close(win, eid)
+
     def resetAll(self):
-        # Close all windows in the environment
-        self.viz.close()
+        # Close all windows in the given environment
+        self.viz.close(None, self.env)
 
     # def reset(self):
     #     for var_name in self.split_plots:
@@ -202,8 +205,8 @@ class Visualizations(object):
         self.split_plots = {}
         for window in self.closed_windows:
             # make sure that the window is closed before moving on
-            while self.viz.win_exists(window):
-                self.viz.close(window)
+            while self.viz.win_exists(window, self.env):
+                self.viz.close(window, self.env)
             # remove the closed window
             self.closed_windows.remove(window)
 
@@ -220,7 +223,7 @@ class Visualizations(object):
             self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.split_plots[var_name], name=split_name,
             update = 'append', opts=dict(linecolor=self.getColor(split_name)))
 
-    def plot_epoch(self, var_name, split_name, title_name, x, y, style='solid'):
+    def plotAll(self, var_name, split_name, title_name, x, y, style='solid'):
         if var_name not in self.epoch_plots:
             self.epoch_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
                 legend=[split_name],
