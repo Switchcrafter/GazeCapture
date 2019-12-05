@@ -64,7 +64,8 @@ class ITrackerData(data.Dataset):
         if jitter and split == 'train':
             self.normalize_image = transforms.Compose([
                 transforms.Resize(240),
-                transforms.ColorJitter(),
+                # brightness=[0.0-1.0], contrast=[0.0-1.0], saturation=[0.0-1.0], hue=[0.0-0.5]
+                transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
                 transforms.RandomCrop(self.imSize),
                 transforms.Resize(self.imSize),
                 transforms.ToTensor(),
