@@ -69,10 +69,6 @@ def main():
     else:
         batch_size = 1
 
-    eval_RMSError = math.inf
-    best_RMSError = math.inf
-    lr = BASE_LR
-
     if verbose:
         print('')
         if using_cuda:
@@ -114,16 +110,22 @@ def main():
             # patch_replication_callback(model)  # monkey-patching
             model = DataParallelWithCallback(model, device_ids=args.local_rank).to(device=device)
 
+    eval_RMSError = math.inf
+    best_RMSError = math.inf
+    lr = BASE_LR
+
     epoch = 1
-    RMSErrors = None
-    best_RMSErrors = None
+    RMSErrors = []
+    best_RMSErrors = []
+    learning_rates = []
     if doLoad:
         saved = load_checkpoint(checkpointsPath, device)
         if saved:
-            epoch = saved.get('epoch', 1)
-            best_RMSError = saved.get('best_RMSError')
-            RMSErrors = saved.get('RMSErrors')
-            best_RMSErrors = saved.get('best_RMSErrors')
+            epoch = saved.get('epoch', epoch)
+            best_RMSError = saved.get('best_RMSError', best_RMSError)
+            RMSErrors = saved.get('RMSErrors', RMSErrors)
+            best_RMSErrors = saved.get('best_RMSErrors', best_RMSErrors)
+            learning_rates = saved.get('learning_rates', learning_rates)
             print(
                 'Loading checkpoint : [Epoch: %d | RMSError: %.5f].' % (
                     epoch,
@@ -174,9 +176,10 @@ def main():
         # export the model for use in other frameworks
         export_onnx_model(model, device, verbose)
     else:  # Train
-        learning_rates = [0] * epochs
-        best_RMSErrors = best_RMSErrors or [0] * epochs
-        RMSErrors = RMSErrors or [0] * epochs
+        # resize variables to epochs size
+        resize(learning_rates, epochs)
+        resize(best_RMSErrors, epochs)
+        resize(RMSErrors, epochs)
 
         # first make a learning_rate correction suitable for epoch from saved checkpoint
         # epoch will be non-zero if a checkpoint was loaded
@@ -198,14 +201,17 @@ def main():
                 args.sampling_bar = SamplingBar('HSM')
 
         # Placeholder for overall (all epoch) visualizations
+        args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", None, None)
         args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", None, None)
         args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", None, None)
         args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", None, None)
         # Populate visualizations with checkpoint info
         for epoch_num in range(1,epoch):
+            args.vis.plotAll('LearningRate', 'lr_history', "LearningRate (Overall)", epoch_num, learning_rates[epoch_num], 'dot')
             args.vis.plotAll('RMSError', 'val_history', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num], 'dot')
             args.vis.plotAll('BestRMSError', 'val_history', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num], 'dot')
             if epoch_num == epoch-1:
+                args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch_num, learning_rates[epoch_num])
                 args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num])
                 args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num])
 
@@ -233,6 +239,7 @@ def main():
             best_RMSErrors[epoch - 1] = best_RMSError
             RMSErrors[epoch - 1] = eval_RMSError
 
+            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, lr)
             args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
             args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, eval_RMSError)
             args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
@@ -258,6 +265,7 @@ def main():
                     'time_elapsed': time_elapsed,
                     'RMSErrors': RMSErrors,
                     'best_RMSErrors': best_RMSErrors,
+                    'learning_rates': learning_rates,
                 },
                 is_best,
                 checkpointsPath,
@@ -618,12 +626,12 @@ def remove_module_from_state(saved_state):
 
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
-    lr = BASE_LR * (0.1 ** (epoch // 30))
+    lr = BASE_LR * (0.1 ** (epoch // 10))
 
-    print('')
-    print('adjust_learning_rate(optimizer, epoch={0}'.format(epoch))
-    print('lr {0} = BASE_LR {1} * (0.1 ** (epoch {2} // 30)'.format(lr, BASE_LR, epoch))
-    print('')
+    # print('')
+    # print('adjust_learning_rate(optimizer, epoch={0}'.format(epoch))
+    # print('lr {0} = BASE_LR {1} * (0.1 ** (epoch {2} // 30)'.format(lr, BASE_LR, epoch))
+    # print('')
 
     for param_group in optimizer.state_dict()['param_groups']:
         param_group['lr'] = lr
@@ -639,6 +647,11 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
+def resize(l, newsize, filling=None):
+    if newsize > len(l):
+        l.extend([filling for x in range(len(l), newsize)])
+    else:
+        del l[newsize:]
 
 def parse_commandline_arguments():
     parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
@@ -655,7 +668,7 @@ def parse_commandline_arguments():
                         help="Just validate and terminate.")
     parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=False,
                         help="Start from scratch (do not load).")
-    parser.add_argument('--epochs', type=int, default=25)
+    parser.add_argument('--epochs', type=int, default=30)
     parser.add_argument('--workers', type=int, default=16)
     parser.add_argument('--dataset_limit', type=int, default=0, help="Limits the dataset size, useful for debugging")
     parser.add_argument('--exportONNX', type=str2bool, nargs='?', const=True, default=False)
