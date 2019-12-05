@@ -113,10 +113,10 @@ def main():
     if doLoad:
         saved = load_checkpoint(checkpointsPath, device)
         if saved:
-            epoch = saved['epoch']
-            best_RMSError = saved['best_RMSError']
-            RMSErrors = saved['RMSErrors']
-            best_RMSErrors = saved['best_RMSErrors']
+            epoch = saved.get('epoch', 1)
+            best_RMSError = saved.get('best_RMSError')
+            RMSErrors = saved.get('RMSErrors')
+            best_RMSErrors = saved.get('best_RMSErrors')
             print(
                 'Loading checkpoint : [Epoch: %d | RMSError: %.5f].' % (
                     epoch,
