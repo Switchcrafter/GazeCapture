@@ -99,13 +99,20 @@ def main():
             # Single-Process Multi-GPU
             torch.distributed.init_process_group(backend="nccl")
             model = torch.nn.DistributedDataParallel(model)
-        else:
+        elif args.mode == 'ddp2':
             print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
             # Multi-Process Single-GPU
             # args.world_size = os.environ.get('WORLD_SIZE') or 1
             # torch.distributed.init_process_group(backend='nccl', world_size=args.world_size, init_method='env://')
             torch.distributed.init_process_group(backend='nccl')
             model = torch.nn.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank[0])
+        else:
+            from sync_batchnorm import convert_model, patch_replication_callback, DataParallelWithCallback
+            # Convert batchNorm layers into synchronized batchNorm
+            model = convert_model(model)
+            # model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=device)
+            # patch_replication_callback(model)  # monkey-patching
+            model = DataParallelWithCallback(model, device_ids=args.local_rank).to(device=device)
 
     epoch = 1
     RMSErrors = None
@@ -657,7 +664,7 @@ def parse_commandline_arguments():
                         help="verbose mode - print details every batch")
     # Experimental options
     parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--mode', help="Multi-GPU mode: dp, ddp1, [ddp2]", default='ddp2')
+    parser.add_argument('--mode', help="Multi-GPU mode: dp, ddp1, [ddp2], ddp3", default='ddp2')
     parser.add_argument('--name', help="Provide a name to the experiment", default='main')
     parser.add_argument('--local_rank', help="", nargs='+', default=[0])
     parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
