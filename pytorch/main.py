@@ -21,6 +21,7 @@ from Utilities import AverageMeter, ProgressBar, SamplingBar
 
 try:
     from azureml.core.run import Run
+
     run = Run.get_context()
 except ImportError:
     run = None
@@ -43,7 +44,6 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 }
 '''
 
-BASE_LR = 0.001
 MOMENTUM = 0.9
 WEIGHT_DECAY = 1e-4
 IMAGE_WIDTH = 224
@@ -51,6 +51,10 @@ IMAGE_HEIGHT = 224
 IMAGE_SIZE = (IMAGE_WIDTH, IMAGE_HEIGHT)
 GRID_SIZE = 25
 FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
+
+START_LR = 1
+END_LR = 3E-3
+LR_FACTOR = 6
 
 
 def main():
@@ -66,7 +70,6 @@ def main():
 
     eval_RMSError = math.inf
     best_RMSError = math.inf
-    lr = BASE_LR
 
     if verbose:
         print('')
@@ -100,7 +103,8 @@ def main():
             args.world_size = os.environ.get('WORLD_SIZE') or 1
             # torch.distributed.init_process_group(backend='nccl', world_size=args.world_size, init_method='env://')
             torch.distributed.init_process_group(backend='nccl')
-            model = torch.nn.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank[0])
+            model = torch.nn.DistributedDataParallel(model, device_ids=args.local_rank,
+                                                     output_device=args.local_rank[0])
 
     epoch = 1
     if doLoad:
@@ -135,21 +139,27 @@ def main():
     #     criterion = nn.MSELoss(reduction='sum').to(device=device)
     criterion = nn.MSELoss(reduction='mean').to(device=device)
 
-    optimizer = torch.optim.SGD(model.parameters(), lr,
+    optimizer = torch.optim.SGD(model.parameters(), START_LR,
                                 momentum=MOMENTUM,
                                 weight_decay=WEIGHT_DECAY)
+
+    step_size = 4 * (datasets['train'].size / batch_size)
+    clr = cyclical_lr(step_size, min_lr=END_LR / LR_FACTOR, max_lr=END_LR)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr])
 
     if doTest:
         # Quick test
         start_time = datetime.now()
-        eval_MSELoss, eval_RMSError = test(datasets, model, criterion, 1, checkpointsPath, batch_size, device, dataset_limit, verbose)
+        eval_MSELoss, eval_RMSError = test(datasets, model, criterion, 1, checkpointsPath, batch_size, device,
+                                           dataset_limit, verbose)
         time_elapsed = datetime.now() - start_time
         print('')
         print('Testing MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
         print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif doValidate:
         start_time = datetime.now()
-        eval_MSELoss, eval_RMSError = validate(datasets, model, criterion, 1, checkpointsPath, batch_size, device, dataset_limit, verbose)
+        eval_MSELoss, eval_RMSError = validate(datasets, model, criterion, 1, checkpointsPath, batch_size, device,
+                                               dataset_limit, verbose)
         time_elapsed = datetime.now() - start_time
         print('')  # print blank line after loading data
         print('Validation MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
@@ -185,16 +195,16 @@ def main():
         for epoch in range(epoch, epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
             start_time = datetime.now()
-            lr = adjust_learning_rate(optimizer, epoch)
-
-            learning_rates[epoch - 1] = lr
 
             # train for one epoch
-            print('\nEpoch:{} [device:{}, lr:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch, device, lr, best_RMSError, args.hsm, args.adv))
-            train_MSELoss, train_RMSError = train(datasets['train'], model, criterion, optimizer, epoch, batch_size, device, dataset_limit, verbose, args)
+            print('\nEpoch:{} [device:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch, device, best_RMSError,
+                                                                                         args.hsm, args.adv))
+            train_MSELoss, train_RMSError = train(datasets['train'], model, criterion, optimizer, scheduler, epoch,
+                                                  batch_size, device, dataset_limit, verbose, args)
 
             # evaluate on validation set
-            eval_MSELoss, eval_RMSError = validate(datasets, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose)
+            eval_MSELoss, eval_RMSError = validate(datasets, model, criterion, epoch, checkpointsPath, batch_size,
+                                                   device, dataset_limit, verbose)
 
             # remember best RMSError and save checkpoint
             is_best = eval_RMSError < best_RMSError
@@ -221,7 +231,6 @@ def main():
                     'train_RMSError': train_RMSError,
                     'eval_MSELoss': eval_MSELoss,
                     'eval_RMSError': eval_RMSError,
-                    'lr': lr,
                     'time_elapsed': time_elapsed,
                 },
                 is_best,
@@ -245,7 +254,7 @@ def adversarialAttack(image, data_grad, epsilon=0.1):
     # Collect the element-wise sign of the data gradient
     sign_data_grad = data_grad.sign()
     # Create the perturbed image by adjusting each pixel of the input image
-    perturbed_image = image + epsilon*sign_data_grad
+    perturbed_image = image + epsilon * sign_data_grad
     # Adding clipping to maintain [0,1] range
     perturbed_image = torch.clamp(perturbed_image, 0, 1)
     # Return the perturbed image
@@ -256,10 +265,11 @@ def euclideanBatchError(output, target):
     """ For a batch of output and target returns corresponding batch of euclidean errors
     """
     # Batch Euclidean Distance sqrt(dx^2 + dy^2)
-    return torch.sqrt(torch.sum(torch.pow(output - target, 2),1))
+    return torch.sqrt(torch.sum(torch.pow(output - target, 2), 1))
 
 
-def train(dataset, model, criterion, optimizer, epoch, batch_size, device, dataset_limit=None, verbose=False, args=None):
+def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, device, dataset_limit=None, verbose=False,
+          args=None):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     MSELosses = AverageMeter()
@@ -280,7 +290,8 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
         if epoch > 0 and epoch % args.hsm_cycle == 0:
             args.multinomial_weights = torch.ones(dataset.size, dtype=torch.double)
         # update dataloader and sampler
-        sampler = torch.utils.data.WeightedRandomSampler(args.multinomial_weights, int(len(args.multinomial_weights)), replacement=True)
+        sampler = torch.utils.data.WeightedRandomSampler(args.multinomial_weights, int(len(args.multinomial_weights)),
+                                                         replacement=True)
         loader = torch.utils.data.DataLoader(
             dataset.loader.dataset,
             batch_size=batch_size,
@@ -292,6 +303,8 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
             args.sampling_bar.display(args.multinomial_weights)
     else:
         loader = dataset.loader
+
+    lrs = []
 
     # load data samples and train
     for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(loader):
@@ -324,7 +337,7 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
             # normalize and threshold prob values at max value '1'
             batch_loss = error.detach().cpu().div_(10.0)
             # batch_loss = error.detach().cpu().div_(best_MSELoss*2)
-            batch_loss[batch_loss>1.0] = 1.0
+            batch_loss[batch_loss > 1.0] = 1.0
             args.multinomial_weights.scatter_(0, indices, batch_loss.type_as(torch.DoubleTensor()))
 
         # average over the batch
@@ -364,6 +377,11 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
         # optimize
         optimizer.step()
 
+        # Update LR
+        scheduler.step()
+        lr_step = optimizer.state_dict()["param_groups"][0]["lr"]
+        lrs.append(lr_step)
+
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
@@ -374,21 +392,24 @@ def train(dataset, model, criterion, optimizer, epoch, batch_size, device, datas
                   'Data {data_time.val:8.4f} ({data_time.avg:8.4f})\t'
                   'MSELoss {MSELosses.val:8.4f} ({MSELosses.avg:8.4f})\t'
                   'RMSError {RMSErrors.val:8.4f} ({RMSErrors.avg:8.4f})\t'.format(
-                    split=dataset.split,
-                    epoch=epoch,
-                    batchNum=batchNum,
-                    dataset_size=dataset.size,
-                    batch_time=batch_time,
-                    data_time=data_time,
-                    MSELosses=MSELosses,
-                    RMSErrors=RMSErrors))
+                split=dataset.split,
+                epoch=epoch,
+                batchNum=batchNum,
+                dataset_size=dataset.size,
+                batch_time=batch_time,
+                data_time=data_time,
+                MSELosses=MSELosses,
+                RMSErrors=RMSErrors))
         else:
             progress_bar.update(num_samples, MSELosses.avg, RMSErrors.avg)
 
         if dataset_limit and dataset_limit <= batchNum:
             break
 
+    print('lrs={}'.format(lrs))
+
     return MSELosses.avg, RMSErrors.avg
+
 
 def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit=None, verbose=False):
     batch_time = AverageMeter()
@@ -459,13 +480,13 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
                   'Time {batch_time.val:8.4f} ({batch_time.avg:8.4f})\t'
                   'MSELoss {MSELosses.val:8.4f} ({MSELosses.avg:8.4f})\t'
                   'RMSError {RMSErrors.val:8.4f} ({RMSErrors.avg:8.4f})\t'.format(
-                    split=dataset.split,
-                    epoch=epoch,
-                    batchNum=batchNum,
-                    dataset_size=dataset.size,
-                    batch_time=batch_time,
-                    MSELosses=MSELosses,
-                    RMSErrors=RMSErrors))
+                split=dataset.split,
+                epoch=epoch,
+                batchNum=batchNum,
+                dataset_size=dataset.size,
+                batch_time=batch_time,
+                MSELosses=MSELosses,
+                RMSErrors=RMSErrors))
         else:
             progress_bar.update(num_samples, MSELosses.avg, RMSErrors.avg)
 
@@ -488,7 +509,8 @@ def validate(datasets,
              device,
              dataset_limit=None,
              verbose=False):
-    return evaluate(datasets['val'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose)
+    return evaluate(datasets['val'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit,
+                    verbose)
 
 
 def test(datasets,
@@ -500,7 +522,8 @@ def test(datasets,
          device,
          dataset_limit=None,
          verbose=False):
-    return evaluate(datasets['test'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose)
+    return evaluate(datasets['test'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit,
+                    verbose)
 
 
 def export_onnx_model(model, device, verbose):
@@ -578,19 +601,20 @@ def remove_module_from_state(saved_state):
     return state
 
 
-def adjust_learning_rate(optimizer, epoch):
-    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
-    lr = BASE_LR * (0.1 ** (epoch // 30))
+def cyclical_lr(stepsize, min_lr=3e-4, max_lr=3e-3):
+    # Scaler: we can adapt this if we do not want the triangular CLR
+    scaler = lambda x: 1.
 
-    print('')
-    print('adjust_learning_rate(optimizer, epoch={0}'.format(epoch))
-    print('lr {0} = BASE_LR {1} * (0.1 ** (epoch {2} // 30)'.format(lr, BASE_LR, epoch))
-    print('')
+    # Lambda function to calculate the LR
+    lr_lambda = lambda it: min_lr + (max_lr - min_lr) * relative(it, stepsize)
 
-    for param_group in optimizer.state_dict()['param_groups']:
-        param_group['lr'] = lr
+    # Additional function to see where on the cycle we are
+    def relative(it, stepsize):
+        cycle = math.floor(1 + it / (2 * stepsize))
+        x = abs(it / stepsize - 2 * cycle + 1)
+        return max(0, (1 - x)) * scaler(cycle)
 
-    return lr
+    return lr_lambda
 
 
 def str2bool(v):
@@ -689,7 +713,7 @@ def parse_commandline_arguments():
         print('exportONNX            = %d' % exportONNX)
         print('===================================================')
     return args, doLoad, doTest, doValidate, dataPath, checkpointsPath, exportONNX, saveCheckpoints, \
-        usingCuda, workers, epochs, dataset_limit, verbose, device
+           usingCuda, workers, epochs, dataset_limit, verbose, device
 
 
 if __name__ == "__main__":
