@@ -172,20 +172,6 @@ def main():
         best_RMSErrors = [0] * epochs
         RMSErrors = [0] * epochs
 
-        # first make a learning_rate correction suitable for epoch from saved checkpoint
-        # epoch will be non-zero if a checkpoint was loaded
-        for epoch in range(1, epoch):
-            if verbose:
-                print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
-                start_time = datetime.now()
-            lr = adjust_learning_rate(optimizer, epoch)
-
-            learning_rates[epoch - 1] = lr
-
-            if verbose:
-                time_elapsed = datetime.now() - start_time
-                print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-
         if args.hsm:
             args.multinomial_weights = torch.ones(datasets['train'].size, dtype=torch.double)
             if not verbose:
@@ -406,7 +392,7 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
         if dataset_limit and dataset_limit <= batchNum:
             break
 
-    print('lrs={}'.format(lrs))
+    # print('lrs={}'.format(lrs))
 
     return MSELosses.avg, RMSErrors.avg
 
