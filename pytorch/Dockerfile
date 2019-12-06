@@ -22,6 +22,8 @@ RUN conda install -y pytorch torchvision cudatoolkit=10.0 -c pytorch
 RUN conda install -y scipy
 RUN conda clean -tipsy
 RUN conda install -c conda-forge jsonpatch
+RUN conda install -c conda-forge visdom
+RUN pip install torchtoolbox
 
 # Execute the python
 ENTRYPOINT ["python"]
