@@ -214,6 +214,7 @@ class Visualizations(object):
             update = 'append', opts=dict(linecolor=self.getColor(split_name)))
 
     def plotAll(self, var_name, split_name, title_name, x, y, style='solid'):
+        ytype = 'log' if split_name == "lr" else 'linear'
         if var_name not in self.epoch_plots:
             self.epoch_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
                 legend=[split_name],
@@ -221,6 +222,9 @@ class Visualizations(object):
                 linecolor=self.getColor(split_name),
                 dash=self.getStyle(style),
                 xlabel='Epoch',
+                ytickmin=0,
+                ytickmax=None,
+                ytype=ytype,
                 ylabel=var_name
             ))
         else:
