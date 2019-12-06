@@ -51,9 +51,9 @@ index = lr_find_loss.index(min_loss)
 upper_lr = lr_find_lr[index] / 10
 lower_lr = upper_lr / 6
 
-print('min_loss {0}, lr {1}'.format(min_loss, lr_find_lr[index]))
-print('upper_lr = {0}'.format(upper_lr))
-print('lower_lr = {0}'.format(lower_lr))
+print(f'min_loss {min_loss}, lr {lr_find_lr[index]}')
+print(f'upper_lr = {upper_lr}')
+print(f'lower_lr = {lower_lr}')
 
 plt.ylabel("lr")
 plt.xlabel("step")

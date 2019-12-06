@@ -231,7 +231,6 @@ def main():
                     'train_RMSError': train_RMSError,
                     'eval_MSELoss': eval_MSELoss,
                     'eval_RMSError': eval_RMSError,
-                    'lr': lr,
                     'time_elapsed': time_elapsed,
                 },
                 is_best,
