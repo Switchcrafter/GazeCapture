@@ -32,8 +32,8 @@ All_RMS_Errors = {
                             2.0364, 2.0364, 2.0292, 2.0292, 2.0292, 2.0292, 2.0292, 2.0292, 2.0292, 2.0292, 2.0292,
                             2.0292, 2.0292, 2.0292, 2.0223, 2.0223, 2.0223, 2.0223, 2.0223],
     },
-    'BDCMR-jitter': {
-        # BDCMR, don't do mean for face/eyes, add jitter and random crop from 240->224
+    'BDCMR-crop': {
+        # BDCMR, don't do mean for face/eyes, add random crop from 240->224
         # Batch 128 on Alienware 51m NVIDIA 2080Ti
         'RMS_Errors': [2.293592200122107, 2.23778991227833, 2.111237920557162, 2.0503367604228098, 2.1053897357740574,
                       2.077477353582786, 2.0204562945901428, 2.038922714529698, 2.06019775089836, 2.0420013571074125,
@@ -52,7 +52,7 @@ All_RMS_Errors = {
                             1.97707222670457, 1.97707222670457]
     },
     'BDCMR-HSM': {
-        # BDCMR-jitter, plus turn on Hard Sample Mining
+        # BDCMR-crop, plus turn on Hard Sample Mining
         # Batch 128 on Alienware 51m NVIDIA 2080Ti
         'RMS_Errors': [2.331934588406017, 2.2223023436738085, 2.2591254915418286, 2.30623818617502, 2.221061948232388,
                        2.2014403343521356, 2.2300259151471566, 2.113216987454659, 2.1317593734538547,
@@ -71,7 +71,7 @@ All_RMS_Errors = {
                             2.0678742538944697, 2.0678742538944697]
     },
     'BDCMR-ADV': {
-        # BDCMR-jitter, plus turn on adversarial attack - specifically Fast Gradient Sign Attack (FGSA)
+        # BDCMR-crop, plus turn on adversarial attack - specifically Fast Gradient Sign Attack (FGSA)
         # Batch 128 on Alienware 51m NVIDIA 2080Ti
         'RMS_Errors': [3.118429561293037, 2.8755794966068535, 3.1696789808215593, 2.8034747481586635,
                        2.8611501258896275, 2.50125332359668, 2.7022982818613777, 2.6738781996036267, 2.620483103003691,
@@ -111,8 +111,8 @@ All_RMS_Errors = {
                             2.0411622707364376, 2.0411622707364376, 2.0411622707364376, 2.0411622707364376,
                             2.0411622707364376, 2.0411622707364376]
     },
-    'BDCMR-227-jitter': {
-        # BDCMR-227, add jitter and random crop from 240->227.
+    'BDCMR-227-crop': {
+        # BDCMR-227, add random crop from 240->227.
         # Batch 128 on Alienware 51m NVIDIA 2080Ti
         'RMS_Errors': [2.314591295412906, 2.2165885619693904, 2.15799731368095, 2.042023872735922, 2.0753487422471086,
                        2.082726178557262, 2.028972923507126, 2.056609269766176, 2.030756619253973, 2.0462504959619516,
@@ -130,6 +130,24 @@ All_RMS_Errors = {
                             1.991890024930419, 1.991890024930419, 1.991890024930419, 1.991890024930419,
                             1.991890024930419, 1.991890024930419]
     },
+    'BDCMR-CLR': {
+        # BDCMR-crop, add CLR in triangular shape using 3E-3 as upper bound, 3E-3/6 as lower bound
+        'RMS_Errors': [2.37913497101964, 2.256394443531203, 2.2498499778267838, 2.1023626527613093, 2.0570811328746843,
+                       2.0420069148737707, 2.027525443940974, 2.019467522108723, 2.024614392564693, 2.0622427220783863,
+                       2.075644106278102, 2.1231898370010387, 2.079519994738283, 2.0054482663327122, 1.9801020802470286,
+                       1.9761306966962475, 2.006571741880149, 1.9715972641609463, 2.0903384909023752, 2.104521881082993,
+                       2.055211592810861, 2.0141416943466095, 1.9869592400469391, 1.9842890210013784, 1.991951227508781,
+                       2.0294997850840093, 2.019113934400824, 2.121046531192392, 2.0463625383922217,
+                       2.0002399273021316],
+        'Best_RMS_Errors': [2.37913497101964, 2.256394443531203, 2.2498499778267838, 2.1023626527613093,
+                            2.0570811328746843, 2.0420069148737707, 2.027525443940974, 2.019467522108723,
+                            2.019467522108723, 2.019467522108723, 2.019467522108723, 2.019467522108723,
+                            2.019467522108723, 2.0054482663327122, 1.9801020802470286, 1.9761306966962475,
+                            1.9761306966962475, 1.9715972641609463, 1.9715972641609463, 1.9715972641609463,
+                            1.9715972641609463, 1.9715972641609463, 1.9715972641609463, 1.9715972641609463,
+                            1.9715972641609463, 1.9715972641609463, 1.9715972641609463, 1.9715972641609463,
+                            1.9715972641609463, 1.9715972641609463]
+    }
 }
 
 # Make a data frame
@@ -137,10 +155,11 @@ df_rms = pd.DataFrame({'x': range(1, 31),
                        'MIT-LRN': np.array((All_RMS_Errors['MIT-LRN'])['RMS_Errors']),
                        'BDCMR': np.array((All_RMS_Errors['BDCMR'])['RMS_Errors']),
                        'BDCMR-227': np.array((All_RMS_Errors['BDCMR-227'])['RMS_Errors']),
-                       'BDCMR-jitter': np.array((All_RMS_Errors['BDCMR-jitter'])['RMS_Errors']),
-                       'BDCMR-227-jitter': np.array((All_RMS_Errors['BDCMR-227-jitter'])['RMS_Errors']),
+                       'BDCMR-crop': np.array((All_RMS_Errors['BDCMR-crop'])['RMS_Errors']),
+                       'BDCMR-227-crop': np.array((All_RMS_Errors['BDCMR-227-crop'])['RMS_Errors']),
                        'BDCMR-HSM': np.array((All_RMS_Errors['BDCMR-HSM'])['RMS_Errors']),
                        'BDCMR-ADV': np.array((All_RMS_Errors['BDCMR-ADV'])['RMS_Errors']),
+                       'BDCMR-CLR': np.array((All_RMS_Errors['BDCMR-CLR'])['RMS_Errors']),
                        })
 
 # style
@@ -169,10 +188,11 @@ df_best_rms = pd.DataFrame({'x': range(1, 31),
                             'MIT-LRN': np.array((All_RMS_Errors['MIT-LRN'])['Best_RMS_Errors']),
                             'BDCMR': np.array((All_RMS_Errors['BDCMR'])['Best_RMS_Errors']),
                             'BDCMR-227': np.array((All_RMS_Errors['BDCMR-227'])['Best_RMS_Errors']),
-                            'BDCMR-jitter': np.array((All_RMS_Errors['BDCMR-jitter'])['Best_RMS_Errors']),
-                            'BDCMR-227-jitter': np.array((All_RMS_Errors['BDCMR-227-jitter'])['Best_RMS_Errors']),
+                            'BDCMR-crop': np.array((All_RMS_Errors['BDCMR-crop'])['Best_RMS_Errors']),
+                            'BDCMR-227-crop': np.array((All_RMS_Errors['BDCMR-227-crop'])['Best_RMS_Errors']),
                             'BDCMR-HSM': np.array((All_RMS_Errors['BDCMR-HSM'])['Best_RMS_Errors']),
                             'BDCMR-ADV': np.array((All_RMS_Errors['BDCMR-ADV'])['Best_RMS_Errors']),
+                            'BDCMR-CLR': np.array((All_RMS_Errors['BDCMR-CLR'])['Best_RMS_Errors']),
                             })
 
 # style
