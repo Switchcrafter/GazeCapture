@@ -25,14 +25,26 @@ STEP_SCALAR = 4
 
 batch_size = 128                        # typical batch size on Alienware 51m with RTX 2080Ti
 dataset_size = 1251983                  # size of 'train' dataset
-epochs = 8                              # how many epochs to plot the CLR
+epochs = 30                             # how many epochs to plot the CLR
+
+plot_columns = 6
+plot_rows = math.ceil(epochs / plot_columns)
 
 batch_count = math.ceil(dataset_size / batch_size)
 step_size = STEP_SCALAR * batch_count
 clr = cyclical_lr(step_size, min_lr=END_LR / LR_FACTOR, max_lr=END_LR)
 
-lrs = []
-for i in range(epochs * batch_count):
-    lrs.append(clr(i))
-plt.plot(lrs)
+i = 0
+fig, axs = plt.subplots(plot_rows, plot_columns, sharex=True, sharey=True)
+for epoch in range(epochs):
+    lrs = []
+    for i in range(batch_count):
+        lrs.append(clr(i))
+        i += 1
+
+    row = math.floor(epoch / plot_columns)
+    column = epoch % plot_columns
+    axs[row, column].plot(lrs)
+    axs[row, column].set_title(f'Epoch {epoch + 1}')
+
 plt.show()
