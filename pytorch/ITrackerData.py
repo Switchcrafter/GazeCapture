@@ -45,6 +45,26 @@ def loadMetadata(filename, silent=False):
     return metadata
 
 
+def normalize_image_transform(image_size, split, jitter):
+    if jitter and split == 'train':
+        normalize_image = transforms.Compose([
+            transforms.Resize(240),
+            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+            transforms.RandomCrop(image_size),
+            transforms.Resize(image_size),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])  # Well known ImageNet values
+        ])
+    else:
+        normalize_image = transforms.Compose([
+            transforms.Resize(image_size),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])  # Well known ImageNet values
+        ])
+
+    return normalize_image
+
+
 class ITrackerData(data.Dataset):
     def __init__(self, dataPath, imSize, gridSize, split='train', silent=False, jitter=True):
 
@@ -57,24 +77,11 @@ class ITrackerData(data.Dataset):
 
         if metadata_file is None or not os.path.isfile(metadata_file):
             raise RuntimeError('There is no such file %s! Provide a valid dataset path.' % metadata_file)
-        self.metadata = loadMetadata(metadata_file, silent=True)
+        self.metadata = loadMetadata(metadata_file, silent)
         if self.metadata is None:
             raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % metadata_file)
 
-        if jitter and split == 'train':
-            self.normalize_image = transforms.Compose([
-                transforms.Resize(240),
-                # brightness=[0.0-1.0], contrast=[0.0-1.0], saturation=[0.0-1.0], hue=[0.0-0.5]
-                transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
-                transforms.RandomCrop(self.imSize),
-                transforms.Resize(self.imSize),
-                transforms.ToTensor(),
-            ])
-        else:
-            self.normalize_image = transforms.Compose([
-                transforms.Resize(self.imSize),
-                transforms.ToTensor(),
-            ])
+        self.normalize_image = normalize_image_transform(image_size=self.imSize, jitter=jitter, split=split)
 
         if split == 'test':
             mask = self.metadata['labelTest']
@@ -82,6 +89,8 @@ class ITrackerData(data.Dataset):
             mask = self.metadata['labelVal']
         elif split == 'train':
             mask = self.metadata['labelTrain']
+        elif split == 'all':
+            mask = np.ones[len(self.metadata)]
         else:
             raise Exception('split should be test, val or train. The value of split was: {}'.format(split))
 
