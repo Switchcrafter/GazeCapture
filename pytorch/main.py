@@ -56,6 +56,7 @@ FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
 START_LR = 1
 END_LR = 3E-3
 LR_FACTOR = 6
+STEP_SCALAR = 4
 
 
 def main():
@@ -161,7 +162,8 @@ def main():
                                 momentum=MOMENTUM,
                                 weight_decay=WEIGHT_DECAY)
 
-    step_size = 4 * (datasets['train'].size / batch_size)
+    batch_count = math.ceil(datasets['train'].size / batch_size)
+    step_size = STEP_SCALAR * batch_count
     clr = cyclical_lr(step_size, min_lr=END_LR / LR_FACTOR, max_lr=END_LR)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr])
 
