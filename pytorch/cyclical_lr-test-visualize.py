@@ -1,5 +1,29 @@
+import argparse
 import math
+
 import matplotlib.pyplot as plt
+
+
+def parse_commandline_arguments():
+    parser = argparse.ArgumentParser(description='cyclical_lr-test-visualize.py')
+    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--dataset_size', type=int, default=1251983)  # size of 'train' MIT GazeCapture dataset
+    parser.add_argument('--step_scalar',
+                        type=float,
+                        default=4.,
+                        help="How many epochs in one steps (ie: one-half triangle cycle)")
+    parser.add_argument('--epochs', type=int, default=30)
+    parser.add_argument('--decay_factor',
+                        type=float,
+                        default=1.,
+                        help="How much decay should occur. 1 = no decay. 0.5-0.8 are common values")
+    parser.add_argument('--plot_columns',
+                        type=int,
+                        default=6,
+                        help='Number of columns in output plot')
+    args = parser.parse_args()
+
+    return args
 
 
 # Based on https://www.jeremyjordan.me/nn-learning-rate/
@@ -24,34 +48,40 @@ def cyclical_lr(stepsize, min_lr=3e-4, max_lr=3e-3, decay_factor=1):
     return lr_lambda
 
 
-START_LR = 1
-END_LR = 3E-3
-LR_FACTOR = 6
-STEP_SCALAR = 4                         # This results in one steps (ie: one-half triangle cycle) over 4 epochs
+def main():
+    args = parse_commandline_arguments()
 
-batch_size = 128                        # typical batch size on Alienware 51m with RTX 2080Ti
-dataset_size = 1251983                  # size of 'train' dataset
-epochs = 30                             # how many epochs to plot the CLR
-decay_factor = 1                        # 1 = no decay, less than 1 is decay (ie: 0.8)
+    START_LR = 1
+    END_LR = 3E-3
+    LR_FACTOR = 6
+    STEP_SCALAR = args.step_scalar
 
-plot_columns = 6
-plot_rows = math.ceil(epochs / plot_columns)
+    batch_size = args.batch_size
+    dataset_size = args.dataset_size
+    epochs = args.epochs
+    decay_factor = args.decay_factor
 
-batch_count = math.ceil(dataset_size / batch_size)
-step_size = STEP_SCALAR * batch_count
-clr = cyclical_lr(step_size, min_lr=END_LR / LR_FACTOR, max_lr=END_LR, decay_factor=decay_factor)
+    plot_columns = args.plot_columns
+    plot_rows = math.ceil(epochs / plot_columns)
 
-i = 0
-fig, axs = plt.subplots(plot_rows, plot_columns, sharex=True, sharey=True)
-for epoch in range(epochs):
-    lrs = []
-    for j in range(batch_count):
-        lrs.append(clr(i))
-        i += 1
+    batch_count = math.ceil(dataset_size / batch_size)
+    step_size = STEP_SCALAR * batch_count
+    clr = cyclical_lr(step_size, min_lr=END_LR / LR_FACTOR, max_lr=END_LR, decay_factor=decay_factor)
 
-    row = math.floor(epoch / plot_columns)
-    column = epoch % plot_columns
-    axs[row, column].plot(lrs)
-    axs[row, column].set_title(f'Epoch {epoch + 1}')
+    batch_num = 0
+    fig, axs = plt.subplots(plot_rows, plot_columns, sharex=True, sharey=True)
+    for epoch in range(epochs):
+        lrs = []
+        for j in range(batch_count):
+            # this is equivalent to calling scheduler.step() once per batch
+            lrs.append(clr(batch_num))
+            batch_num += 1
 
-plt.show()
+        row = math.floor(epoch / plot_columns)
+        column = epoch % plot_columns
+        axs[row, column].plot(lrs)
+        axs[row, column].set_title(f'Epoch {epoch + 1}')
+    plt.show()
+
+
+main()
