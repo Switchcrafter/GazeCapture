@@ -56,6 +56,7 @@ FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
 START_LR = 1
 END_LR = 3E-3
 LR_FACTOR = 6
+STEP_SCALAR = 4
 
 def main():
     args, doLoad, doTest, doValidate, dataPath, checkpointsPath, \
@@ -159,7 +160,8 @@ def main():
                                 momentum=MOMENTUM,
                                 weight_decay=WEIGHT_DECAY)
 
-    step_size = 4 * (datasets['train'].size / batch_size)
+    batch_count = math.ceil(datasets['train'].size / batch_size)
+    step_size = STEP_SCALAR * batch_count
     clr = cyclical_lr(step_size, min_lr=END_LR / LR_FACTOR, max_lr=END_LR)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr])
 
@@ -187,17 +189,6 @@ def main():
         resize(best_RMSErrors, epochs)
         resize(RMSErrors, epochs)
 
-        # first make a learning_rate correction suitable for epoch from saved checkpoint
-        # epoch will be non-zero if a checkpoint was loaded
-        for epoch in range(1, epoch):
-            if verbose:
-                print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
-                start_time = datetime.now()
-
-            if verbose:
-                time_elapsed = datetime.now() - start_time
-                print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-
         if args.hsm:
             args.multinomial_weights = torch.ones(datasets['train'].size, dtype=torch.double)
             if not verbose:
@@ -209,7 +200,7 @@ def main():
         args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", None, None)
         args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", None, None)
         # Populate visualizations with checkpoint info
-        for epoch_num in range(1,epoch):
+        for epoch_num in range(1, epoch):
             args.vis.plotAll('LearningRate', 'lr_history', "LearningRate (Overall)", epoch_num, learning_rates[epoch_num], 'dot')
             args.vis.plotAll('RMSError', 'val_history', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num], 'dot')
             args.vis.plotAll('BestRMSError', 'val_history', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num], 'dot')
@@ -418,8 +409,6 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
         scheduler.step()
         lr_step = optimizer.state_dict()["param_groups"][0]["lr"]
         lrs.append(lr_step)
-        # lr = lr_step
-        # lr = scheduler.get_lr()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -663,11 +652,13 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
+
 def resize(l, newsize, filling=None):
     if newsize > len(l):
         l.extend([filling for x in range(len(l), newsize)])
     else:
         del l[newsize:]
+
 
 def parse_commandline_arguments():
     parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
