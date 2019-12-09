@@ -57,7 +57,6 @@ START_LR = 1
 END_LR = 3E-3
 LR_FACTOR = 6
 
-
 def main():
     args, doLoad, doTest, doValidate, dataPath, checkpointsPath, \
     exportONNX, saveCheckpoints, using_cuda, workers, epochs, \
@@ -116,7 +115,6 @@ def main():
 
     eval_RMSError = math.inf
     best_RMSError = math.inf
-    # lr = BASE_LR
 
     epoch = 1
     RMSErrors = []
@@ -195,9 +193,6 @@ def main():
             if verbose:
                 print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
                 start_time = datetime.now()
-            lr = adjust_learning_rate(optimizer, epoch)
-
-            learning_rates[epoch - 1] = lr
 
             if verbose:
                 time_elapsed = datetime.now() - start_time
@@ -228,6 +223,7 @@ def main():
         for epoch in range(epoch, epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
             start_time = datetime.now()
+            learning_rates[epoch - 1] = scheduler.get_lr()
 
             args.vis.reset()
             # train for one epoch
@@ -246,7 +242,7 @@ def main():
             best_RMSErrors[epoch - 1] = best_RMSError
             RMSErrors[epoch - 1] = eval_RMSError
 
-            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, lr)
+            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, scheduler.get_lr())
             args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
             args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, eval_RMSError)
             args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
@@ -422,6 +418,8 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
         scheduler.step()
         lr_step = optimizer.state_dict()["param_groups"][0]["lr"]
         lrs.append(lr_step)
+        # lr = lr_step
+        # lr = scheduler.get_lr()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -448,7 +446,7 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
         if dataset_limit and dataset_limit <= batchNum:
             break
 
-    print('lrs={}'.format(lrs))
+    # print('lrs={}'.format(lrs))
 
     return MSELosses.avg, RMSErrors.avg
 
