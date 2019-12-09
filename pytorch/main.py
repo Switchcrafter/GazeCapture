@@ -62,7 +62,7 @@ STEP_SCALAR = 4
 def main():
     args, doLoad, doTest, doValidate, dataPath, checkpointsPath, \
     exportONNX, saveCheckpoints, using_cuda, workers, epochs, \
-    dataset_limit, verbose, device = parse_commandline_arguments()
+    dataset_limit, verbose, device, color_space = parse_commandline_arguments()
 
     # Initialize the visualization environment open => http://localhost:8097
     args.vis = Visualizations(args.name)
@@ -153,7 +153,7 @@ def main():
 
     totalstart_time = datetime.now()
 
-    datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose)
+    datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space)
 
     #     criterion = nn.MSELoss(reduction='sum').to(device=device)
     criterion = nn.MSELoss(reduction='mean').to(device=device)
@@ -440,6 +440,7 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
 
     return MSELosses.avg, RMSErrors.avg
 
+
 def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit=None, verbose=False, args=None):
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -691,6 +692,7 @@ def parse_commandline_arguments():
     parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
     parser.add_argument('--hsm_cycle', type=int, default=8)
     parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="Enables Adversarial Attack")
+    parser.add_argument('--color_space', default='RGB', help='Image color space - RGB, YCbCr, HSV, LAB')
     args = parser.parse_args()
 
     args.device = None
@@ -720,6 +722,7 @@ def parse_commandline_arguments():
         print('args.exportONNX       = %s' % args.exportONNX)
         print('args.disable_cuda     = %d' % args.disable_cuda)
         print('args.verbose          = %d' % args.verbose)
+        print('args.color_space      = %s' % args.color_space)
         print('===================================================')
 
     # Change there flags to control what happens.
@@ -735,6 +738,7 @@ def parse_commandline_arguments():
     epochs = args.epochs
     dataset_limit = args.dataset_limit
     device = args.device
+    color_space = args.color_space
 
     if verbose:
         print('===================================================')
@@ -747,9 +751,10 @@ def parse_commandline_arguments():
         print('workers               = %d' % workers)
         print('epochs                = %d' % epochs)
         print('exportONNX            = %d' % exportONNX)
+        print('color_space           = %s' % color_space)
         print('===================================================')
     return args, doLoad, doTest, doValidate, dataPath, checkpointsPath, exportONNX, saveCheckpoints, \
-           usingCuda, workers, epochs, dataset_limit, verbose, device
+           usingCuda, workers, epochs, dataset_limit, verbose, device, color_space
 
 
 if __name__ == "__main__":

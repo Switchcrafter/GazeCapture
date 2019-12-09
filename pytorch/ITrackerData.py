@@ -49,7 +49,7 @@ def normalize_image_transform(image_size, split, jitter):
     if jitter and split == 'train':
         normalize_image = transforms.Compose([
             transforms.Resize(240),
-            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1),  # hue=0.1
             transforms.RandomCrop(image_size),
             transforms.Resize(image_size),
             transforms.ToTensor(),
@@ -66,11 +66,12 @@ def normalize_image_transform(image_size, split, jitter):
 
 
 class ITrackerData(data.Dataset):
-    def __init__(self, dataPath, imSize, gridSize, split='train', silent=False, jitter=True):
+    def __init__(self, dataPath, imSize, gridSize, split='train', silent=False, jitter=True, color_space='YCbCr'):
 
         self.dataPath = dataPath
         self.imSize = imSize
         self.gridSize = gridSize
+        self.color_space = color_space
 
         print('Loading iTracker dataset...')
         metadata_file = os.path.join(dataPath, 'metadata.mat')
@@ -101,7 +102,7 @@ class ITrackerData(data.Dataset):
         try:
             # ToDo: Try YCbCr, HSV, LAB format
             # im = np.array(Image.open(path).convert('YCbCr'))
-            im = Image.open(path).convert('RGB')
+            im = Image.open(path).convert(self.color_space)
         except OSError:
             raise RuntimeError('Could not read image: ' + path)
         return im
@@ -164,8 +165,8 @@ class Dataset:
         self.loader = loader
 
 
-def load_data(split, path, image_size, grid_size, workers, batch_size, verbose):
-    data = ITrackerData(path, image_size, grid_size, split=split, silent=not verbose)
+def load_data(split, path, image_size, grid_size, workers, batch_size, verbose, color_space):
+    data = ITrackerData(path, image_size, grid_size, split=split, silent=not verbose, color_space=color_space)
     size = len(data.indices)
     shuffle = True if split == 'train' else False
     loader = torch.utils.data.DataLoader(
@@ -178,14 +179,14 @@ def load_data(split, path, image_size, grid_size, workers, batch_size, verbose):
     return Dataset(split, data, size, loader)
 
 
-def load_all_data(path, image_size, grid_size, workers, batch_size, verbose):
+def load_all_data(path, image_size, grid_size, workers, batch_size, verbose, color_space='YCbCr'):
     print(centeredText('Loading Data'))
     all_data = {
         # training data : model sees and learns from this data
-        'train': load_data('train', path, image_size, grid_size, workers, batch_size, verbose),
+        'train': load_data('train', path, image_size, grid_size, workers, batch_size, verbose, color_space),
         # validation data : model sees but never learns from this data
-        'val': load_data('val', path, image_size, grid_size, workers, batch_size, verbose),
+        'val': load_data('val', path, image_size, grid_size, workers, batch_size, verbose, color_space),
         # test data : model never sees or learns from this data
-        'test': load_data('test', path, image_size, grid_size, workers, batch_size, verbose)
+        'test': load_data('test', path, image_size, grid_size, workers, batch_size, verbose, color_space)
     }
     return all_data
