@@ -45,7 +45,7 @@ TARGETS = [(-10., -3.),
 
 def main():
     model = ITrackerModel().to(device='cpu')
-    saved = torch.load('checkpoint.pth.tar', map_location='cpu')
+    saved = torch.load('best_checkpoint.pth.tar', map_location='cpu')
 
     model.load_state_dict(saved['state_dict'])
     model.eval()
