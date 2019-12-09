@@ -58,7 +58,6 @@ END_LR = 3E-3
 LR_FACTOR = 6
 STEP_SCALAR = 4
 
-
 def main():
     args, doLoad, doTest, doValidate, dataPath, checkpointsPath, \
     exportONNX, saveCheckpoints, using_cuda, workers, epochs, \
@@ -117,7 +116,6 @@ def main():
 
     eval_RMSError = math.inf
     best_RMSError = math.inf
-    # lr = BASE_LR
 
     epoch = 1
     RMSErrors = []
@@ -197,17 +195,17 @@ def main():
                 args.sampling_bar = SamplingBar('HSM')
 
         # Placeholder for overall (all epoch) visualizations
-        # args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", None, None)
+        args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", None, None)
         args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", None, None)
         args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", None, None)
         args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", None, None)
         # Populate visualizations with checkpoint info
         for epoch_num in range(1, epoch):
-            # args.vis.plotAll('LearningRate', 'lr_history', "LearningRate (Overall)", epoch_num, learning_rates[epoch_num], 'dot')
+            args.vis.plotAll('LearningRate', 'lr_history', "LearningRate (Overall)", epoch_num, learning_rates[epoch_num], 'dot')
             args.vis.plotAll('RMSError', 'val_history', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num], 'dot')
             args.vis.plotAll('BestRMSError', 'val_history', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num], 'dot')
             if epoch_num == epoch-1:
-                # args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch_num, learning_rates[epoch_num])
+                args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch_num, learning_rates[epoch_num])
                 args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num])
                 args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num])
 
@@ -216,6 +214,7 @@ def main():
         for epoch in range(epoch, epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
             start_time = datetime.now()
+            learning_rates[epoch - 1] = scheduler.get_lr()
 
             args.vis.reset()
             # train for one epoch
@@ -234,7 +233,7 @@ def main():
             best_RMSErrors[epoch - 1] = best_RMSError
             RMSErrors[epoch - 1] = eval_RMSError
 
-            # args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, lr)
+            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, scheduler.get_lr())
             args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
             args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, eval_RMSError)
             args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
