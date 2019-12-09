@@ -23,6 +23,25 @@ IMAGE_SIZE = (IMAGE_WIDTH, IMAGE_HEIGHT)
 GRID_SIZE = 25
 FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
 
+DEVICE_NAME = "Alienware 51m"
+
+TARGETS = [(-10., -3.),
+           (-10., -6.),
+           (-10., -9.),
+           (-10., -12.),
+           (-10., -15.),
+           (0., -3.),
+           (0., -6.),
+           (0., -9.),
+           (0., -12.),
+           (0., -15.),
+           (10., -3.),
+           (10., -6.),
+           (10., -9.),
+           (10., -12.),
+           (10., -15.),
+           ]
+
 
 def main():
     model = ITrackerModel().to(device='cpu')
@@ -234,6 +253,9 @@ def main():
         if k == 27:  # ESC
             break
         if k == 32:
+            target = target + 1
+            if target >= len(TARGETS):
+                target = 0
             stimulusX, stimulusY = change_target(target, monitor)
 
     cv2.destroyAllWindows()
@@ -242,12 +264,12 @@ def main():
 
 def change_target(target, monitor):
     (stimulusX, stimulusY) = cam2screen(
-        -5.,
-        -4.,
+        (TARGETS[target])[0],
+        (TARGETS[target])[1],
         1,
         monitor.width,
         monitor.height,
-        deviceName="Alienware 51m"
+        deviceName=DEVICE_NAME
     )
 
     return stimulusX, stimulusY
