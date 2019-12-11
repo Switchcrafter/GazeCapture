@@ -171,17 +171,11 @@ All_RMS_Errors = {
 }
 
 # Make a data frame
-df_rms = pd.DataFrame({'x': range(1, 31),
-                       'MIT-LRN': np.array((All_RMS_Errors['MIT-LRN'])['RMS_Errors']),
-                       'BDCMR': np.array((All_RMS_Errors['BDCMR'])['RMS_Errors']),
-                       'BDCMR-227': np.array((All_RMS_Errors['BDCMR-227'])['RMS_Errors']),
-                       'BDCMR-crop': np.array((All_RMS_Errors['BDCMR-crop'])['RMS_Errors']),
-                       'BDCMR-227-crop': np.array((All_RMS_Errors['BDCMR-227-crop'])['RMS_Errors']),
-                       'BDCMR-HSM': np.array((All_RMS_Errors['BDCMR-HSM'])['RMS_Errors']),
-                       'BDCMR-ADV': np.array((All_RMS_Errors['BDCMR-ADV'])['RMS_Errors']),
-                       'BDCMR-CLR': np.array((All_RMS_Errors['BDCMR-CLR'])['RMS_Errors']),
-                       'BDCMR-jitter-normalize': np.array((All_RMS_Errors['BDCMR-jitter-normalize'])['RMS_Errors']),
-                       })
+rms_object = {'x': range(1, 31)}
+for key in All_RMS_Errors.keys():
+    rms_object[key] = np.array((All_RMS_Errors[key])['RMS_Errors'])
+
+df_rms = pd.DataFrame(rms_object)
 
 # style
 plt.style.use('seaborn-darkgrid')
@@ -204,18 +198,12 @@ plt.xlabel("Epoch")
 plt.ylabel("RMS Error")
 plt.show()
 
+best_rms_object = {'x': range(1, 31)}
+for key in All_RMS_Errors.keys():
+    best_rms_object[key] = np.array((All_RMS_Errors[key])['Best_RMS_Errors'])
+
 # Make a data frame
-df_best_rms = pd.DataFrame({'x': range(1, 31),
-                            'MIT-LRN': np.array((All_RMS_Errors['MIT-LRN'])['Best_RMS_Errors']),
-                            'BDCMR': np.array((All_RMS_Errors['BDCMR'])['Best_RMS_Errors']),
-                            'BDCMR-227': np.array((All_RMS_Errors['BDCMR-227'])['Best_RMS_Errors']),
-                            'BDCMR-crop': np.array((All_RMS_Errors['BDCMR-crop'])['Best_RMS_Errors']),
-                            'BDCMR-227-crop': np.array((All_RMS_Errors['BDCMR-227-crop'])['Best_RMS_Errors']),
-                            'BDCMR-HSM': np.array((All_RMS_Errors['BDCMR-HSM'])['Best_RMS_Errors']),
-                            'BDCMR-ADV': np.array((All_RMS_Errors['BDCMR-ADV'])['Best_RMS_Errors']),
-                            'BDCMR-CLR': np.array((All_RMS_Errors['BDCMR-CLR'])['Best_RMS_Errors']),
-                            'BDCMR-jitter-normalize': np.array((All_RMS_Errors['BDCMR-jitter-normalize'])['Best_RMS_Errors']),
-                            })
+df_best_rms = pd.DataFrame(best_rms_object)
 
 # style
 plt.style.use('seaborn-darkgrid')
