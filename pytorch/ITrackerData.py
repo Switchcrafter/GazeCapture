@@ -49,7 +49,7 @@ def normalize_image_transform(image_size, split, jitter):
     if jitter and split == 'train':
         normalize_image = transforms.Compose([
             transforms.Resize(240),
-            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1),  # hue=0.1
+            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
             transforms.RandomCrop(image_size),
             transforms.Resize(image_size),
             transforms.ToTensor(),
