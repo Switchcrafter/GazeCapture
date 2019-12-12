@@ -56,7 +56,8 @@ FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
 START_LR = 1
 END_LR = 3E-3
 LR_FACTOR = 6
-STEP_SCALAR = 4
+EPOCHS_PER_STEP = 4
+
 
 def main():
     args, doLoad, doTest, doValidate, dataPath, checkpointsPath, \
@@ -161,8 +162,13 @@ def main():
                                 weight_decay=WEIGHT_DECAY)
 
     batch_count = math.ceil(datasets['train'].size / batch_size)
-    step_size = STEP_SCALAR * batch_count
-    clr = cyclical_lr(step_size, min_lr=END_LR / LR_FACTOR, max_lr=END_LR)
+    step_size = EPOCHS_PER_STEP * batch_count
+    clr = cyclical_lr(batch_count,
+                      shape=shape_function(args.shape_type, step_size),
+                      decay=decay_function(args.decay_type, EPOCHS_PER_STEP),
+                      min_lr=END_LR / LR_FACTOR,
+                      max_lr=END_LR,
+                      )
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr])
 
     if doTest:
@@ -264,14 +270,13 @@ def main():
                 checkpointsPath,
                 saveCheckpoints)
 
-            if(args.verbose):
-                print('')
-                print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
-                print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-                print('')
-                print('\'RMS_Errors\': {0},'.format(RMSErrors))
-                print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
-                print('')
+            print('')
+            print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
+            print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
+            print('')
+            print('\'RMS_Errors\': {0},'.format(RMSErrors))
+            print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
+            print('')
 
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
@@ -629,18 +634,41 @@ def remove_module_from_state(saved_state):
     return state
 
 
-def cyclical_lr(stepsize, min_lr=3e-4, max_lr=3e-3):
-    # Scaler: we can adapt this if we do not want the triangular CLR
-    scaler = lambda x: 1.
+def decay_function(decay_type, epochs_per_step):
+    if decay_type == 'none':
+        decay = lambda current_epoch: 1.
+    elif decay_type == 'step':
+        drop = 0.5
+        decay = lambda current_epoch: math.pow(drop, math.floor(1 + current_epoch / (2 * epochs_per_step)))
+    elif decay_type == 'exp':
+        k = 0.1
+        decay = lambda current_epoch: math.exp(-k * current_epoch)
+    elif decay_type == 'time':
+        decay_time = 0.1
+        decay = lambda current_epoch: 1. / (1. + decay_time * current_epoch)
+
+    return decay
+
+
+def shape_function(shape_type, step_size):
+    if shape_type == 'flat':
+        shape = lambda it: 1.
+    elif shape_type == 'triangular':
+        # for a given iteration, determines which cycle it belongs to
+        # note that a cycle is 2x steps in the triangular waveform
+        cycle = lambda it: math.floor(1 + it / (2 * step_size))
+
+        shape = lambda it: max(0, (1 - abs(it / step_size - 2 * cycle(it) + 1)))
+
+    return shape
+
+
+# Based on https://www.jeremyjordan.me/nn-learning-rate/
+def cyclical_lr(batch_count, shape, decay, min_lr=3e-4, max_lr=3e-3):
+    epoch = lambda it: math.floor(it / batch_count)
 
     # Lambda function to calculate the LR
-    lr_lambda = lambda it: min_lr + (max_lr - min_lr) * relative(it, stepsize)
-
-    # Additional function to see where on the cycle we are
-    def relative(it, stepsize):
-        cycle = math.floor(1 + it / (2 * stepsize))
-        x = abs(it / stepsize - 2 * cycle + 1)
-        return max(0, (1 - x)) * scaler(cycle)
+    lr_lambda = lambda it: min_lr + (max_lr - min_lr) * shape(it) * decay(epoch(it))
 
     return lr_lambda
 
@@ -692,6 +720,12 @@ def parse_commandline_arguments():
     parser.add_argument('--hsm_cycle', type=int, default=8)
     parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="Enables Adversarial Attack")
     parser.add_argument('--color_space', default='YCbCr', help='Image color space - RGB, YCbCr, HSV, LAB')
+    parser.add_argument('--decay_type',
+                        default='none',
+                        help='none, step, exp, time')
+    parser.add_argument('--shape_type',
+                        default='triangular',
+                        help='triangular, flat')
     args = parser.parse_args()
 
     args.device = None
