@@ -30,18 +30,16 @@ class ItrackerImageModel(nn.Module):
     def __init__(self):
         super(ItrackerImageModel, self).__init__()
         self.model = models.resnet18(pretrained=True)
+        self.conv = nn.Sequential(*list(self.model.children())[:-2])
 
         # Freeze the parameters
-        for param in self.model.parameters():
+        for param in self.conv.parameters():
             param.requires_grad = False
 
-        fc = nn.Linear(512, 512)
-
-        self.model.fc = fc
-
     def forward(self, x):
-        x = self.model(x)
-        # 512
+        x = self.conv(x)
+        x = x.view(x.size(0), -1)
+        # 25088
         return x
 
 
@@ -51,9 +49,9 @@ class FaceImageModel(nn.Module):
         self.conv = ItrackerImageModel()
         self.fc = nn.Sequential(
             # FC-F1
-            # 512
+            # 25088
             nn.Dropout(0.1),
-            nn.Linear(512, 128),
+            nn.Linear(25088, 128),
             # 128
             nn.ReLU(inplace=True),
 
@@ -68,7 +66,7 @@ class FaceImageModel(nn.Module):
     def forward(self, x):
         # 3C x 224H x 224W
         x = self.conv(x)
-        # 512
+        # 25088
         x = self.fc(x)
         # 64
         return x
@@ -106,7 +104,7 @@ class FaceGridModel(nn.Module):
 class ITrackerModel(nn.Module):
     def __init__(self):
         super(ITrackerModel, self).__init__()
-        # 3Cx224Hx224W --> 512
+        # 3Cx224Hx224W --> 25088
         self.eyeModel = ItrackerImageModel()
         # 3Cx224Hx224W --> 64
         self.faceModel = FaceImageModel()
@@ -117,8 +115,8 @@ class ITrackerModel(nn.Module):
         self.eyesFC = nn.Sequential(
             # FC-E1
             nn.Dropout(0.1),
-            # 512
-            nn.Linear(2 * 512, 128),
+            # 50176
+            nn.Linear(2 * 25088, 128),
             # 128
             nn.ReLU(inplace=True),
             # 128
