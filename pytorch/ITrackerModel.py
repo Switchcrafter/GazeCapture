@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.parallel
 import torch.optim
 import torch.utils.data
+from torchvision import models
 
 '''
 Pytorch model for the iTracker.
@@ -28,69 +29,21 @@ class ItrackerImageModel(nn.Module):
     # ZeroPad = (k-1)/2
     def __init__(self):
         super(ItrackerImageModel, self).__init__()
-        self.features = nn.Sequential(
-            # The shape of the layers below is heavily influenced by AlexNet, discussed in the paper
-            # "ImageNet Classification with Deep Convolutional Neural Networks"
-            # https://papers.nips.cc/paper/4824-imagenet-classification-with-deep-convolutional-neural-networks.pdf
-            # The comments for the convolutional layers below are based on the descriptions from the AlexNet paper,
-            # with adjustments based on the "Eye Gaze for Everyone" paper.
-            # https://people.csail.mit.edu/khosla/papers/cvpr2016_Khosla.pdf
+        self.model = models.resnet18(pretrained=True)
 
-            # CONV-1
-            # 3C x 224H x 224W
-            nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=0),
-            # (<input dimension> + <padding> * <groups> - <kernel size>) / <stride> + 1 = <output dimension>
-            # (224 + 0 * 1 - 11) / 4 + 1 ~= 54
-            #
-            # <output channels> x <output dimension> x <output dimension>
-            # 96C x 54H x 54W
-            nn.MaxPool2d(kernel_size=3, stride=2),
-            # (<input dimension> - <kernel size>) / <stride> + 1 = <output dimension>
-            # (54 - 3) / 2 + 1 ~= 26
-            # 96C x 26H x 26W
-            nn.ReLU(inplace=True),
-            # 96C x 26H x 26W
+        # Freeze the parameters
+        for param in self.model.parameters():
+            param.requires_grad = False
 
-            # CONV-2
-            # 96C x 26H x 26W
-            nn.BatchNorm2d(96),
-            nn.Dropout2d(0.1),
-            nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2, groups=2),
-            # (26 + 2 * 2 - 5) / 1 + 1 ~= 26
-            # 256C x 26H x 26W
-            nn.MaxPool2d(kernel_size=3, stride=2),
-            # (26 - 3) / 2 + 1 ~= 12
-            # 256C x 12H x 12W
-            nn.ReLU(inplace=True),
-            # 256C x 12H x 12W
+        fc = nn.Linear(512, 512)
 
-            # CONV-3
-            # 256C x 12H x 12W
-            nn.BatchNorm2d(256),
-            nn.Dropout2d(0.1),
-            nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1),
-            # (12 + 2 * 1 - 3) / 1 + 1 ~= 12
-            # 384C x 12H x 12W
-            nn.ReLU(inplace=True),
-            # 384C x 12H x 12W
-
-            # CONV-4
-            # 384C x 12H x 12W
-            nn.BatchNorm2d(384),
-            nn.Dropout2d(0.1),
-            nn.Conv2d(384, 64, kernel_size=1, stride=1, padding=0),
-            # (12 + 2 * 1 - 3) / 1 + 1 ~= 12
-            # 64C x 12H x 12W
-            nn.ReLU(inplace=True),
-            # 64C x 12H x 12W
-        )
+        self.model.fc = fc
 
     def forward(self, x):
-        x = self.features(x)
-        # 64C x 12H x 12W
-        x = x.view(x.size(0), -1)
-        # 9,216 (64x12x12)
+        x = self.model(x)
+        # 512
         return x
+
 
 class FaceImageModel(nn.Module):
     def __init__(self):
@@ -98,9 +51,9 @@ class FaceImageModel(nn.Module):
         self.conv = ItrackerImageModel()
         self.fc = nn.Sequential(
             # FC-F1
-            # 9,216 (64x12x12)
+            # 512
             nn.Dropout(0.1),
-            nn.Linear(12 * 12 * 64, 128),
+            nn.Linear(512, 128),
             # 128
             nn.ReLU(inplace=True),
 
@@ -115,7 +68,7 @@ class FaceImageModel(nn.Module):
     def forward(self, x):
         # 3C x 224H x 224W
         x = self.conv(x)
-        # 9,216 (64x12x12)
+        # 512
         x = self.fc(x)
         # 64
         return x
@@ -153,7 +106,7 @@ class FaceGridModel(nn.Module):
 class ITrackerModel(nn.Module):
     def __init__(self):
         super(ITrackerModel, self).__init__()
-        # 3Cx224Hx224W --> 9,216 (64x12x12)
+        # 3Cx224Hx224W --> 512
         self.eyeModel = ItrackerImageModel()
         # 3Cx224Hx224W --> 64
         self.faceModel = FaceImageModel()
@@ -164,8 +117,8 @@ class ITrackerModel(nn.Module):
         self.eyesFC = nn.Sequential(
             # FC-E1
             nn.Dropout(0.1),
-            # 18,432‬ (64x12x12)*2
-            nn.Linear(2 * 12 * 12 * 64, 128),
+            # 512
+            nn.Linear(2 * 512, 128),
             # 128
             nn.ReLU(inplace=True),
             # 128
