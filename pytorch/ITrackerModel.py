@@ -32,9 +32,9 @@ class ItrackerImageModel(nn.Module):
         self.model = models.resnet18(pretrained=True)
         self.conv = nn.Sequential(*list(self.model.children())[:-2])
 
-        # Freeze the parameters
-        for param in self.conv.parameters():
-            param.requires_grad = False
+        # # Freeze the parameters
+        # for param in self.conv.parameters():
+        #     param.requires_grad = False
 
     def forward(self, x):
         x = self.conv(x)
