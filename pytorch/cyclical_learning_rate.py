@@ -2,7 +2,7 @@ import math
 
 
 def decay_function(decay_type, epochs_per_step):
-    if decay_type == 'no_decay':
+    if decay_type == 'none':
         decay = lambda current_epoch: 1.
     elif decay_type == 'step_decay':
         drop = 0.5

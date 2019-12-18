@@ -166,11 +166,12 @@ def main():
     batch_count = math.ceil(datasets['train'].size / batch_size)
     step_size = EPOCHS_PER_STEP * batch_count
     clr = cyclical_learning_rate.cyclical_lr(batch_count,
-                      shape=cyclical_learning_rate.shape_function(args.shape_type, step_size),
-                      decay=cyclical_learning_rate.decay_function(args.decay_type, EPOCHS_PER_STEP),
-                      min_lr=END_LR / LR_FACTOR,
-                      max_lr=END_LR,
-                      )
+                                             shape=cyclical_learning_rate.shape_function(args.shape_type,
+                                                                                         step_size),
+                                             decay=cyclical_learning_rate.decay_function(args.decay_type,
+                                                                                         EPOCHS_PER_STEP),
+                                             min_lr=END_LR / LR_FACTOR,
+                                             max_lr=END_LR)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr])
 
     if doTest:
@@ -405,9 +406,11 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
 
             # concatenate both real and adversarial loss functions
             loss = loss + loss_adv
+            del loss_adv
 
         # backprop the loss
         loss.backward()
+        del loss
 
         # optimize
         optimizer.step()

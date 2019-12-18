@@ -60,11 +60,12 @@ def main():
     batch_count = math.ceil(dataset_size / batch_size)  # batches per epoch
     step_size = EPOCHS_PER_STEP * batch_count  # batches per step
     clr = cyclical_learning_rate.cyclical_lr(batch_count,
-                      shape=cyclical_learning_rate.shape_function(shape_type, step_size),
-                      decay=cyclical_learning_rate.decay_function(decay_type, EPOCHS_PER_STEP),
-                      min_lr=min_lr,
-                      max_lr=max_lr,
-                      )
+                                             shape=cyclical_learning_rate.shape_function(shape_type,
+                                                                                         step_size),
+                                             decay=cyclical_learning_rate.decay_function(decay_type,
+                                                                                         EPOCHS_PER_STEP),
+                                             min_lr=min_lr,
+                                             max_lr=max_lr)
 
     batch_num = 0
     all_lrs = []
