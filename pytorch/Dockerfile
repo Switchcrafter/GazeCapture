@@ -28,6 +28,8 @@ RUN pip3 install scipy
 RUN pip3 install jsonpatch
 RUN pip3 install visdom
 RUN pip3 install torchtoolbox
+RUN pip3 install --extra-index-url https://developer.download.nvidia.com/compute/redist/cuda/10.0 nvidia-dali
+RUN pip3 install matplotlib
 
 # Execute the python
 ENTRYPOINT ["python"]

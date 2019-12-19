@@ -1,88 +1,55 @@
-import torch.utils.data as data
-import scipy.io as sio
-from PIL import Image
+from __future__ import division
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
+# %matplotlib inline
+
+# import collections
+import numpy as np
+# from random import shuffle
+from nvidia.dali.pipeline import Pipeline
+import nvidia.dali.ops as ops
+import nvidia.dali.types as types
+from nvidia.dali.plugin.pytorch import DALIGenericIterator
+
 import os
 import os.path
-import torchvision.transforms as transforms
+import scipy.io as sio
 import torch
-import numpy as np
-
 from Utilities import centeredText
 
-'''
-Data loader for the iTracker.
-Use prepareDataset.py to convert the dataset from http://gazecapture.csail.mit.edu/ to proper format.
-
-Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018.
-
-Website: http://gazecapture.csail.mit.edu/
-
-Cite:
-
-Eye Tracking for Everyone
-K.Krafka*, A. Khosla*, P. Kellnhofer, H. Kannan, S. Bhandarkar, W. Matusik and A. Torralba
-IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2016
-
-@inproceedings{cvpr2016_gazecapture,
-Author = {Kyle Krafka and Aditya Khosla and Petr Kellnhofer and Harini Kannan and Suchendra Bhandarkar and Wojciech Matusik and Antonio Torralba},
-Title = {Eye Tracking for Everyone},
-Year = {2016},
-Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
-}
-
-'''
-
-
-def loadMetadata(filename, silent=False):
-    try:
-        # http://stackoverflow.com/questions/6273634/access-array-contents-from-a-mat-file-loaded-using-scipy-io-loadmat-python
+class ITrackerMetadata(object):
+    def __init__(self, dataPath, silent=True):
         if not silent:
-            print('\tReading metadata from %s...' % filename)
-        metadata = sio.loadmat(filename, squeeze_me=True, struct_as_record=False)
-    except:
-        print('\tFailed to read the meta file "%s"!' % filename)
-        return None
-    return metadata
-
-
-def normalize_image_transform(image_size, split, jitter):
-    if jitter and split == 'train':
-        normalize_image = transforms.Compose([
-            transforms.Resize(240),
-            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
-            transforms.RandomCrop(image_size),
-            transforms.Resize(image_size),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])  # Well known ImageNet values
-        ])
-    else:
-        normalize_image = transforms.Compose([
-            transforms.Resize(image_size),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])  # Well known ImageNet values
-        ])
-
-    return normalize_image
-
-
-class ITrackerData(data.Dataset):
-    def __init__(self, dataPath, imSize, gridSize, split='train', silent=False, jitter=True, color_space='YCbCr'):
-
-        self.dataPath = dataPath
-        self.imSize = imSize
-        self.gridSize = gridSize
-        self.color_space = color_space
-
-        print('Loading iTracker dataset...')
+            print('Loading iTracker dataset')
         metadata_file = os.path.join(dataPath, 'metadata.mat')
+        self.metadata = self.loadMetadata(metadata_file, silent)
 
-        if metadata_file is None or not os.path.isfile(metadata_file):
-            raise RuntimeError('There is no such file %s! Provide a valid dataset path.' % metadata_file)
-        self.metadata = loadMetadata(metadata_file, silent)
-        if self.metadata is None:
-            raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % metadata_file)
+    def loadMetadata(self, filename, silent):
+        if filename is None or not os.path.isfile(filename):
+            raise RuntimeError('There is no such file %s! Provide a valid dataset path.' % filename)
 
-        self.normalize_image = normalize_image_transform(image_size=self.imSize, jitter=jitter, split=split)
+        try:
+            # http://stackoverflow.com/questions/6273634/access-array-contents-from-a-mat-file-loaded-using-scipy-io-loadmat-python
+            if not silent:
+                print('\tReading metadata from %s' % filename)
+            metadata = sio.loadmat(filename, squeeze_me=True, struct_as_record=False)
+        except:
+            raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % filename)
+
+        return metadata
+
+class ITrackerData(object):
+    def __init__(self, batch_size, dataPath, metadata, split, gridSize, silent=True):
+        self.batch_size = batch_size
+        self.dataPath = dataPath
+        self.gridSize = gridSize
+        self.metadata = metadata
+
+        # if not silent:
+        #     print('Loading iTracker dataset')
+        # metadata_file = os.path.join(dataPath, 'metadata.mat')
+        # self.metadata = self.loadMetadata(metadata_file, silent)
+        # self.metadata = ITrackerMetadata(metadata_file, silent)
 
         if split == 'test':
             mask = self.metadata['labelTest']
@@ -96,16 +63,30 @@ class ITrackerData(data.Dataset):
             raise Exception('split should be test, val or train. The value of split was: {}'.format(split))
 
         self.indices = np.argwhere(mask)[:, 0]
-        print('Loaded iTracker dataset split "%s" with %d records...' % (split, len(self.indices)))
+        if not silent:
+            print('Loaded iTracker dataset split "%s" with %d records.' % (split, len(self.indices)))
 
-    def loadImage(self, path):
-        try:
-            # ToDo: Try YCbCr, HSV, LAB format
-            # im = np.array(Image.open(path).convert('YCbCr'))
-            im = Image.open(path).convert(self.color_space)
-        except OSError:
-            raise RuntimeError('Could not read image: ' + path)
-        return im
+    def __len__(self):
+        return len(self.indices)
+
+    def __getitem__(self, index):
+        rowIndex = self.indices[index]
+        imFacePath = os.path.join(self.dataPath,
+                                  '%05d/appleFace/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                                               self.metadata['frameIndex'][rowIndex]))
+        imEyeLPath = os.path.join(self.dataPath,
+                                  '%05d/appleLeftEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                                                  self.metadata['frameIndex'][rowIndex]))
+        imEyeRPath = os.path.join(self.dataPath,
+                                  '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                                                   self.metadata['frameIndex'][rowIndex]))
+        gaze = np.array([self.metadata['labelDotXCam'][rowIndex], self.metadata['labelDotYCam'][rowIndex]], np.float32)
+        frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]])
+        faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][rowIndex, :])
+        row = np.array([int(rowIndex)], dtype = np.uint8)
+        index = np.array([int(index)], dtype = np.uint8)
+
+        return row, imFacePath, imEyeLPath, imEyeRPath, faceGrid, gaze, frame, index
 
     def makeGrid(self, params):
         gridLen = self.gridSize[0] * self.gridSize[1]
@@ -120,42 +101,107 @@ class ITrackerData(data.Dataset):
         grid[cond] = 1
         return grid
 
-    def __getitem__(self, real_index):
-        index = self.indices[real_index]
+    def __iter__(self):
+        self.index = 0
+        self.size = len(self.indices)
+        return self
 
-        imFacePath = os.path.join(self.dataPath,
-                                  '%05d/appleFace/%05d.jpg' % (self.metadata['labelRecNum'][index],
-                                                               self.metadata['frameIndex'][index]))
-        imEyeLPath = os.path.join(self.dataPath,
-                                  '%05d/appleLeftEye/%05d.jpg' % (self.metadata['labelRecNum'][index],
-                                                                  self.metadata['frameIndex'][index]))
-        imEyeRPath = os.path.join(self.dataPath,
-                                  '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][index],
-                                                                   self.metadata['frameIndex'][index]))
+    def __next__(self):
+        rowBatch = []
+        imFaceBatch = []
+        imEyeLBatch = []
+        imEyeRBatch = []
+        faceGridBatch = []
+        gazeBatch = []
+        frameBatch = []
+        indexBatch = []
+        labels = []
+        for _ in range(self.batch_size):
+            row, imFacePath, imEyeLPath, imEyeRPath, faceGrid, gaze, frame, index = self.__getitem__(self.index)
+            # print(row, index, self.index, self.size)
+            imFace = open(imFacePath, 'rb')
+            imEyeL = open(imEyeLPath, 'rb')
+            imEyeR = open(imEyeRPath, 'rb')
 
-        imFace = self.loadImage(imFacePath)
-        imEyeL = self.loadImage(imEyeLPath)
-        imEyeR = self.loadImage(imEyeRPath)
+            rowBatch.append(row)
+            imFaceBatch.append(np.frombuffer(imFace.read(), dtype = np.uint8))
+            imEyeLBatch.append(np.frombuffer(imEyeL.read(), dtype = np.uint8))
+            imEyeRBatch.append(np.frombuffer(imEyeR.read(), dtype = np.uint8))
+            faceGridBatch.append(faceGrid)
+            gazeBatch.append(gaze)
+            frameBatch.append(frame)
+            indexBatch.append(index)
 
-        imFace = self.normalize_image(imFace)
-        imEyeL = self.normalize_image(imEyeL)
-        imEyeR = self.normalize_image(imEyeR)
+            imFace.close()
+            imEyeL.close()
+            imEyeR.close()
 
-        gaze = np.array([self.metadata['labelDotXCam'][index], self.metadata['labelDotYCam'][index]], np.float32)
-        frame = np.array([self.metadata['labelRecNum'][index], self.metadata['frameIndex'][index]])
+            self.index = (self.index + 1) % self.size
+        return (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, faceGridBatch, gazeBatch, frameBatch, indexBatch)
 
-        faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][index, :])
+    next = __next__
 
-        # to tensor
-        row = torch.LongTensor([int(index)])
-        faceGrid = torch.FloatTensor(faceGrid)
-        gaze = torch.FloatTensor(gaze)
+class ExternalSourcePipeline(Pipeline):
+    def __init__(self, data, batch_size, imageSize, split, silent, num_threads, device_id):
+        super(ExternalSourcePipeline, self).__init__(batch_size,
+                                      num_threads,
+                                      device_id,
+                                      seed=12)
 
-        return row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, real_index
+        self.sourceIterator = iter(data)
+        self.rowBatch = ops.ExternalSource()
+        self.imFaceBatch = ops.ExternalSource()
+        self.imEyeLBatch = ops.ExternalSource()
+        self.imEyeRBatch = ops.ExternalSource()
+        self.faceGridBatch = ops.ExternalSource()
+        self.gazeBatch = ops.ExternalSource()
+        self.frameBatch = ops.ExternalSource()
+        self.indexBatch = ops.ExternalSource()
+        # ImageDecoder below accepts  CPU inputs, but returns GPU outputs (hence device = "mixed"), HWC ordering
+        self.decode = ops.ImageDecoder(device = "mixed", output_type = types.RGB)
+        # The rest of pre-processing is done on the GPU
+        self.resize = ops.Resize(device="gpu", resize_x=256, resize_y=256)
+        # self.res = ops.RandomResizedCrop(device="gpu", size =(224,224))
+        # HWC->CHW, crop (224,224), normalize
+        self.norm = ops.CropMirrorNormalize(device="gpu",
+                                            output_dtype=types.FLOAT,
+                                            output_layout='CHW',
+                                            crop=(224, 224),
+                                            image_type=types.RGB,
+                                            mean=[0.485 * 255,0.456 * 255,0.406 * 255],
+                                            std=[0.229 * 255,0.224 * 255,0.225 * 255])
+        self.cast = ops.Cast(device='gpu', dtype=types.FLOAT)#types.INT32,types.UINT8,types.FLOAT
 
-    def __len__(self):
-        return len(self.indices)
+    def define_graph(self):
+        self.row = self.rowBatch()
+        self.imFace = self.imFaceBatch()
+        self.imEyeL = self.imEyeLBatch()
+        self.imEyeR = self.imEyeRBatch()
+        self.faceGrid = self.faceGridBatch()
+        self.gaze = self.gazeBatch()
+        self.frame = self.frameBatch()
+        self.index = self.indexBatch()
 
+        imFaceD = self.norm(self.resize(self.decode(self.imFace)))
+        imEyeLD = self.norm(self.resize(self.decode(self.imEyeL)))
+        imEyeRD = self.norm(self.resize(self.decode(self.imEyeR)))
+
+        return (self.row, imFaceD, imEyeLD, imEyeRD, self.faceGrid, self.gaze, self.frame, self.index)
+
+    @property
+    def size(self):
+        return len(self.sourceIterator)
+
+    def iter_setup(self):
+        (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, faceGridBatch, gazeBatch, frameBatch, indexBatch) = self.sourceIterator.next()
+        self.feed_input(self.row, rowBatch)
+        self.feed_input(self.imFace, imFaceBatch)
+        self.feed_input(self.imEyeL, imEyeLBatch)
+        self.feed_input(self.imEyeR, imEyeRBatch)
+        self.feed_input(self.faceGrid, faceGridBatch)
+        self.feed_input(self.gaze, gazeBatch)
+        self.feed_input(self.frame, frameBatch)
+        self.feed_input(self.index, indexBatch)
 
 class Dataset:
     def __init__(self, split, data, size, loader):
@@ -164,29 +210,80 @@ class Dataset:
         self.size = size
         self.loader = loader
 
-
-def load_data(split, path, image_size, grid_size, workers, batch_size, verbose, color_space):
-    data = ITrackerData(path, image_size, grid_size, split=split, silent=not verbose, color_space=color_space)
-    size = len(data.indices)
-    shuffle = True if split == 'train' else False
-    loader = torch.utils.data.DataLoader(
-        data,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        num_workers=workers,
-        pin_memory=False)
-
+def load_data(split, dataPath, metadata, image_size, grid_size, workers, batch_size, verbose, color_space):
+    data = ITrackerData(batch_size, dataPath, metadata, split, grid_size, silent=not verbose)
+    size = len(data)
+    # shuffle = True if split == 'train' else False
+    #todo: shuffle, deviceId, color_space
+    pipe = ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=workers, device_id = 0)
+    pipe.build()
+    # Todo: pin memory
+    loader = DALIGenericIterator([pipe], ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=pipe.size, fill_last_batch=False)
     return Dataset(split, data, size, loader)
-
 
 def load_all_data(path, image_size, grid_size, workers, batch_size, verbose, color_space='YCbCr'):
     print(centeredText('Loading Data'))
+    metadata = ITrackerMetadata(path, silent=not verbose).metadata
     all_data = {
         # training data : model sees and learns from this data
-        'train': load_data('train', path, image_size, grid_size, workers, batch_size, verbose, color_space),
+        'train': load_data('train', path, metadata, image_size, grid_size, workers, batch_size, verbose, color_space),
         # validation data : model sees but never learns from this data
-        'val': load_data('val', path, image_size, grid_size, workers, batch_size, verbose, color_space),
+        'val': load_data('val', path, metadata, image_size, grid_size, workers, batch_size, verbose, color_space),
         # test data : model never sees or learns from this data
-        'test': load_data('test', path, image_size, grid_size, workers, batch_size, verbose, color_space)
+        'test': load_data('test', path, metadata, image_size, grid_size, workers, batch_size, verbose, color_space)
     }
     return all_data
+
+def show_images(image_batch, batch_size):
+    columns = 4
+    rows = (batch_size + 1) // (columns)
+    fig = plt.figure(0, figsize = (32,(32 // columns) * rows))
+    gs = gridspec.GridSpec(rows, columns)
+    for j in range(rows*columns):
+        plt.subplot(gs[j])
+        plt.axis("off")
+        # CHW -> HWC
+        plt.imshow(np.transpose(image_batch[j], (1,2,0)))
+        # # HWC format
+        # plt.imshow(image_batch[j])
+    plt.draw()
+    plt.pause(0.001)
+
+if __name__ == "__main__":
+    print("Running")
+    batch_size = 8
+    dataPath='/home/jatin/data/gc-data-prepped/'
+    IMAGE_SIZE=(256,256)
+    verbose=True
+    workers=2
+    FACE_GRID_SIZE=(25,25)
+    verbose=True
+    color_space='RGB'
+    datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space)
+
+    for i, data in enumerate(datasets['val'].loader):
+        batch_data = data[0]
+        row = batch_data["row"]
+        imFace = batch_data["imFace"]
+        imEyeL = batch_data["imEyeL"]
+        imEyeR = batch_data["imEyeR"]
+        faceGrid = batch_data["faceGrid"]
+        gaze = batch_data["gaze"]
+        frame = batch_data["frame"]
+        indices = batch_data["indices"]
+        # imFace.type('torch.FloatTensor').to(device)
+        print(i, row[0], indices[1])
+        # print(imFace.to('cpu'))
+        plt.ion()
+        plt.show()
+        show_images(imFace.to('cpu'), batch_size=batch_size)
+
+    # (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) = pipe.run()
+    # print(imFace.as_cpu().at(3).shape)
+    # print(imFace.as_cpu().at(3))
+    # print(imFace)#<nvidia.dali.backend_impl.TensorListGPU
+    # show_images(imFace.as_cpu(), batch_size=batch_size)
+    # input('')
+
+
+
