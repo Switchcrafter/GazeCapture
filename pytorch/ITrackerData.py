@@ -157,20 +157,35 @@ class ExternalSourcePipeline(Pipeline):
         self.gazeBatch = ops.ExternalSource()
         self.frameBatch = ops.ExternalSource()
         self.indexBatch = ops.ExternalSource()
-        # ImageDecoder below accepts  CPU inputs, but returns GPU outputs (hence device = "mixed"), HWC ordering
-        self.decode = ops.ImageDecoder(device = "mixed", output_type = types.RGB)
-        # The rest of pre-processing is done on the GPU
-        self.resize = ops.Resize(device="gpu", resize_x=256, resize_y=256)
-        # self.res = ops.RandomResizedCrop(device="gpu", size =(224,224))
-        # HWC->CHW, crop (224,224), normalize
-        self.norm = ops.CropMirrorNormalize(device="gpu",
-                                            output_dtype=types.FLOAT,
-                                            output_layout='CHW',
-                                            crop=(224, 224),
-                                            image_type=types.RGB,
-                                            mean=[0.485 * 255,0.456 * 255,0.406 * 255],
-                                            std=[0.229 * 255,0.224 * 255,0.225 * 255])
-        self.cast = ops.Cast(device='gpu', dtype=types.FLOAT)#types.INT32,types.UINT8,types.FLOAT
+
+        GPU = True
+        if GPU:
+            # ImageDecoder below accepts  CPU inputs, but returns GPU outputs (hence device = "mixed"), HWC ordering
+            self.decode = ops.ImageDecoder(device = "mixed", output_type = types.RGB)
+            # The rest of pre-processing is done on the GPU
+            self.resize = ops.Resize(device="gpu", resize_x=256, resize_y=256)
+            # self.res = ops.RandomResizedCrop(device="gpu", size =(224,224))
+            # HWC->CHW, crop (224,224), normalize
+            self.norm = ops.CropMirrorNormalize(device="gpu",
+                                                output_dtype=types.FLOAT,
+                                                output_layout='CHW',
+                                                crop=(224, 224),
+                                                image_type=types.RGB,
+                                                mean=[0.485 * 255,0.456 * 255,0.406 * 255],
+                                                std=[0.229 * 255,0.224 * 255,0.225 * 255])
+            self.cast = ops.Cast(device='gpu', dtype=types.FLOAT)#types.INT32,types.UINT8,types.FLOAT
+        else:
+            self.decode = ops.ImageDecoder(device = "cpu", output_type = types.RGB)
+            self.resize = ops.Resize(device="cpu", resize_x=256, resize_y=256)
+            self.norm = ops.CropMirrorNormalize(device="cpu",
+                                                output_dtype=types.FLOAT,
+                                                output_layout='CHW',
+                                                crop=(224, 224),
+                                                image_type=types.RGB,
+                                                mean=[0.485 * 255, 0.456 * 255, 0.406 * 255],
+                                                std=[0.229 * 255, 0.224 * 255, 0.225 * 255])
+            # self.cast = ops.Cast(device='cpu', dtype=types.FLOAT)
+
 
     def define_graph(self):
         self.row = self.rowBatch()
@@ -213,12 +228,18 @@ class Dataset:
 def load_data(split, dataPath, metadata, image_size, grid_size, workers, batch_size, verbose, color_space):
     data = ITrackerData(batch_size, dataPath, metadata, split, grid_size, silent=not verbose)
     size = len(data)
+    num_gpus = torch.cuda.device_count()
     # shuffle = True if split == 'train' else False
     #todo: shuffle, deviceId, color_space
-    pipe = ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=workers, device_id = 0)
-    pipe.build()
+    # pipe = ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=workers, device_id = 0)
+    # pipe.build()
+    # # Todo: pin memory
+    # loader = PyTorchIterator([pipe], ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=pipe.size, fill_last_batch=False)
+    # loader = DALIGenericIterator([pipe], ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=pipe.size, fill_last_batch=False)
+    pipes = [ExternalSourcePipeline(data, batch_size=batch_size//num_gpus, imageSize=image_size, split=split, silent=not verbose, num_threads=workers//num_gpus, device_id = i) for i in range(num_gpus)]
+    pipes[0].build()
     # Todo: pin memory
-    loader = DALIGenericIterator([pipe], ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=pipe.size, fill_last_batch=False)
+    loader = DALIGenericIterator(pipes, ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=pipes[0].size, fill_last_batch=False)
     return Dataset(split, data, size, loader)
 
 def load_all_data(path, image_size, grid_size, workers, batch_size, verbose, color_space='YCbCr'):
