@@ -470,7 +470,7 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
 
     # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(dataset.loader):
     for i, data in enumerate(dataset.loader):
-        batch_data = data[0]
+        batch_data = data[int(args.local_rank)]
         row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"],\
                                             batch_data["imEyeL"], batch_data["imEyeR"], batch_data["faceGrid"],\
                                             batch_data["gaze"], batch_data["frame"], batch_data["indices"]
