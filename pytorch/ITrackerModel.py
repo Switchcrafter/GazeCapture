@@ -5,6 +5,9 @@ import torch.optim
 import torch.utils.data
 from torchvision import models
 
+from efficientnet_pytorch import EfficientNet
+
+
 '''
 Pytorch model for the iTracker.
 Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018. 
@@ -29,17 +32,26 @@ class ItrackerImageModel(nn.Module):
     # ZeroPad = (k-1)/2
     def __init__(self):
         super(ItrackerImageModel, self).__init__()
-        self.model = models.resnet18(pretrained=True)
-        self.conv = nn.Sequential(*list(self.model.children())[:-2])
+        # self.model = models.resnet18(pretrained=True)
+        # self.conv = nn.Sequential(*list(self.model.children())[:-2])
 
         # # Freeze the parameters
         # for param in self.conv.parameters():
         #     param.requires_grad = False
 
+        self.model = EfficientNet.from_pretrained('efficientnet-b0')
+
     def forward(self, x):
-        x = self.conv(x)
+        # x = self.conv(x)
+        # # 512x7x7
+        # x = x.view(x.size(0), -1)
+        # # 25088 (512×7×7)
+
+        x = self.model.extract_features(x)
+        # 1280x7x7
         x = x.view(x.size(0), -1)
-        # 25088 (512×7×7)
+        # 62720 (1280x7x7)
+
         return x
 
 
@@ -51,7 +63,7 @@ class FaceImageModel(nn.Module):
             # FC-F1
             # 25088
             nn.Dropout(0.1),
-            nn.Linear(25088, 128),
+            nn.Linear(62720, 128),
             # 128
             nn.ReLU(inplace=True),
 
@@ -116,7 +128,7 @@ class ITrackerModel(nn.Module):
             # FC-E1
             nn.Dropout(0.1),
             # 50176
-            nn.Linear(2 * 25088, 128),
+            nn.Linear(2 * 62720, 128),
             # 128
             nn.ReLU(inplace=True),
             # 128
