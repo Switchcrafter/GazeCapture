@@ -41,6 +41,22 @@ class ItrackerImageModel(nn.Module):
 
         self.model = EfficientNet.from_pretrained('efficientnet-b0')
 
+        # B0
+        # 1280x7x7
+        # 62720
+        #
+        # B1
+        # 1280x7x7
+        # 62720
+        #
+        # B2
+        # 1408x7x7
+        # 68992
+        #
+        # B3
+        # 1536x7x7
+        # 75264
+
     def forward(self, x):
         # x = self.conv(x)
         # # 512x7x7
