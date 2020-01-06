@@ -96,29 +96,34 @@ def main():
 
     # GPU optimizations and modes
     cudnn.benchmark = True
-    if using_cuda and len(args.local_rank) > 1:
+    if using_cuda:
         if args.mode == 'dp':
             print('Using DataParallel Backend')
+            if not args.disable_sync:
+                from sync_batchnorm import convert_model
+                # Convert batchNorm layers into synchronized batchNorm
+                model = convert_model(model)
             model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=device)
         elif args.mode == 'ddp1':
+            # Single-Process Multiple-GPU: You'll observe all gpus running a single process (processes with same PID)
             print('Using DistributedDataParallel Backend - Single-Process Multi-GPU')
-            # Single-Process Multi-GPU
             torch.distributed.init_process_group(backend="nccl")
-            model = torch.nn.DistributedDataParallel(model)
+            model = torch.nn.parallel.DistributedDataParallel(model)
         elif args.mode == 'ddp2':
-            print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
-            # Multi-Process Single-GPU
-            # args.world_size = os.environ.get('WORLD_SIZE') or 1
-            # torch.distributed.init_process_group(backend='nccl', world_size=args.world_size, init_method='env://')
+            # Multi-Process Single-GPU : You'll observe multiple gpus running different processes (different PIDs)
+            # OMP_NUM_THREADS = nb_cpu_threads / nproc_per_node
             torch.distributed.init_process_group(backend='nccl')
-            model = torch.nn.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank[0])
+            if not args.disable_sync:
+                # Convert batchNorm layers into synchronized batchNorm
+                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank[0])
+            ###### code after this place runs in their own process #####
+            setPrintPolicy(args.master, torch.distributed.get_rank())
+            print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
         else:
-            from sync_batchnorm import convert_model, patch_replication_callback, DataParallelWithCallback
-            # Convert batchNorm layers into synchronized batchNorm
-            model = convert_model(model)
-            # model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=device)
-            # patch_replication_callback(model)  # monkey-patching
-            model = DataParallelWithCallback(model, device_ids=args.local_rank).to(device=device)
+            print("No Parallelization")
+    else:
+        print("Cuda disabled")
 
     eval_RMSError = math.inf
     best_RMSError = math.inf
@@ -157,7 +162,7 @@ def main():
 
     totalstart_time = datetime.now()
 
-    datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space)
+    datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space, not args.disable_boost)
 
     #     criterion = nn.MSELoss(reduction='sum').to(device=device)
     criterion = nn.MSELoss(reduction='mean').to(device=device)
@@ -225,7 +230,7 @@ def main():
         for epoch in range(epoch, epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
             start_time = datetime.now()
-            learning_rates[epoch - 1] = scheduler.get_lr()
+            learning_rates[epoch - 1] = scheduler.get_last_lr()
 
             args.vis.reset()
             # train for one epoch
@@ -244,7 +249,7 @@ def main():
             best_RMSErrors[epoch - 1] = best_RMSError
             RMSErrors[epoch - 1] = eval_RMSError
 
-            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, scheduler.get_lr())
+            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, scheduler.get_last_lr())
             args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
             args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, eval_RMSError)
             args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
@@ -718,6 +723,12 @@ def resize(l, newsize, filling=None):
     else:
         del l[newsize:]
 
+def setPrintPolicy(master, local_rank):
+    print("[PrintPolicy]", master, local_rank, "Verbatim" if local_rank == master else "Silent")
+    if local_rank == master:
+        sys.stdout = sys.__stdout__
+    else:
+        sys.stdout = open(os.devnull, 'w')
 
 def parse_commandline_arguments():
     parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
@@ -742,10 +753,13 @@ def parse_commandline_arguments():
     parser.add_argument('--verbose', type=str2bool, nargs='?', const=True, default=False,
                         help="verbose mode - print details every batch")
     # Experimental options
-    parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--mode', help="Multi-GPU mode: dp, ddp1, [ddp2], ddp3", default='ddp2')
+    parser.add_argument('--batch_size', type=int, default=256)
+    parser.add_argument('--mode', help="Parallelization mode: [none], dp, ddp1, ddp2", default='none')
+    parser.add_argument('--disable_sync', action='store_true', default=False, help='Disable Sync BN')
+    parser.add_argument('--disable_boost', action='store_true', default=False, help='Disable eval boost')
     parser.add_argument('--name', help="Provide a name to the experiment", default='main')
-    parser.add_argument('--local_rank', help="", nargs='+', default=[0])
+    parser.add_argument('--local_rank', help="", nargs='+', default=list(range(torch.cuda.device_count())))
+    parser.add_argument('--master', type=int, default=0)
     parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
     parser.add_argument('--hsm_cycle', type=int, default=8)
     parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="Enables Adversarial Attack")
@@ -760,13 +774,28 @@ def parse_commandline_arguments():
 
     args.device = None
     usingCuda = False
+    if torch.cuda.device_count() > 1 and args.mode == "none":
+        print("##################################################################################################")
+        print("You're running in non-Parallelization mode ['none'] on a multi-GPU machine.\n \
+        Make sure you're not using `-m torch.distributed.launch --nproc_per_node=<num devices>`\n \
+        which would just create multiple parallel runs on different GPUs without any synchronization.\n \
+        For no parallelization use              : --local_rank 0 --mode 'none' \n \
+        For data parallelization use            : --local_rank 0 1 2 3 --mode 'dp' \n \
+        For distributed DP1 use                 : -m torch.distributed.launch --nproc_per_node=1 --mode 'ddp1' \n \
+        For distributed DP2 use                 : -m torch.distributed.launch --nproc_per_node=4 --mode 'ddp2' \n \
+        ")
+        print("##################################################################################################")
+    args.master = args.local_rank[0] if args.mode == 'dp' else args.master
+    args.batch_size = args.batch_size * torch.cuda.device_count() if args.mode == 'ddp1' else args.batch_size
     if not args.disable_cuda and torch.cuda.is_available() and len(args.local_rank) > 0:
         usingCuda = True
         # remove any device which doesn't exists
         args.local_rank = [int(d) for d in args.local_rank if 0 <= int(d) < torch.cuda.device_count()]
-        # # set args.local_rank[0] (the master node) as the current device
+        # set args.local_rank[0] as the current device
         torch.cuda.set_device(args.local_rank[0])
         args.device = torch.device("cuda")
+        if args.mode != 'dp' and args.mode != 'ddp1' and torch.cuda.device_count() > 1:
+            args.name = args.name + "_" + str(args.local_rank[0])
     else:
         args.device = torch.device('cpu')
 
