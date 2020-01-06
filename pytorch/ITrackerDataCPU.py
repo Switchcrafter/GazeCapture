@@ -65,7 +65,7 @@ def normalize_image_transform(image_size, split, jitter):
     return normalize_image
 
 
-class ITrackerData(data.Dataset):
+class ITrackerDataCPU(data.Dataset):
     def __init__(self, dataPath, imSize, gridSize, split='train', silent=False, jitter=True, color_space='YCbCr'):
 
         self.dataPath = dataPath
@@ -166,9 +166,11 @@ class Dataset:
 
 
 def load_data(split, path, image_size, grid_size, workers, batch_size, verbose, color_space):
-    data = ITrackerData(path, image_size, grid_size, split=split, silent=not verbose, color_space=color_space)
+    data = ITrackerDataCPU(path, image_size, grid_size, split=split, silent=not verbose, color_space=color_space)
     size = len(data.indices)
     shuffle = True if split == 'train' else False
+    if eval_boost:
+        batch_size = batch_size if split == 'train' else batch_size*2
     loader = torch.utils.data.DataLoader(
         data,
         batch_size=batch_size,
@@ -179,14 +181,14 @@ def load_data(split, path, image_size, grid_size, workers, batch_size, verbose, 
     return Dataset(split, data, size, loader)
 
 
-def load_all_data(path, image_size, grid_size, workers, batch_size, verbose, color_space='YCbCr'):
+def load_all_data(path, image_size, grid_size, workers, batch_size, verbose, color_space='YCbCr', eval_boost=True):
     print(centeredText('Loading Data'))
     all_data = {
         # training data : model sees and learns from this data
-        'train': load_data('train', path, image_size, grid_size, workers, batch_size, verbose, color_space),
+        'train': load_data('train', path, image_size, grid_size, workers, batch_size, verbose, color_space, eval_boost),
         # validation data : model sees but never learns from this data
-        'val': load_data('val', path, image_size, grid_size, workers, batch_size, verbose, color_space),
+        'val': load_data('val', path, image_size, grid_size, workers, batch_size, verbose, color_space, eval_boost),
         # test data : model never sees or learns from this data
-        'test': load_data('test', path, image_size, grid_size, workers, batch_size, verbose, color_space)
+        'test': load_data('test', path, image_size, grid_size, workers, batch_size, verbose, color_space, eval_boost)
     }
     return all_data
