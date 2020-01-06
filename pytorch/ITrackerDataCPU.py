@@ -65,7 +65,7 @@ def normalize_image_transform(image_size, split, jitter):
     return normalize_image
 
 
-class ITrackerData(data.Dataset):
+class ITrackerDataCPU(data.Dataset):
     def __init__(self, dataPath, imSize, gridSize, split='train', silent=False, jitter=True, color_space='YCbCr'):
 
         self.dataPath = dataPath
@@ -166,7 +166,7 @@ class Dataset:
 
 
 def load_data(split, path, image_size, grid_size, workers, batch_size, verbose, color_space):
-    data = ITrackerData(path, image_size, grid_size, split=split, silent=not verbose, color_space=color_space)
+    data = ITrackerDataCPU(path, image_size, grid_size, split=split, silent=not verbose, color_space=color_space)
     size = len(data.indices)
     shuffle = True if split == 'train' else False
     loader = torch.utils.data.DataLoader(

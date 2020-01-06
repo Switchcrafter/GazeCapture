@@ -16,7 +16,12 @@ import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 
-from ITrackerData import load_all_data
+DALI = True
+if DALI:
+    from ITrackerDataGPU import load_all_data
+else:
+    from ITrackerDataCPU import load_all_data
+
 from ITrackerModel import ITrackerModel
 from Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations
 
@@ -317,36 +322,44 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
 
     end = time.time()
 
-    # todo: HSM support for DALI
-    # # HSM Update - Every epoch
-    # if args.hsm:
-    #     # Reset every few epoch (hsm_cycle)
-    #     if epoch > 0 and epoch % args.hsm_cycle == 0:
-    #         args.multinomial_weights = torch.ones(dataset.size, dtype=torch.double)
-    #     # update dataloader and sampler
-    #     sampler = torch.utils.data.WeightedRandomSampler(args.multinomial_weights, int(len(args.multinomial_weights)),
-    #                                                      replacement=True)
-    #     loader = torch.utils.data.DataLoader(
-    #         dataset.loader.dataset,
-    #         batch_size=batch_size,
-    #         sampler=sampler,
-    #         num_workers=args.workers)
-    #     # Line-space for HSM meter
-    #     print('')
-    #     if not verbose:
-    #         args.sampling_bar.display(args.multinomial_weights)
-    # else:
-    #     loader = dataset.loader
+    # HSM Update - Every epoch
+    if args.hsm:
+        if DALI:
+            # todo: HSM support for DALI
+            loader = dataset.loader
+        else:
+            # Reset every few epoch (hsm_cycle)
+            if epoch > 0 and epoch % args.hsm_cycle == 0:
+                args.multinomial_weights = torch.ones(dataset.size, dtype=torch.double)
+            # update dataloader and sampler
+            sampler = torch.utils.data.WeightedRandomSampler(args.multinomial_weights, int(len(args.multinomial_weights)),
+                                                            replacement=True)
+            loader = torch.utils.data.DataLoader(
+                dataset.loader.dataset,
+                batch_size=batch_size,
+                sampler=sampler,
+                num_workers=args.workers)
+            # Line-space for HSM meter
+            print('')
+            if not verbose:
+                args.sampling_bar.display(args.multinomial_weights)
+    else:
+        loader = dataset.loader
 
     lrs = []
 
     # load data samples and train
     # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(loader):
     for i, data in enumerate(dataset.loader):
-        batch_data = data[0]
-        row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"],\
+        if DALI:
+            batch_data = data[0]
+            # batch_data = data[int(args.local_rank)]
+            row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"],\
                                             batch_data["imEyeL"], batch_data["imEyeR"], batch_data["faceGrid"],\
                                             batch_data["gaze"], batch_data["frame"], batch_data["indices"]
+        else:
+            (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) =  data
+        
         batchNum = i + 1
         actual_batch_size = imFace.size(0)
         num_samples += actual_batch_size
@@ -470,10 +483,15 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
 
     # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(dataset.loader):
     for i, data in enumerate(dataset.loader):
-        batch_data = data[int(args.local_rank)]
-        row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"],\
+        if DALI:
+            batch_data = data[0]
+            # print('###########',args.local_rank[0])
+            # batch_data = data[int(args.local_rank[0])]
+            row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"],\
                                             batch_data["imEyeL"], batch_data["imEyeR"], batch_data["faceGrid"],\
                                             batch_data["gaze"], batch_data["frame"], batch_data["indices"]
+        else:
+            (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) =  data
 
         batchNum = i + 1
         actual_batch_size = imFace.size(0)

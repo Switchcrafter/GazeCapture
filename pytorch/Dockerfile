@@ -29,6 +29,8 @@ RUN pip3 install jsonpatch
 RUN pip3 install visdom
 RUN pip3 install torchtoolbox
 RUN pip3 install --extra-index-url https://developer.download.nvidia.com/compute/redist/cuda/10.0 nvidia-dali
+# Alternatively download a wheel from http://developer.download.nvidia.com/compute/redist/cuda/10.0/nvidia-dali/
+# install as pip3 install <wheel>.whl
 RUN pip3 install matplotlib
 
 # Execute the python
@@ -56,3 +58,10 @@ ENV NVIDIA_DRIVER_CAPABILITIES all
 # GPU 3 as dataloader
 # sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=3 main.py --batch_size 64 --mode 'ddp2'
 # sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --batch_size 128 --mode 'dp' --local_rank 0 1 2
+
+# 1170 3gpu dp
+# 780/gpu 3gpu ddp 
+
+# unstable
+# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --batch_size 192 --mode 'ddp2'
+# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --batch_size 384 --mode 'dp' --local_rank 0 1 2 3

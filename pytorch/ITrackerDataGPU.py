@@ -38,7 +38,7 @@ class ITrackerMetadata(object):
 
         return metadata
 
-class ITrackerData(object):
+class ITrackerDataGPU(object):
     def __init__(self, batch_size, dataPath, metadata, split, gridSize, silent=True):
         self.batch_size = batch_size
         self.dataPath = dataPath
@@ -228,20 +228,20 @@ class Dataset:
 def load_data(split, dataPath, metadata, image_size, grid_size, workers, batch_size, verbose, color_space):
     num_gpus = torch.cuda.device_count()
     # shuffle = True if split == 'train' else False
-    distributed = True
+    distributed = False # distributed=True is currently unstable/experimental mode
     if not distributed:
-        data = ITrackerData(batch_size, dataPath, metadata, split, grid_size, silent=not verbose)
+        data = ITrackerDataGPU(batch_size, dataPath, metadata, split, grid_size, silent=not verbose)
         size = len(data)
         #todo: shuffle, deviceId, color_space
         pipe = ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=8, device_id = num_gpus-1)
         pipe.build()
         # Todo: pin memory, PyTorchIterator
         loader = DALIGenericIterator([pipe], ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=pipe.size, fill_last_batch=False)
-    else:
-        data = ITrackerData(batch_size//num_gpus, dataPath, metadata, split, grid_size, silent=not verbose)
+    else: # experimental - unstable (distributed mode)
+        data = ITrackerDataGPU(batch_size, dataPath, metadata, split, grid_size, silent=not verbose)
         size = len(data)
-        pipes = [ExternalSourcePipeline(data, batch_size=batch_size//num_gpus, imageSize=image_size, split=split, silent=not verbose, num_threads=8//num_gpus, device_id = i) for i in range(num_gpus)]
-        # pipes = [ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=8//num_gpus, device_id = i) for i in range(num_gpus)]
+        # pipes = [ExternalSourcePipeline(data, batch_size=batch_size//num_gpus, imageSize=image_size, split=split, silent=not verbose, num_threads=8//num_gpus, device_id = i) for i in range(num_gpus)]
+        pipes = [ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=8, device_id = i) for i in range(num_gpus)]
         pipes[0].build()
         # Todo: pin memory
         loader = DALIGenericIterator(pipes, ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=pipes[0].size, fill_last_batch=False)
@@ -278,7 +278,8 @@ def show_images(image_batch, batch_size):
 if __name__ == "__main__":
     print("Running")
     batch_size = 8
-    dataPath='/home/jatin/data/gc-data-prepped/'
+    # dataPath='/home/jatin/data/gc-data-prepped/'
+    dataPath='/data/gc-data-prepped/'
     IMAGE_SIZE=(256,256)
     verbose=True
     workers=2
@@ -300,9 +301,9 @@ if __name__ == "__main__":
         # imFace.type('torch.FloatTensor').to(device)
         print(i, row[0], indices[1])
         # print(imFace.to('cpu'))
-        plt.ion()
-        plt.show()
-        show_images(imFace.to('cpu'), batch_size=batch_size)
+        # plt.ion()
+        # plt.show()
+        # show_images(imFace.to('cpu'), batch_size=batch_size)
 
     # (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) = pipe.run()
     # print(imFace.as_cpu().at(3).shape)
