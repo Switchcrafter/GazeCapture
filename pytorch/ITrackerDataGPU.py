@@ -249,6 +249,7 @@ def load_data(split, dataPath, metadata, image_size, grid_size, workers, batch_s
 
 def load_all_data(path, image_size, grid_size, workers, batch_size, verbose, color_space='YCbCr'):
     print(centeredText('Loading Data'))
+    eval_boost=True
     metadata = ITrackerMetadata(path, silent=not verbose).metadata
     all_data = {
         # training data : model sees and learns from this data

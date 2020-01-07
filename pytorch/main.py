@@ -16,11 +16,13 @@ import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 
-DALI = True
-if DALI:
-    from ITrackerDataGPU import load_all_data
-else:
-    from ITrackerDataCPU import load_all_data
+# # TODO find a command line arg enabling this switch or use it as default for 
+# # multi-spu scenarios
+# DALI = True
+# if DALI:
+#     from ITrackerDataGPU import load_all_data
+# else:
+#     from ITrackerDataCPU import load_all_data
 
 from ITrackerModel import ITrackerModel
 from Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations
@@ -72,6 +74,12 @@ def main():
     # Initialize the visualization environment open => http://localhost:8097
     args.vis = Visualizations(args.name)
     args.vis.resetAll()
+
+    # chose the dataloader cpu/gpu
+    if args.data_loader == "gpu":
+        from ITrackerDataGPU import load_all_data
+    else:
+        from ITrackerDataCPU import load_all_data
 
     if using_cuda and torch.cuda.device_count() > 0:
         # Change batch_size in commandLine args if out of cuda memory
@@ -162,7 +170,8 @@ def main():
 
     totalstart_time = datetime.now()
 
-    datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space, not args.disable_boost)
+    datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space)
+    # datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space, not args.disable_boost)
 
     #     criterion = nn.MSELoss(reduction='sum').to(device=device)
     criterion = nn.MSELoss(reduction='mean').to(device=device)
@@ -230,7 +239,8 @@ def main():
         for epoch in range(epoch, epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
             start_time = datetime.now()
-            learning_rates[epoch - 1] = scheduler.get_last_lr()
+            # learning_rates[epoch - 1] = scheduler.get_last_lr()
+            learning_rates[epoch - 1] = get_lr(scheduler)
 
             args.vis.reset()
             # train for one epoch
@@ -249,7 +259,7 @@ def main():
             best_RMSErrors[epoch - 1] = best_RMSError
             RMSErrors[epoch - 1] = eval_RMSError
 
-            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, scheduler.get_last_lr())
+            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, get_lr(scheduler))
             args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
             args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, eval_RMSError)
             args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
@@ -291,6 +301,10 @@ def main():
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
 
+# different versions of pytorch have different methods
+def get_lr(scheduler):
+    # return scheduler.get_last_lr()
+    return scheduler.get_lr()
 
 # Fast Gradient Sign Attack (FGSA)
 def adversarialAttack(image, data_grad, epsilon=0.1):
@@ -329,7 +343,7 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
 
     # HSM Update - Every epoch
     if args.hsm:
-        if DALI:
+        if args.data_loader == "gpu":
             # todo: HSM support for DALI
             loader = dataset.loader
         else:
@@ -356,7 +370,7 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
     # load data samples and train
     # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(loader):
     for i, data in enumerate(dataset.loader):
-        if DALI:
+        if args.data_loader == "gpu":
             batch_data = data[0]
             # batch_data = data[int(args.local_rank)]
             row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"],\
@@ -488,7 +502,7 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
 
     # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(dataset.loader):
     for i, data in enumerate(dataset.loader):
-        if DALI:
+        if args.data_loader == "gpu":
             batch_data = data[0]
             # print('###########',args.local_rank[0])
             # batch_data = data[int(args.local_rank[0])]
@@ -764,12 +778,9 @@ def parse_commandline_arguments():
     parser.add_argument('--hsm_cycle', type=int, default=8)
     parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="Enables Adversarial Attack")
     parser.add_argument('--color_space', default='YCbCr', help='Image color space - RGB, YCbCr, HSV, LAB')
-    parser.add_argument('--decay_type',
-                        default='none',
-                        help='none, step, exp, time')
-    parser.add_argument('--shape_type',
-                        default='triangular',
-                        help='triangular, flat')
+    parser.add_argument('--decay_type', default='none', help='none, step, exp, time')
+    parser.add_argument('--shape_type', default='triangular', help='triangular, flat')
+    parser.add_argument('--data_loader', default="cpu", help="cpu, gpu")
     args = parser.parse_args()
 
     args.device = None
