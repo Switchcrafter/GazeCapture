@@ -165,7 +165,7 @@ class Dataset:
         self.loader = loader
 
 
-def load_data(split, path, image_size, grid_size, workers, batch_size, verbose, color_space):
+def load_data(split, path, image_size, grid_size, workers, batch_size, verbose, color_space, eval_boost):
     data = ITrackerDataCPU(path, image_size, grid_size, split=split, silent=not verbose, color_space=color_space)
     size = len(data.indices)
     shuffle = True if split == 'train' else False
@@ -181,8 +181,9 @@ def load_data(split, path, image_size, grid_size, workers, batch_size, verbose, 
     return Dataset(split, data, size, loader)
 
 
-def load_all_data(path, image_size, grid_size, workers, batch_size, verbose, color_space='YCbCr', eval_boost=True):
+def load_all_data(path, image_size, grid_size, workers, batch_size, verbose, color_space='YCbCr'):
     print(centeredText('Loading Data'))
+    eval_boost=False
     all_data = {
         # training data : model sees and learns from this data
         'train': load_data('train', path, image_size, grid_size, workers, batch_size, verbose, color_space, eval_boost),
