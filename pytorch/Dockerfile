@@ -1,10 +1,5 @@
-# Base image - use the basic Python 3 image as our launching point.
 FROM nvidia/cuda
 FROM python:3.7
-
-# ARG CUDA_TOOLKIT_VERSION=10.1
-# ARG CONDA_PYTHON_VERSION=3
-# ARG CONDA_DIR=/opt/conda
 
 Maintainer MSREnable
 
@@ -67,3 +62,5 @@ ENV NVIDIA_DRIVER_CAPABILITIES all
 # DALI - all gpu as dataloaders (unstable)
 # sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --batch_size 192 --mode 'ddp2'
 # sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --batch_size 384 --mode 'dp' --local_rank 0 1 2 3
+
+# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --batch_size 56 --mode 'ddp2' --data_loader 'gpu' --disable_sync

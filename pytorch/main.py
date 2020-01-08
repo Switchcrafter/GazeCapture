@@ -372,7 +372,7 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "gpu":
             batch_data = data[0]
-            # batch_data = data[int(args.local_rank)]
+            # batch_data = data[int(args.local_rank[0])]
             row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"],\
                                             batch_data["imEyeL"], batch_data["imEyeR"], batch_data["faceGrid"],\
                                             batch_data["gaze"], batch_data["frame"], batch_data["indices"]

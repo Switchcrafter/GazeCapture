@@ -227,6 +227,7 @@ class Dataset:
 
 def load_data(split, dataPath, metadata, image_size, grid_size, workers, batch_size, verbose, color_space):
     num_gpus = torch.cuda.device_count()
+    # TODO support for shuffle
     # shuffle = True if split == 'train' else False
     distributed = False # distributed=True is currently unstable/experimental mode
     if not distributed:
@@ -240,11 +241,18 @@ def load_data(split, dataPath, metadata, image_size, grid_size, workers, batch_s
     else: # experimental - unstable (distributed mode)
         data = ITrackerDataGPU(batch_size, dataPath, metadata, split, grid_size, silent=not verbose)
         size = len(data)
-        # pipes = [ExternalSourcePipeline(data, batch_size=batch_size//num_gpus, imageSize=image_size, split=split, silent=not verbose, num_threads=8//num_gpus, device_id = i) for i in range(num_gpus)]
-        pipes = [ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=8, device_id = i) for i in range(num_gpus)]
-        pipes[0].build()
-        # Todo: pin memory
-        loader = DALIGenericIterator(pipes, ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=pipes[0].size, fill_last_batch=False)
+        pipes = [ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=1, device_id = i) for i in range(num_gpus)]
+        # Todo: pin memory, auto_reset=True for auto reset iterator
+        # DALIGenericIterator has inbuilt build for all pipelines
+        loader = DALIGenericIterator(pipes, ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=len(data), fill_last_batch=False, last_batch_padded=True)
+    # else: # experimental - unstable (distributed mode)
+    #     # data = ITrackerDataGPU(batch_size, dataPath, metadata, split, grid_size, silent=not verbose)
+    #     # size = len(data)
+    #     data = [ITrackerDataGPU(batch_size, dataPath, metadata, split, grid_size, silent=not verbose) for i in range(num_gpus)]
+    #     pipes = [ExternalSourcePipeline(data[i], batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=1, device_id = i) for i in range(num_gpus)]
+    #     # Todo: pin memory, auto_reset=True for auto reset iterator
+    #     # DALIGenericIterator has inbuilt build for all pipelines
+    #     loader = DALIGenericIterator(pipes, ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=len(data[0]), fill_last_batch=False, last_batch_padded=True)
     return Dataset(split, data, size, loader)
 
 def load_all_data(path, image_size, grid_size, workers, batch_size, verbose, color_space='YCbCr'):
