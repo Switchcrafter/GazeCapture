@@ -75,11 +75,12 @@ def main():
     args.vis = Visualizations(args.name)
     args.vis.resetAll()
 
-    # chose the dataloader cpu/gpu
-    if args.data_loader == "gpu":
-        from ITrackerDataGPU import load_all_data
-    else:
-        from ITrackerDataCPU import load_all_data
+    from ITrackerData import load_all_data
+    # # chose the dataloader cpu/gpu
+    # if args.data_loader == "gpu":
+    #     from ITrackerDataGPU import load_all_data
+    # else:
+    #     from ITrackerDataCPU import load_all_data
 
     if using_cuda and torch.cuda.device_count() > 0:
         # Change batch_size in commandLine args if out of cuda memory
@@ -170,8 +171,7 @@ def main():
 
     totalstart_time = datetime.now()
 
-    datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space)
-    # datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space, not args.disable_boost)
+    datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space, args.data_loader, not args.disable_boost)
 
     #     criterion = nn.MSELoss(reduction='sum').to(device=device)
     criterion = nn.MSELoss(reduction='mean').to(device=device)
