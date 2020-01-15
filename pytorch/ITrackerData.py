@@ -19,6 +19,7 @@ from nvidia.dali.plugin.pytorch import DALIGenericIterator
 
 from Utilities import centeredText
 
+# TODO remove imageNet style normalization as they don't apply to YCbCr color space
 def normalize_image_transform(image_size, split, jitter):
     if jitter and split == 'train':
         normalize_image = transforms.Compose([
@@ -38,34 +39,8 @@ def normalize_image_transform(image_size, split, jitter):
 
     return normalize_image
 
-class ITrackerMetadata(object):
-    def __init__(self, dataPath, silent=True):
-        if not silent:
-            print('Loading iTracker dataset')
-        metadata_file = os.path.join(dataPath, 'metadata.mat')
-        self.metadata = self.loadMetadata(metadata_file, silent)
-
-    def loadMetadata(self, filename, silent):
-        if filename is None or not os.path.isfile(filename):
-            raise RuntimeError('There is no such file %s! Provide a valid dataset path.' % filename)
-        try:
-            # http://stackoverflow.com/questions/6273634/access-array-contents-from-a-mat-file-loaded-using-scipy-io-loadmat-python
-            if not silent:
-                print('\tReading metadata from %s' % filename)
-            metadata = sio.loadmat(filename, squeeze_me=True, struct_as_record=False)
-        except:
-            raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % filename)
-        return metadata
-
-class Dataset:
-    def __init__(self, split, data, size, loader):
-        self.split = split
-        self.data = data
-        self.size = size
-        self.loader = loader
-
 class ExternalSourcePipeline(Pipeline):
-    def __init__(self, data, batch_size, imageSize, split, silent, num_threads, device_id):
+    def __init__(self, data, batch_size, imageSize, split, silent, num_threads, device_id, data_loader):
         super(ExternalSourcePipeline, self).__init__(batch_size,
                                       num_threads,
                                       device_id,
@@ -81,8 +56,21 @@ class ExternalSourcePipeline(Pipeline):
         self.frameBatch = ops.ExternalSource()
         self.indexBatch = ops.ExternalSource()
 
-        GPU = True
-        if GPU:
+        if data_loader == "cpu":
+            print("Error: cpu data loader shouldn't be handled by DALI")
+        elif data_loader == "dali_cpu":
+            self.decode = ops.ImageDecoder(device = "cpu", output_type = types.RGB)
+            self.resize = ops.Resize(device="cpu", resize_x=256, resize_y=256)
+            self.norm = ops.CropMirrorNormalize(device="cpu",
+                                                output_dtype=types.FLOAT,
+                                                output_layout='CHW',
+                                                crop=(224, 224),
+                                                image_type=types.RGB,
+                                                mean=[0.485 * 255, 0.456 * 255, 0.406 * 255],
+                                                std=[0.229 * 255, 0.224 * 255, 0.225 * 255])
+            # self.cast = ops.Cast(device='cpu', dtype=types.FLOAT)
+        else:
+            #data_loader == "dali_gpu" or data_loader == "dali_gpu_all":
             # ImageDecoder below accepts  CPU inputs, but returns GPU outputs (hence device = "mixed"), HWC ordering
             self.decode = ops.ImageDecoder(device = "mixed", output_type = types.RGB)
             # The rest of pre-processing is done on the GPU
@@ -97,17 +85,7 @@ class ExternalSourcePipeline(Pipeline):
                                                 mean=[0.485 * 255,0.456 * 255,0.406 * 255],
                                                 std=[0.229 * 255,0.224 * 255,0.225 * 255])
             self.cast = ops.Cast(device='gpu', dtype=types.FLOAT)#types.INT32,types.UINT8,types.FLOAT
-        else:
-            self.decode = ops.ImageDecoder(device = "cpu", output_type = types.RGB)
-            self.resize = ops.Resize(device="cpu", resize_x=256, resize_y=256)
-            self.norm = ops.CropMirrorNormalize(device="cpu",
-                                                output_dtype=types.FLOAT,
-                                                output_layout='CHW',
-                                                crop=(224, 224),
-                                                image_type=types.RGB,
-                                                mean=[0.485 * 255, 0.456 * 255, 0.406 * 255],
-                                                std=[0.229 * 255, 0.224 * 255, 0.225 * 255])
-            # self.cast = ops.Cast(device='cpu', dtype=types.FLOAT)
+            
 
     def define_graph(self):
         self.row = self.rowBatch()
@@ -139,6 +117,32 @@ class ExternalSourcePipeline(Pipeline):
         self.feed_input(self.gaze, gazeBatch)
         self.feed_input(self.frame, frameBatch)
         self.feed_input(self.index, indexBatch)
+
+class ITrackerMetadata(object):
+    def __init__(self, dataPath, silent=True):
+        if not silent:
+            print('Loading iTracker dataset')
+        metadata_file = os.path.join(dataPath, 'metadata.mat')
+        self.metadata = self.loadMetadata(metadata_file, silent)
+
+    def loadMetadata(self, filename, silent):
+        if filename is None or not os.path.isfile(filename):
+            raise RuntimeError('There is no such file %s! Provide a valid dataset path.' % filename)
+        try:
+            # http://stackoverflow.com/questions/6273634/access-array-contents-from-a-mat-file-loaded-using-scipy-io-loadmat-python
+            if not silent:
+                print('\tReading metadata from %s' % filename)
+            metadata = sio.loadmat(filename, squeeze_me=True, struct_as_record=False)
+        except:
+            raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % filename)
+        return metadata
+
+class Dataset:
+    def __init__(self, split, data, size, loader):
+        self.split = split
+        self.data = data
+        self.size = size
+        self.loader = loader
 
 class ITrackerData(object):
     def __init__(self, dataPath, metadata, batch_size, imSize, gridSize, split, silent=True, jitter=True, color_space='YCbCr', data_loader='cpu'):
@@ -287,12 +291,13 @@ def load_data(split, dataPath, metadata, image_size, grid_size, workers, batch_s
     else:
         num_gpus = torch.cuda.device_count()
         # TODO support for shuffle
-        if data_loader == "gpu":
+        if data_loader == "dali_gpu" or data_loader == "dali_cpu":
             #todo: shuffle, deviceId, color_space
-            pipes = [ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=8, device_id = num_gpus-1)]
-        elif data_loader == "gpu_all":
-            pipes = [ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=1, device_id = i) for i in range(num_gpus)]
-        
+            pipes = [ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=8, device_id = num_gpus-1, data_loader=data_loader)]
+        elif data_loader == "dali_gpu_all":
+            pipes = [ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=1, device_id = i, data_loader=data_loader) for i in range(num_gpus)]
+        else:
+            error("Invalid data_loader mode", data_loader)
         # Todo: pin memory, auto_reset=True for auto reset iterator
         # DALIGenericIterator has inbuilt build for all pipelines
         loader = DALIGenericIterator(pipes, ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=len(data), fill_last_batch=False, last_batch_padded=True)
