@@ -77,11 +77,7 @@ def main():
     args.vis = Visualizations(args.name)
     args.vis.resetAll()
 
-    # chose the dataloader cpu/gpu
-    if args.data_loader == "gpu":
-        from ITrackerDataGPU import load_all_data
-    else:
-        from ITrackerDataCPU import load_all_data
+    from ITrackerData import load_all_data
 
     if using_cuda and torch.cuda.device_count() > 0:
         # Change batch_size in commandLine args if out of cuda memory
@@ -172,8 +168,7 @@ def main():
 
     totalstart_time = datetime.now()
 
-    datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space)
-    # datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space, not args.disable_boost)
+    datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space, args.data_loader, not args.disable_boost)
 
     #     criterion = nn.MSELoss(reduction='sum').to(device=device)
     criterion = nn.MSELoss(reduction='mean').to(device=device)
@@ -346,10 +341,7 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
 
     # HSM Update - Every epoch
     if args.hsm:
-        if args.data_loader == "gpu":
-            # todo: HSM support for DALI
-            loader = dataset.loader
-        else:
+        if args.data_loader == "cpu":
             # Reset every few epoch (hsm_cycle)
             if epoch > 0 and epoch % args.hsm_cycle == 0:
                 args.multinomial_weights = torch.ones(dataset.size, dtype=torch.double)
@@ -365,6 +357,9 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
             print('')
             if not verbose:
                 args.sampling_bar.display(args.multinomial_weights)
+        else: # dali modes
+            # todo: HSM support for DALI
+            loader = dataset.loader
     else:
         loader = dataset.loader
 
@@ -373,14 +368,17 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
     # load data samples and train
     # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(loader):
     for i, data in enumerate(dataset.loader):
-        if args.data_loader == "gpu":
-            batch_data = data[0]
-            # batch_data = data[int(args.local_rank)]
+        if args.data_loader == "cpu":
+            (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) =  data
+        else: # dali modes
+            if args.data_loader == "dali_gpu_all":
+                #TODO test with dp mode
+                batch_data = data[int(args.local_rank[0])]
+            else: # dali_gpu, dali_cpu
+                batch_data = data[0]
             row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"],\
                                             batch_data["imEyeL"], batch_data["imEyeR"], batch_data["faceGrid"],\
                                             batch_data["gaze"], batch_data["frame"], batch_data["indices"]
-        else:
-            (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) =  data
         
         batchNum = i + 1
         actual_batch_size = imFace.size(0)
@@ -507,15 +505,17 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
 
     # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(dataset.loader):
     for i, data in enumerate(dataset.loader):
-        if args.data_loader == "gpu":
-            batch_data = data[0]
-            # print('###########',args.local_rank[0])
-            # batch_data = data[int(args.local_rank[0])]
+        if args.data_loader == "cpu":
+            (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) =  data
+        else: # dali modes
+            if args.data_loader == "dali_gpu_all":
+                #TODO test with dp mode
+                batch_data = data[int(args.local_rank[0])]
+            else: # dali_gpu, #dali_cpu
+                batch_data = data[0]
             row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"],\
                                             batch_data["imEyeL"], batch_data["imEyeR"], batch_data["faceGrid"],\
                                             batch_data["gaze"], batch_data["frame"], batch_data["indices"]
-        else:
-            (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) =  data
 
         batchNum = i + 1
         actual_batch_size = imFace.size(0)
@@ -746,7 +746,7 @@ def parse_commandline_arguments():
     parser.add_argument('--color_space', default='YCbCr', help='Image color space - RGB, YCbCr, HSV, LAB')
     parser.add_argument('--decay_type', default='none', help='none, step, exp, time')
     parser.add_argument('--shape_type', default='triangular', help='triangular, flat')
-    parser.add_argument('--data_loader', default="cpu", help="cpu, gpu")
+    parser.add_argument('--data_loader', default="cpu", help="cpu, dali_cpu, dali_gpu, dali_gpu_all")
     args = parser.parse_args()
 
     args.device = None

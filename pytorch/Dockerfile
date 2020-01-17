@@ -1,10 +1,5 @@
-# Base image - use the basic Python 3 image as our launching point.
 FROM nvidia/cuda
 FROM python:3.7
-
-# ARG CUDA_TOOLKIT_VERSION=10.1
-# ARG CONDA_PYTHON_VERSION=3
-# ARG CONDA_DIR=/opt/conda
 
 Maintainer MSREnable
 
@@ -56,14 +51,29 @@ ENV NVIDIA_DRIVER_CAPABILITIES all
 # B128, W32, xPin: 1@726,
 # B256, W32, xPin: 1@740,
 
-# DALI - last gpu as data loader
-# GPU 3 as dataloader
-# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=3 main.py --batch_size 64 --mode 'ddp2'
-# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --batch_size 128 --mode 'dp' --local_rank 0 1 2
 
-# 1170 3gpu dp
-# 780/gpu 3gpu ddp 
+# cpu 
+# (all 4 GPUs, ) [POTENTIALLY CRASHES THE GPU 0 WITH Xid 79]
+# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --batch_size 256 --mode 'ddp2' --data_loader 'cpu'
+# cpu: all 4 GPUs, 440 samples/sec
+# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --batch_size 256 --mode 'dp' --local_rank 0 1 2 3 --data_loader 'dali_cpu'
 
-# DALI - all gpu as dataloaders (unstable)
-# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --batch_size 192 --mode 'ddp2'
-# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --batch_size 384 --mode 'dp' --local_rank 0 1 2 3
+
+# dali_gpu 
+# ddp2: (3 GPUs, 4th for data-loading, 3@560=1680 samples/sec)
+# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=3 main.py --batch_size 70 --mode 'ddp2' --data_loader 'dali_gpu'
+# dp: 3 GPUs, 740 samples/sec
+# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --batch_size 128 --mode 'dp' --local_rank 0 1 2 --data_loader 'dali_gpu'
+
+# dali_gpu_all 
+# (all 4 GPUs, 4@323=1292 samples/sec)
+# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --batch_size 56 --mode 'ddp2' --data_loader 'dali_gpu_all'
+# dp: Invalid mode
+
+
+# dali_cpu 
+# ddp2: (all 4 GPUs, 4@550=2200 samples/sec) ** MOST OPTIMAL MODE **
+# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --batch_size 256 --mode 'ddp2' --data_loader 'dali_cpu'
+# dp: (all 4 GPUs, 870 samples/sec)
+# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --batch_size 256 --mode 'dp' --local_rank 0 1 2 3 --data_loader 'dali_cpu'
+
