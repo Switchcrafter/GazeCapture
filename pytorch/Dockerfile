@@ -9,6 +9,8 @@ RUN pip3 install jsonpatch
 RUN pip3 install visdom
 RUN pip3 install torchtoolbox
 RUN pip3 install --extra-index-url https://developer.download.nvidia.com/compute/redist/cuda/10.0 nvidia-dali
+# For local machine try
+# RUN pip3 install --index-url https://developer.download.nvidia.com/compute/redist/cuda/10.0 nvidia-dali
 # Alternatively download a wheel from http://developer.download.nvidia.com/compute/redist/cuda/10.0/nvidia-dali/
 # install as pip3 install <wheel>.whl
 RUN pip3 install matplotlib
