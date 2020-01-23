@@ -5,7 +5,7 @@ import os.path
 import scipy.io as sio
 import numpy as np
 # import collections
-# from random import shuffle
+from random import shuffle
 
 # CPU data loader
 from PIL import Image
@@ -40,12 +40,14 @@ def normalize_image_transform(image_size, split, jitter):
     return normalize_image
 
 class ExternalSourcePipeline(Pipeline):
-    def __init__(self, data, batch_size, imageSize, split, silent, num_threads, device_id, data_loader):
+    def __init__(self, data, batch_size, imageSize, split, silent, num_threads, device_id, data_loader, shuffle=False):
         super(ExternalSourcePipeline, self).__init__(batch_size,
                                       num_threads,
                                       device_id,
                                       seed=12)
 
+        if shuffle:
+            data.shuffle()
         self.sourceIterator = iter(data)
         self.rowBatch = ops.ExternalSource()
         self.imFaceBatch = ops.ExternalSource()
@@ -177,8 +179,6 @@ class ITrackerData(object):
 
     def loadImage(self, path):
         try:
-            # ToDo: Try YCbCr, HSV, LAB format
-            # im = np.array(Image.open(path).convert('YCbCr'))
             im = Image.open(path).convert(self.color_space)
         except OSError:
             raise RuntimeError('Could not read image: ' + path)
@@ -238,6 +238,9 @@ class ITrackerData(object):
         self.index = 0
         self.size = len(self.indices)
         return self
+    
+    def shuffle(self):
+        shuffle(self.indices)
 
     def __next__(self):
         rowBatch = []
@@ -290,12 +293,10 @@ def load_data(split, dataPath, metadata, image_size, grid_size, workers, batch_s
             pin_memory=False)
     else:
         num_gpus = torch.cuda.device_count()
-        # TODO support for shuffle
         if data_loader == "dali_gpu" or data_loader == "dali_cpu":
-            #todo: shuffle, deviceId, color_space
-            pipes = [ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=8, device_id = num_gpus-1, data_loader=data_loader)]
+            pipes = [ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=8, device_id = num_gpus-1, data_loader=data_loader, shuffle=shuffle)]
         elif data_loader == "dali_gpu_all":
-            pipes = [ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=1, device_id = i, data_loader=data_loader) for i in range(num_gpus)]
+            pipes = [ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=1, device_id = i, data_loader=data_loader, shuffle=shuffle) for i in range(num_gpus)]
         else:
             error("Invalid data_loader mode", data_loader)
         # Todo: pin memory, auto_reset=True for auto reset iterator
