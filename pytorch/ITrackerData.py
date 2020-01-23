@@ -168,6 +168,7 @@ class ITrackerData(object):
             raise Exception('split should be test, val or train. The value of split was: {}'.format(split))
         
         self.indices = np.argwhere(mask)[:, 0]
+
         if not silent:
             print('Loaded iTracker dataset split "%s" with %d records.' % (split, len(self.indices)))
         
