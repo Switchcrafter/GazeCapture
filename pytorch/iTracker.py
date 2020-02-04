@@ -166,9 +166,9 @@ def main():
             # cv2.imshow("HoG images", hog_images)
 
             # Run inference using face, right_eye_image, left_eye_image and face_grid
-            imFace = Image.fromarray(face_image, 'RGB')
-            imEyeL = Image.fromarray(left_eye_image, 'RGB')
-            imEyeR = Image.fromarray(right_eye_image, 'RGB')
+            imFace = Image.fromarray(cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB), 'RGB').convert('YCbCr')
+            imEyeL = Image.fromarray(cv2.cvtColor(left_eye_image, cv2.COLOR_BGR2RGB), 'RGB').convert('YCbCr')
+            imEyeR = Image.fromarray(cv2.cvtColor(right_eye_image, cv2.COLOR_BGR2RGB), 'RGB').convert('YCbCr')
 
             imFace = normalize_image(imFace)
             imEyeL = normalize_image(imEyeL)
