@@ -16,14 +16,6 @@ import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 
-# # TODO find a command line arg enabling this switch or use it as default for 
-# # multi-spu scenarios
-# DALI = True
-# if DALI:
-#     from ITrackerDataGPU import load_all_data
-# else:
-#     from ITrackerDataCPU import load_all_data
-
 from ITrackerModel import ITrackerModel
 from Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations
 
