@@ -1,4 +1,5 @@
 *.json
 *.tar
 checkpoints*
-venv
+venv*
+.ipynb_checkpoints
