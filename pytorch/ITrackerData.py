@@ -87,7 +87,7 @@ class ExternalSourcePipeline(Pipeline):
                                                 mean=[0.485 * 255,0.456 * 255,0.406 * 255],
                                                 std=[0.229 * 255,0.224 * 255,0.225 * 255])
             self.cast = ops.Cast(device='gpu', dtype=types.FLOAT)#types.INT32,types.UINT8,types.FLOAT
-            
+
 
     def define_graph(self):
         self.row = self.rowBatch()
@@ -166,12 +166,12 @@ class ITrackerData(object):
             mask = np.ones[len(self.metadata)]
         else:
             raise Exception('split should be test, val or train. The value of split was: {}'.format(split))
-        
+
         self.indices = np.argwhere(mask)[:, 0]
 
         if not silent:
             print('Loaded iTracker dataset split "%s" with %d records.' % (split, len(self.indices)))
-        
+
         if self.data_loader == 'cpu':
             self.normalize_image = normalize_image_transform(image_size=self.imSize, jitter=jitter, split=split)
 
@@ -184,7 +184,7 @@ class ITrackerData(object):
         except OSError:
             raise RuntimeError('Could not read image: ' + path)
         return im
-    
+
     # merge two
     def __getitem__(self, index):
         rowIndex = self.indices[index]
@@ -239,7 +239,7 @@ class ITrackerData(object):
         self.index = 0
         self.size = len(self.indices)
         return self
-    
+
     def shuffle(self):
         shuffle(self.indices)
 
@@ -299,7 +299,8 @@ def load_data(split, dataPath, metadata, image_size, grid_size, workers, batch_s
         elif data_loader == "dali_gpu_all":
             pipes = [ExternalSourcePipeline(data, batch_size=batch_size, imageSize=image_size, split=split, silent=not verbose, num_threads=1, device_id = i, data_loader=data_loader, shuffle=shuffle) for i in range(num_gpus)]
         else:
-            error("Invalid data_loader mode", data_loader)
+            # todo raise error
+            print("Invalid data_loader mode", data_loader)
         # Todo: pin memory, auto_reset=True for auto reset iterator
         # DALIGenericIterator has inbuilt build for all pipelines
         loader = DALIGenericIterator(pipes, ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=len(data), fill_last_batch=False, last_batch_padded=True)

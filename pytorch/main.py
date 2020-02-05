@@ -160,10 +160,7 @@ def main():
 
     datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space, args.data_loader, not args.disable_boost)
 
-    #     criterion = nn.MSELoss(reduction='sum')
-    # criterion = nn.MSELoss(reduction='mean')
-    criterion = nn.MSELoss(reduction='mean') + nn.L1Loss(reduction='mean')
-    criterion = criterion.to(device=device)
+    criterion = MultiCriterion(reduction='mean').to(device=device)
 
     optimizer = torch.optim.SGD(model.parameters(), START_LR,
                                 momentum=MOMENTUM,
@@ -601,6 +598,20 @@ def test(datasets,
          verbose=False, args=None):
     return evaluate(datasets['test'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose, args)
 
+# class MultiCriterion(nn.Module):
+#     def __init__(self, reduction='mean'):
+#         super(MultiCriterion, self).__init__()
+#         self.criterion1  = nn.MSELoss(reduction=reduction)
+#         self.criterion2  = nn.L1Loss(reduction=reduction)
+#     def forward(self, input, target):
+#         return self.criterion1(input, target) + self.criterion2(input, target)
+
+class MultiCriterion(nn.Module):
+    def __init__(self, reduction='mean'):
+        super(MultiCriterion, self).__init__()
+        self.criterion  = [nn.MSELoss(reduction=reduction), nn.L1Loss(reduction=reduction)]
+    def forward(self, input, target):
+        return sum([criterion(input, target) for criterion in self.criterion])
 
 def export_onnx_model(model, device, verbose):
     # switch to evaluate mode
