@@ -160,8 +160,10 @@ def main():
 
     datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space, args.data_loader, not args.disable_boost)
 
-    #     criterion = nn.MSELoss(reduction='sum').to(device=device)
-    criterion = nn.MSELoss(reduction='mean').to(device=device)
+    #     criterion = nn.MSELoss(reduction='sum')
+    # criterion = nn.MSELoss(reduction='mean')
+    criterion = nn.MSELoss(reduction='mean') + nn.L1Loss(reduction='mean')
+    criterion = criterion.to(device=device)
 
     optimizer = torch.optim.SGD(model.parameters(), START_LR,
                                 momentum=MOMENTUM,
@@ -368,7 +370,7 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
             row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"],\
                                             batch_data["imEyeL"], batch_data["imEyeR"], batch_data["faceGrid"],\
                                             batch_data["gaze"], batch_data["frame"], batch_data["indices"]
-        
+
         batchNum = i + 1
         actual_batch_size = imFace.size(0)
         num_samples += actual_batch_size
