@@ -106,7 +106,7 @@ def main():
             # Single-Process Multiple-GPU: You'll observe all gpus running a single process (processes with same PID)
             print('Using DistributedDataParallel Backend - Single-Process Multi-GPU')
             torch.distributed.init_process_group(backend="nccl")
-            model = torch.nn.parallel.DistributedDataParallel(model)
+            model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)
         elif args.mode == 'ddp2':
             # Multi-Process Single-GPU : You'll observe multiple gpus running different processes (different PIDs)
             # OMP_NUM_THREADS = nb_cpu_threads / nproc_per_node
@@ -114,7 +114,7 @@ def main():
             if not args.disable_sync:
                 # Convert batchNorm layers into synchronized batchNorm
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank[0])
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank[0], find_unused_parameters=True)
             ###### code after this place runs in their own process #####
             setPrintPolicy(args.master, torch.distributed.get_rank())
             print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
@@ -611,12 +611,23 @@ def test(datasets,
 #     def forward(self, input, target):
 #         return self.criterion1(input, target) + self.criterion2(input, target)
 
+# class MultiCriterion(nn.Module):
+#     def __init__(self, reduction='mean'):
+#         super(MultiCriterion, self).__init__()
+#         self.criterion  = [nn.MSELoss(reduction=reduction), nn.L1Loss(reduction=reduction)]
+#     def forward(self, input, target):
+#         return sum([criterion(input, target) for criterion in self.criterion])
+
 class MultiCriterion(nn.Module):
     def __init__(self, reduction='mean'):
         super(MultiCriterion, self).__init__()
+        self.weights = [0.5, 0.5]
         self.criterion  = [nn.MSELoss(reduction=reduction), nn.L1Loss(reduction=reduction)]
+        # Normalize weights here to sum upto 1
+        self.weights = [float(w)/sum(self.weights) for w in self.weights]
+
     def forward(self, input, target):
-        return sum([criterion(input, target) for criterion in self.criterion])
+        return sum([self.weights[i] * self.criterion[i](input, target) for i in range(len(self.criterion))])
 
 def export_onnx_model(model, device, verbose):
     # switch to evaluate mode
