@@ -12,7 +12,6 @@ def find_face_dlib(image):
     isValid = 0
     shape_np = None
 
-    image = np.array(image.convert('RGB'))
     face_rectangles = detector(image, 0)
 
     if len(face_rectangles) == 1:
