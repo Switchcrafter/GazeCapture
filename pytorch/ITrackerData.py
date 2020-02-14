@@ -303,7 +303,7 @@ def load_data(split, dataPath, metadata, image_size, grid_size, workers, batch_s
             print("Invalid data_loader mode", data_loader)
         # Todo: pin memory, auto_reset=True for auto reset iterator
         # DALIGenericIterator has inbuilt build for all pipelines
-        loader = DALIGenericIterator(pipes, ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=len(data), fill_last_batch=False, last_batch_padded=True)
+        loader = DALIGenericIterator(pipes, ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=len(data), fill_last_batch=False, last_batch_padded=True, auto_reset=True)
 
     return Dataset(split, data, size, loader)
 

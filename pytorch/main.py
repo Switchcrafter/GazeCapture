@@ -603,31 +603,31 @@ def test(datasets,
          verbose=False, args=None):
     return evaluate(datasets['test'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose, args)
 
+# # SmoothL1Loss, 
 # class MultiCriterion(nn.Module):
 #     def __init__(self, reduction='mean'):
 #         super(MultiCriterion, self).__init__()
-#         self.criterion1  = nn.MSELoss(reduction=reduction)
-#         self.criterion2  = nn.L1Loss(reduction=reduction)
-#     def forward(self, input, target):
-#         return self.criterion1(input, target) + self.criterion2(input, target)
-
-# class MultiCriterion(nn.Module):
-#     def __init__(self, reduction='mean'):
-#         super(MultiCriterion, self).__init__()
+#         self.weights = [0.80, 0.20]
 #         self.criterion  = [nn.MSELoss(reduction=reduction), nn.L1Loss(reduction=reduction)]
+#         # Normalize weights here to sum upto 1
+#         self.weights = [float(w)/sum(self.weights) for w in self.weights]
+
 #     def forward(self, input, target):
-#         return sum([criterion(input, target) for criterion in self.criterion])
+#         return sum([self.weights[i] * self.criterion[i].forward(input, target) for i in range(len(self.criterion))])
+    
+#     def backward(self, retain_graph):
+#         return sum([self.weights[i] * self.criterion[i].backward(retain_graph=retain_graph) for i in range(len(self.criterion))])
 
 class MultiCriterion(nn.Module):
     def __init__(self, reduction='mean'):
         super(MultiCriterion, self).__init__()
-        self.weights = [0.5, 0.5]
         self.criterion  = [nn.MSELoss(reduction=reduction), nn.L1Loss(reduction=reduction)]
-        # Normalize weights here to sum upto 1
-        self.weights = [float(w)/sum(self.weights) for w in self.weights]
 
     def forward(self, input, target):
-        return sum([self.weights[i] * self.criterion[i](input, target) for i in range(len(self.criterion))])
+        return sum([criterion.forward(input, target) for criterion in self.criterion])
+    
+    def backward(self, retain_graph):
+        return sum([criterion.backward(retain_graph=retain_graph) for criterion in self.criterion])
 
 def export_onnx_model(model, device, verbose):
     # switch to evaluate mode
