@@ -1,14 +1,10 @@
 from datetime import datetime  # for timing
 
 import cv2
-import imutils
 import numpy as np
 import torch
-from PIL import Image
-from imutils import face_utils
+
 from screeninfo import get_monitors
-from skimage import exposure
-from skimage import feature
 
 from ITrackerData import normalize_image_transform
 from ITrackerModel import ITrackerModel
@@ -69,11 +65,6 @@ def main():
 
         display = np.zeros((monitor.height - screenOffsetY, monitor.width - screenOffsetX, 3), dtype=np.uint8)
 
-        face_image = None
-        right_eye_image = None
-        left_eye_image = None
-        face_grid = None
-
         shape_np, isValid = face_utilities.find_face_dlib(webcam_image)
 
         if isValid:
@@ -81,22 +72,22 @@ def main():
 
             display = generate_baseline_display_data(display, screenOffsetX, screenOffsetY, webcam_image, face_rect)
 
-            face_image, left_eye_image, right_eye_image = generate_face_eye_images(face_rect,
-                                                                                   left_eye_rect_relative,
-                                                                                   right_eye_rect_relative,
-                                                                                   webcam_image)
+            face_image, left_eye_image, right_eye_image = face_utilities.generate_face_eye_images(face_rect,
+                                                                                                  left_eye_rect_relative,
+                                                                                                  right_eye_rect_relative,
+                                                                                                  webcam_image)
 
-            faceGridImage, face_grid = generate_face_grid(face_rect, webcam_image)
-            imEyeL, imEyeR, imFace = prepare_image_inputs(faceGridImage,
-                                                          face_image,
-                                                          left_eye_image,
-                                                          right_eye_image)
+            face_grid_image, face_grid = face_utilities.generate_face_grid(face_rect, webcam_image)
+            imEyeL, imEyeR, imFace = face_utilities.prepare_image_inputs(face_grid_image,
+                                                                         face_image,
+                                                                         left_eye_image,
+                                                                         right_eye_image)
 
             start_time = datetime.now()
             gaze_prediction_np = run_inference(model, normalize_image, imFace, imEyeL, imEyeR, face_grid, 'YCbCr')
             time_elapsed = datetime.now() - start_time
 
-            display = generate_display_data(display, faceGridImage, face_image, gaze_prediction_np, left_eye_image,
+            display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image,
                                             monitor, right_eye_image, stimulusX, stimulusY, time_elapsed)
 
         cv2.imshow("display", display)
@@ -114,45 +105,6 @@ def main():
     cap.release()
 
 
-def generate_face_eye_images(face_rect, left_eye_rect_relative, right_eye_rect_relative, webcam_image):
-    face_image = webcam_image.copy()
-
-    face_image = face_image[face_rect[1]:face_rect[1]+face_rect[3], face_rect[0]:face_rect[0]+face_rect[2]]
-    face_image = imutils.resize(face_image, width=IMAGE_WIDTH)
-
-    left_eye_image = webcam_image.copy()
-    left_eye_image = left_eye_image[face_rect[1]+left_eye_rect_relative[1]:face_rect[1]+left_eye_rect_relative[1]+left_eye_rect_relative[3],
-                                    face_rect[0]+left_eye_rect_relative[0]:face_rect[0]+left_eye_rect_relative[0]+left_eye_rect_relative[2]]
-    left_eye_image = imutils.resize(left_eye_image, width=IMAGE_WIDTH)
-
-    right_eye_image = webcam_image.copy()
-    right_eye_image = right_eye_image[face_rect[1]+right_eye_rect_relative[1]:face_rect[1]+right_eye_rect_relative[1]+right_eye_rect_relative[3],
-                                      face_rect[0]+right_eye_rect_relative[0]:face_rect[0]+right_eye_rect_relative[0]+right_eye_rect_relative[2]]
-    right_eye_image = imutils.resize(right_eye_image, width=IMAGE_WIDTH)
-
-    return face_image, left_eye_image, right_eye_image
-
-
-def generate_face_grid(face_rect, webcam_image):
-    image_width = webcam_image.shape[1]
-    image_height = webcam_image.shape[0]
-    faceGridX = int((face_rect[0] / image_width) * GRID_SIZE)
-    faceGridY = int((face_rect[1] / image_height) * GRID_SIZE)
-    faceGridW = int(((face_rect[0] + face_rect[2]) / image_width) * GRID_SIZE) - faceGridX
-    faceGridH = int(((face_rect[1] + face_rect[3]) / image_height) * GRID_SIZE) - faceGridY
-    faceGridImage = np.zeros((GRID_SIZE, GRID_SIZE, 3), dtype=np.uint8)
-    face_grid = np.zeros((GRID_SIZE, GRID_SIZE, 1), dtype=np.uint8)
-    faceGridImage.fill(255)
-    for m in range(faceGridW):
-        for n in range(faceGridH):
-            faceGridImage[faceGridY + n, faceGridX + m] = (0, 0, 0)
-            face_grid[faceGridY + n, faceGridX + m] = 1
-    face_grid = face_grid.flatten()  # flatten from 2d (25, 25) to 1d (625)
-
-
-    return faceGridImage, face_grid
-
-
 def generate_baseline_display_data(display, screenOffsetX, screenOffsetY, webcam_image, face_rect):
     display = draw_overlay(display, screenOffsetX, screenOffsetY, webcam_image)
     # display = draw_text(display,
@@ -163,7 +115,7 @@ def generate_baseline_display_data(display, screenOffsetX, screenOffsetY, webcam
     return display
 
 
-def generate_display_data(display, faceGridImage, face_image, gaze_prediction_np, left_eye_image, monitor,
+def generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image, monitor,
                           right_eye_image, stimulusX, stimulusY, time_elapsed):
     (gazePredictionScreenPixelXFromCamera, gazePredictionScreenPixelYFromCamera) = cam2screen(
         gaze_prediction_np[0],
@@ -214,21 +166,6 @@ def generate_display_data(display, faceGridImage, face_image, gaze_prediction_np
                         f' {gazePredictionScreenPixelYFromCamera:.4f})',
                         fill=(255, 255, 255))
     return display
-
-
-def prepare_image_inputs(faceGridImage, face_image, left_eye_image, right_eye_image):
-    faceGridImage = imutils.resize(faceGridImage, width=IMAGE_WIDTH)
-
-    # hog_images = np.concatenate((hogImage(face_image),
-    #                                        hogImage(right_eye_image),
-    #                                        hogImage(left_eye_image)),
-    #                                       axis=0)
-    # cv2.imshow("HoG images", hog_images)
-    # Run inference using face, right_eye_image, left_eye_image and face_grid
-    imFace = Image.fromarray(cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB), 'RGB')
-    imEyeL = Image.fromarray(cv2.cvtColor(left_eye_image, cv2.COLOR_BGR2RGB), 'RGB')
-    imEyeR = Image.fromarray(cv2.cvtColor(right_eye_image, cv2.COLOR_BGR2RGB), 'RGB')
-    return imEyeL, imEyeR, imFace
 
 
 def run_inference(model, normalize_image, imFace, imEyeL, imEyeR, face_grid, color_space):
@@ -308,16 +245,6 @@ def draw_text(image, x, y, string, scale=0.5, fill=(0, 0, 0), thickness=1):
     cv2.putText(image, string, (x, y), font, scale, fill, thickness, cv2.LINE_AA)
 
     return image
-
-
-def hogImage(image):
-    (H, hogImage) = feature.hog(image, orientations=9, pixels_per_cell=(10, 10),
-                                cells_per_block=(3, 3), transform_sqrt=True, block_norm="L1",
-                                visualize=True)
-    hogImage = exposure.rescale_intensity(hogImage, out_range=(0, 255))
-    hogImage = hogImage.astype("uint8")
-
-    return hogImage
 
 
 if __name__ == "__main__":

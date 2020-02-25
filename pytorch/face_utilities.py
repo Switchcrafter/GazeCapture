@@ -2,10 +2,20 @@ import cv2
 import dlib
 import numpy as np
 from imutils import face_utils
+import imutils
+from PIL import Image
+from skimage import exposure
+from skimage import feature
 
 p = "shape_predictor_68_face_landmarks.dat"
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor(p)
+
+IMAGE_WIDTH = 224
+IMAGE_HEIGHT = 224
+IMAGE_SIZE = (IMAGE_WIDTH, IMAGE_HEIGHT)
+GRID_SIZE = 25
+FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
 
 
 def find_face_dlib(image):
@@ -191,3 +201,59 @@ def faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect, right_eye
     idx = len(face_dict['X']) - 1
 
     return faceInfoDict, idx
+
+
+def generate_face_eye_images(face_rect, left_eye_rect_relative, right_eye_rect_relative, webcam_image):
+    face_image = webcam_image.copy()
+
+    face_image = face_image[face_rect[1]:face_rect[1]+face_rect[3], face_rect[0]:face_rect[0]+face_rect[2]]
+    face_image = imutils.resize(face_image, width=IMAGE_WIDTH)
+
+    left_eye_image = webcam_image.copy()
+    left_eye_image = left_eye_image[face_rect[1]+left_eye_rect_relative[1]:face_rect[1]+left_eye_rect_relative[1]+left_eye_rect_relative[3],
+                                    face_rect[0]+left_eye_rect_relative[0]:face_rect[0]+left_eye_rect_relative[0]+left_eye_rect_relative[2]]
+    left_eye_image = imutils.resize(left_eye_image, width=IMAGE_WIDTH)
+
+    right_eye_image = webcam_image.copy()
+    right_eye_image = right_eye_image[face_rect[1]+right_eye_rect_relative[1]:face_rect[1]+right_eye_rect_relative[1]+right_eye_rect_relative[3],
+                                      face_rect[0]+right_eye_rect_relative[0]:face_rect[0]+right_eye_rect_relative[0]+right_eye_rect_relative[2]]
+    right_eye_image = imutils.resize(right_eye_image, width=IMAGE_WIDTH)
+
+    return face_image, left_eye_image, right_eye_image
+
+
+def generate_face_grid(face_rect, webcam_image):
+    image_width = webcam_image.shape[1]
+    image_height = webcam_image.shape[0]
+    faceGridX = int((face_rect[0] / image_width) * GRID_SIZE)
+    faceGridY = int((face_rect[1] / image_height) * GRID_SIZE)
+    faceGridW = int(((face_rect[0] + face_rect[2]) / image_width) * GRID_SIZE) - faceGridX
+    faceGridH = int(((face_rect[1] + face_rect[3]) / image_height) * GRID_SIZE) - faceGridY
+    faceGridImage = np.zeros((GRID_SIZE, GRID_SIZE, 3), dtype=np.uint8)
+    face_grid = np.zeros((GRID_SIZE, GRID_SIZE, 1), dtype=np.uint8)
+    faceGridImage.fill(255)
+    for m in range(faceGridW):
+        for n in range(faceGridH):
+            faceGridImage[faceGridY + n, faceGridX + m] = (0, 0, 0)
+            face_grid[faceGridY + n, faceGridX + m] = 1
+    face_grid = face_grid.flatten()  # flatten from 2d (25, 25) to 1d (625)
+
+    return faceGridImage, face_grid
+
+
+def prepare_image_inputs(face_grid_image, face_image, left_eye_image, right_eye_image):
+    imFace = Image.fromarray(cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB), 'RGB')
+    imEyeL = Image.fromarray(cv2.cvtColor(left_eye_image, cv2.COLOR_BGR2RGB), 'RGB')
+    imEyeR = Image.fromarray(cv2.cvtColor(right_eye_image, cv2.COLOR_BGR2RGB), 'RGB')
+
+    return imEyeL, imEyeR, imFace
+
+
+def hogImage(image):
+    (H, hogImage) = feature.hog(image, orientations=9, pixels_per_cell=(10, 10),
+                                cells_per_block=(3, 3), transform_sqrt=True, block_norm="L1",
+                                visualize=True)
+    hogImage = exposure.rescale_intensity(hogImage, out_range=(0, 255))
+    hogImage = hogImage.astype("uint8")
+
+    return hogImage
