@@ -11,13 +11,20 @@ from random import shuffle
 from PIL import Image
 import torchvision.transforms as transforms
 
-# GPU data loader
-from nvidia.dali.pipeline import Pipeline
-import nvidia.dali.ops as ops
-import nvidia.dali.types as types
-from nvidia.dali.plugin.pytorch import DALIGenericIterator
+try:
+    # GPU data loader
+    from nvidia.dali.pipeline import Pipeline
+    import nvidia.dali.ops as ops
+    import nvidia.dali.types as types
+    from nvidia.dali.plugin.pytorch import DALIGenericIterator
+except ImportError:
+    # If running on a non-CUDA system, stub out Pipeline to prevent code crash
+    class Pipeline:
+        def __init__(self, *args):
+            return
 
 from Utilities import centeredText
+
 
 # TODO remove imageNet style normalization as they don't apply to YCbCr color space
 def normalize_image_transform(image_size, split, jitter):
@@ -42,9 +49,9 @@ def normalize_image_transform(image_size, split, jitter):
 class ExternalSourcePipeline(Pipeline):
     def __init__(self, data, batch_size, imageSize, split, silent, num_threads, device_id, data_loader, shuffle=False):
         super(ExternalSourcePipeline, self).__init__(batch_size,
-                                      num_threads,
-                                      device_id,
-                                      seed=12)
+                                                     num_threads,
+                                                     device_id,
+                                                     seed=12)
 
         if shuffle:
             data.shuffle()
@@ -72,7 +79,7 @@ class ExternalSourcePipeline(Pipeline):
                                                 std=[0.229 * 255, 0.224 * 255, 0.225 * 255])
             # self.cast = ops.Cast(device='cpu', dtype=types.FLOAT)
         else:
-            #data_loader == "dali_gpu" or data_loader == "dali_gpu_all":
+            # data_loader == "dali_gpu" or data_loader == "dali_gpu_all":
             # ImageDecoder below accepts  CPU inputs, but returns GPU outputs (hence device = "mixed"), HWC ordering
             self.decode = ops.ImageDecoder(device = "mixed", output_type = types.RGB)
             # The rest of pre-processing is done on the GPU
@@ -86,8 +93,7 @@ class ExternalSourcePipeline(Pipeline):
                                                 image_type=types.RGB,
                                                 mean=[0.485 * 255,0.456 * 255,0.406 * 255],
                                                 std=[0.229 * 255,0.224 * 255,0.225 * 255])
-            self.cast = ops.Cast(device='gpu', dtype=types.FLOAT)#types.INT32,types.UINT8,types.FLOAT
-            
+            self.cast = ops.Cast(device='gpu', dtype=types.FLOAT)  # types.INT32,types.UINT8,types.FLOAT
 
     def define_graph(self):
         self.row = self.rowBatch()
@@ -103,7 +109,7 @@ class ExternalSourcePipeline(Pipeline):
         imEyeLD = self.norm(self.resize(self.decode(self.imEyeL)))
         imEyeRD = self.norm(self.resize(self.decode(self.imEyeR)))
 
-        return (self.row, imFaceD, imEyeLD, imEyeRD, self.faceGrid, self.gaze, self.frame, self.index)
+        return self.row, imFaceD, imEyeLD, imEyeRD, self.faceGrid, self.gaze, self.frame, self.index
 
     @property
     def size(self):

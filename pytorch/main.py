@@ -1,11 +1,8 @@
-import argparse
 import json
 import math
 import os
-import shutil
 import sys  # for command line argument dumping
 import time
-from collections import OrderedDict
 from datetime import datetime  # for timing
 import subprocess
 
@@ -18,8 +15,10 @@ import torch.utils.data
 
 from ITrackerModel import ITrackerModel
 from Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations
+import checkpoint_manager
 
 import cyclical_learning_rate
+import argument_parser
 
 try:
     from azureml.core.run import Run
@@ -61,9 +60,7 @@ EPOCHS_PER_STEP = 4
 
 
 def main():
-    args, doLoad, doTest, doValidate, dataPath, checkpointsPath, \
-    exportONNX, saveCheckpoints, using_cuda, workers, epochs, \
-    dataset_limit, verbose, device, color_space = parse_commandline_arguments()
+    args = argument_parser.parse_commandline_arguments()
 
     # Initialize the visualization environment open => http://localhost:8097
     args.vis = Visualizations(args.name)
@@ -71,99 +68,42 @@ def main():
 
     from ITrackerData import load_all_data
 
-    if using_cuda and torch.cuda.device_count() > 0:
+    if args.using_cuda and torch.cuda.device_count() > 0:
         # Change batch_size in commandLine args if out of cuda memory
         batch_size = len(args.local_rank) * args.batch_size
     else:
         batch_size = 1
 
-    if verbose:
+    if args.verbose:
         print('')
-        if using_cuda:
+        if args.using_cuda:
             print('Using cuda devices:', args.local_rank)
             # print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
         print('')
 
     # make sure checkpoints directory exists
-    if not os.path.exists(checkpointsPath):
-        print('{0} does not exist, creating...'.format(checkpointsPath))
-        os.mkdir(checkpointsPath)
+    if not os.path.exists(args.output_path):
+        print('{0} does not exist, creating...'.format(args.output_path))
+        os.mkdir(args.output_path)
 
-    # Retrieve model
-    model = ITrackerModel().to(device=device)
-
-    # GPU optimizations and modes
-    cudnn.benchmark = True
-    if using_cuda:
-        if args.mode == 'dp':
-            print('Using DataParallel Backend')
-            if not args.disable_sync:
-                from sync_batchnorm import convert_model
-                # Convert batchNorm layers into synchronized batchNorm
-                model = convert_model(model)
-            model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=device)
-        elif args.mode == 'ddp1':
-            # Single-Process Multiple-GPU: You'll observe all gpus running a single process (processes with same PID)
-            print('Using DistributedDataParallel Backend - Single-Process Multi-GPU')
-            torch.distributed.init_process_group(backend="nccl")
-            model = torch.nn.parallel.DistributedDataParallel(model)
-        elif args.mode == 'ddp2':
-            # Multi-Process Single-GPU : You'll observe multiple gpus running different processes (different PIDs)
-            # OMP_NUM_THREADS = nb_cpu_threads / nproc_per_node
-            torch.distributed.init_process_group(backend='nccl')
-            if not args.disable_sync:
-                # Convert batchNorm layers into synchronized batchNorm
-                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank[0])
-            ###### code after this place runs in their own process #####
-            setPrintPolicy(args.master, torch.distributed.get_rank())
-            print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
-        else:
-            print("No Parallelization")
-    else:
-        print("Cuda disabled")
-
-    eval_RMSError = math.inf
-    best_RMSError = math.inf
-
-    epoch = 1
-    RMSErrors = []
-    best_RMSErrors = []
-    learning_rates = []
-    if doLoad:
-        saved = load_checkpoint(checkpointsPath, device)
-        if saved:
-            epoch = saved.get('epoch', epoch)
-            best_RMSError = saved.get('best_RMSError', best_RMSError)
-            RMSErrors = saved.get('RMSErrors', RMSErrors)
-            best_RMSErrors = saved.get('best_RMSErrors', best_RMSErrors)
-            learning_rates = saved.get('learning_rates', learning_rates)
-            print(
-                'Loading checkpoint : [Epoch: %d | RMSError: %.5f].' % (
-                    epoch,
-                    best_RMSError)
-            )
-
-            try:
-                state = saved['state_dict']
-                model.load_state_dict(state)
-            except RuntimeError:
-                # The most likely cause of a failure to load is that there is a leading "module." from training. This is
-                # normal for models trained with DataParallel. If not using DataParallel, then the "module." needs to be
-                # removed.
-                state = remove_module_from_state(saved)
-                model.load_state_dict(state)
-        else:
-            print('Warning: Could not read checkpoint!')
+    RMSErrors, best_RMSError, best_RMSErrors, epoch, learning_rates, model = initialize_model(args)
 
     print('epoch = %d' % epoch)
 
     totalstart_time = datetime.now()
 
-    datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space, args.data_loader, not args.disable_boost)
+    datasets = load_all_data(args.data_path,
+                             IMAGE_SIZE,
+                             FACE_GRID_SIZE,
+                             args.workers,
+                             batch_size,
+                             args.verbose,
+                             args.color_space,
+                             args.data_loader,
+                             not args.disable_boost)
 
     #     criterion = nn.MSELoss(reduction='sum').to(device=device)
-    criterion = nn.MSELoss(reduction='mean').to(device=device)
+    criterion = nn.MSELoss(reduction='mean').to(device=args.device)
 
     optimizer = torch.optim.SGD(model.parameters(), START_LR,
                                 momentum=MOMENTUM,
@@ -180,33 +120,51 @@ def main():
                                              max_lr=END_LR)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr])
 
-    if doTest:
+    if args.test:
         # Quick test
         start_time = datetime.now()
-        eval_MSELoss, eval_RMSError = test(datasets, model, criterion, 1, checkpointsPath, batch_size, device, dataset_limit, verbose, args)
+        eval_MSELoss, eval_RMSError = evaluate(datasets['test'],
+                                               model,
+                                               criterion,
+                                               1,
+                                               args.output_path,
+                                               batch_size,
+                                               args.device,
+                                               args.dataset_limit,
+                                               args.verbose,
+                                               args)
         time_elapsed = datetime.now() - start_time
         print('')
         print('Testing MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
         print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-    elif doValidate:
+    elif args.validate:
         start_time = datetime.now()
-        eval_MSELoss, eval_RMSError = validate(datasets, model, criterion, 1, checkpointsPath, batch_size, device, dataset_limit, verbose, args)
+        eval_MSELoss, eval_RMSError = evaluate(datasets['val'],
+                                               model,
+                                               criterion,
+                                               1,
+                                               args.output_path,
+                                               batch_size,
+                                               args.device,
+                                               args.dataset_limit,
+                                               args.verbose,
+                                               args)
         time_elapsed = datetime.now() - start_time
         print('')  # print blank line after loading data
         print('Validation MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
         print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-    elif exportONNX:
+    elif args.exportONNX:
         # export the model for use in other frameworks
-        export_onnx_model(model, device, verbose)
+        export_onnx_model(model, args.device, args.verbose)
     else:  # Train
         # resize variables to epochs size
-        resize(learning_rates, epochs)
-        resize(best_RMSErrors, epochs)
-        resize(RMSErrors, epochs)
+        resize(learning_rates, args.epochs)
+        resize(best_RMSErrors, args.epochs)
+        resize(RMSErrors, args.epochs)
 
         if args.hsm:
             args.multinomial_weights = torch.ones(datasets['train'].size, dtype=torch.double)
-            if not verbose:
+            if not args.verbose:
                 args.sampling_bar = SamplingBar('HSM')
 
         # Placeholder for overall (all epoch) visualizations
@@ -226,21 +184,41 @@ def main():
 
 
         # now start training from last best epoch
-        for epoch in range(epoch, epochs + 1):
-            print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
+        for epoch in range(epoch, args.epochs + 1):
+            print('Epoch %05d of %05d - adjust, train, validate' % (epoch, args.epochs))
             start_time = datetime.now()
-            # learning_rates[epoch - 1] = scheduler.get_last_lr()
-            learning_rates[epoch - 1] = get_lr(scheduler)
+            learning_rates[epoch - 1] = scheduler.get_last_lr()
 
             args.vis.reset()
             # train for one epoch
-            print('\nEpoch:{} [device:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch, device, best_RMSError,
-                                                                                         args.hsm, args.adv))
-            train_MSELoss, train_RMSError = train(datasets['train'], model, criterion, optimizer, scheduler, epoch,
-                                                  batch_size, device, dataset_limit, verbose, args)
+            print('\nEpoch:{} [device:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch,
+                                                                                         args.device,
+                                                                                         best_RMSError,
+                                                                                         args.hsm,
+                                                                                         args.adv))
+            train_MSELoss, train_RMSError = train(datasets['train'],
+                                                  model,
+                                                  criterion,
+                                                  optimizer,
+                                                  scheduler,
+                                                  epoch,
+                                                  batch_size,
+                                                  args.device,
+                                                  args.dataset_limit,
+                                                  args.verbose,
+                                                  args)
 
             # evaluate on validation set
-            eval_MSELoss, eval_RMSError = validate(datasets, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose, args)
+            eval_MSELoss, eval_RMSError = evaluate(datasets['val'],
+                                                   model,
+                                                   criterion,
+                                                   epoch,
+                                                   args.output_path,
+                                                   batch_size,
+                                                   args.device,
+                                                   args.dataset_limit,
+                                                   args.verbose,
+                                                   args)
 
             # remember best RMSError and save checkpoint
             is_best = eval_RMSError < best_RMSError
@@ -249,7 +227,7 @@ def main():
             best_RMSErrors[epoch - 1] = best_RMSError
             RMSErrors[epoch - 1] = eval_RMSError
 
-            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, get_lr(scheduler))
+            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, scheduler.get_last_lr())
             args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
             args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, eval_RMSError)
             args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
@@ -261,7 +239,7 @@ def main():
                 run.log('best MSELoss', best_RMSError)
                 run.log('epoch time', time_elapsed)
 
-            save_checkpoint(
+            checkpoint_manager.save_checkpoint(
                 {
                     'epoch': epoch,
                     'state_dict': model.state_dict(),
@@ -277,8 +255,8 @@ def main():
                     'learning_rates': learning_rates,
                 },
                 is_best,
-                checkpointsPath,
-                saveCheckpoints)
+                args.output_path,
+                args.save_checkpoints)
 
             print('')
             print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
@@ -291,10 +269,45 @@ def main():
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
 
-# different versions of pytorch have different methods
-def get_lr(scheduler):
-    # return scheduler.get_last_lr()
-    return scheduler.get_lr()
+
+def initialize_model(args):
+    # Retrieve model
+    model = ITrackerModel().to(device=args.device)
+    # GPU optimizations and modes
+    cudnn.benchmark = True
+    if args.using_cuda:
+        if args.mode == 'dp':
+            print('Using DataParallel Backend')
+            if not args.disable_sync:
+                from sync_batchnorm import convert_model
+                # Convert batchNorm layers into synchronized batchNorm
+                model = convert_model(model)
+            model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=args.device)
+        elif args.mode == 'ddp1':
+            # Single-Process Multiple-GPU: You'll observe all gpus running a single process (processes with same PID)
+            print('Using DistributedDataParallel Backend - Single-Process Multi-GPU')
+            torch.distributed.init_process_group(backend="nccl")
+            model = torch.nn.parallel.DistributedDataParallel(model)
+        elif args.mode == 'ddp2':
+            # Multi-Process Single-GPU : You'll observe multiple gpus running different processes (different PIDs)
+            # OMP_NUM_THREADS = nb_cpu_threads / nproc_per_node
+            torch.distributed.init_process_group(backend='nccl')
+            if not args.disable_sync:
+                # Convert batchNorm layers into synchronized batchNorm
+                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=args.local_rank,
+                                                              output_device=args.local_rank[0])
+            ###### code after this place runs in their own process #####
+            setPrintPolicy(args.master, torch.distributed.get_rank())
+            print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
+        else:
+            print("No Parallelization")
+    else:
+        print("Cuda disabled")
+    RMSErrors, best_RMSError, best_RMSErrors, epoch, learning_rates = checkpoint_manager.extract_checkpoint_data(args,
+                                                                                                                 model)
+    return RMSErrors, best_RMSError, best_RMSErrors, epoch, learning_rates, model
+
 
 # Fast Gradient Sign Attack (FGSA)
 def adversarialAttack(image, data_grad, epsilon=0.1):
@@ -338,8 +351,9 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
             if epoch > 0 and epoch % args.hsm_cycle == 0:
                 args.multinomial_weights = torch.ones(dataset.size, dtype=torch.double)
             # update dataloader and sampler
-            sampler = torch.utils.data.WeightedRandomSampler(args.multinomial_weights, int(len(args.multinomial_weights)),
-                                                            replacement=True)
+            sampler = torch.utils.data.WeightedRandomSampler(args.multinomial_weights,
+                                                             int(len(args.multinomial_weights)),
+                                                             replacement=True)
             loader = torch.utils.data.DataLoader(
                 dataset.loader.dataset,
                 batch_size=batch_size,
@@ -349,7 +363,7 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
             print('')
             if not verbose:
                 args.sampling_bar.display(args.multinomial_weights)
-        else: # dali modes
+        else:  # dali modes
             # todo: HSM support for DALI
             loader = dataset.loader
     else:
@@ -362,7 +376,7 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "cpu":
             (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) =  data
-        else: # dali modes
+        else:  # dali modes
             if args.data_loader == "dali_gpu_all":
                 #TODO test with dp mode
                 batch_data = data[int(args.local_rank[0])]
@@ -478,7 +492,16 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
     return MSELosses.avg, RMSErrors.avg
 
 
-def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit=None, verbose=False, args=None):
+def evaluate(dataset,
+             model,
+             criterion,
+             epoch,
+             checkpoints_path,
+             batch_size,
+             device,
+             dataset_limit=None,
+             verbose=False,
+             args=None):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     MSELosses = AverageMeter()
@@ -505,9 +528,14 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
                 batch_data = data[int(args.local_rank[0])]
             else: # dali_gpu, #dali_cpu
                 batch_data = data[0]
-            row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"],\
-                                            batch_data["imEyeL"], batch_data["imEyeR"], batch_data["faceGrid"],\
-                                            batch_data["gaze"], batch_data["frame"], batch_data["indices"]
+            row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], \
+                                                                          batch_data["imFace"],\
+                                                                          batch_data["imEyeL"], \
+                                                                          batch_data["imEyeR"], \
+                                                                          batch_data["faceGrid"],\
+                                                                          batch_data["gaze"], \
+                                                                          batch_data["frame"], \
+                                                                          batch_data["indices"]
 
         batchNum = i + 1
         actual_batch_size = imFace.size(0)
@@ -574,35 +602,11 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
         if dataset_limit and dataset_limit <= batchNum:
             break
 
-    resultsFileName = os.path.join(checkpointsPath, 'results.json')
+    resultsFileName = os.path.join(checkpoints_path, 'results.json')
     with open(resultsFileName, 'w+') as outfile:
         json.dump(results, outfile)
 
     return MSELosses.avg, RMSErrors.avg
-
-
-def validate(datasets,
-             model,
-             criterion,
-             epoch,
-             checkpointsPath,
-             batch_size,
-             device,
-             dataset_limit=None,
-             verbose=False, args=None):
-    return evaluate(datasets['val'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose, args)
-
-
-def test(datasets,
-         model,
-         criterion,
-         epoch,
-         checkpointsPath,
-         batch_size,
-         device,
-         dataset_limit=None,
-         verbose=False, args=None):
-    return evaluate(datasets['test'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose, args)
 
 
 def export_onnx_model(model, device, verbose):
@@ -639,61 +643,12 @@ def export_onnx_model(model, device, verbose):
                           verbose=verbose)
 
 
-def load_checkpoint(checkpointsPath, device, filename='checkpoint.pth.tar'):
-    filename = os.path.join(checkpointsPath, filename)
-    print(filename)
-    if not os.path.isfile(filename):
-        return None
-    state = torch.load(filename, map_location=device)
-    return state
-
-
-def save_checkpoint(state, is_best, checkpointsPath, saveCheckpoints, filename='checkpoint.pth.tar'):
-    resultsFilename = os.path.join(checkpointsPath, 'results.json')
-    checkpointFilename = os.path.join(checkpointsPath, filename)
-
-    torch.save(state, checkpointFilename)
-
-    if saveCheckpoints:
-        shutil.copyfile(checkpointFilename,
-                        os.path.join(checkpointsPath, 'checkpoint' + str(state['epoch']) + '.pth.tar'))
-        shutil.copyfile(resultsFilename, os.path.join(checkpointsPath, 'results' + str(state['epoch']) + '.json'))
-        shutil.copyfile('ITrackerModel.py', os.path.join(checkpointsPath, 'ITrackerModel.py'))
-
-    bestFilename = os.path.join(checkpointsPath, 'best_' + filename)
-    bestResultsFilename = os.path.join(checkpointsPath, 'best_results.json')
-
-    if is_best:
-        shutil.copyfile(checkpointFilename, bestFilename)
-        shutil.copyfile(resultsFilename, bestResultsFilename)
-
-
-def remove_module_from_state(saved_state):
-    # when using Cuda for training we use DataParallel. When using DataParallel, there is a
-    # 'module.' added to the namespace of the item in the dictionary.
-    # remove 'module.' from the front of the name to make it compatible with cpu only
-    state = OrderedDict()
-
-    for key, value in saved_state['state_dict'].items():
-        state[key[7:]] = value.to(device='cpu')
-
-    return state
-
-
-def str2bool(v):
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
-
-
 def resize(l, newsize, filling=None):
     if newsize > len(l):
         l.extend([filling for x in range(len(l), newsize)])
     else:
         del l[newsize:]
+
 
 def setPrintPolicy(master, local_rank):
     print("[PrintPolicy]", master, local_rank, "Verbatim" if local_rank == master else "Silent")
@@ -701,121 +656,6 @@ def setPrintPolicy(master, local_rank):
         sys.stdout = sys.__stdout__
     else:
         sys.stdout = open(os.devnull, 'w')
-
-def parse_commandline_arguments():
-    parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
-    parser.add_argument('--data_path',
-                        help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.",
-                        default='/data/gc-data-prepped/')
-    parser.add_argument('--output_path',
-                        help="Path to checkpoint",
-                        default=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'checkpoints'))
-    parser.add_argument('--save_checkpoints', type=str2bool, nargs='?', const=True, default=False,
-                        help="Save each of the checkpoints as the run progresses.")
-    parser.add_argument('--test', type=str2bool, nargs='?', const=True, default=False, help="Just test and terminate.")
-    parser.add_argument('--validate', type=str2bool, nargs='?', const=True, default=False,
-                        help="Just validate and terminate.")
-    parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=False,
-                        help="Start from scratch (do not load).")
-    parser.add_argument('--epochs', type=int, default=30)
-    parser.add_argument('--workers', type=int, default=16)
-    parser.add_argument('--dataset_limit', type=int, default=0, help="Limits the dataset size, useful for debugging")
-    parser.add_argument('--exportONNX', type=str2bool, nargs='?', const=True, default=False)
-    parser.add_argument('--disable-cuda', action='store_true', default=False, help='Disable CUDA')
-    parser.add_argument('--verbose', type=str2bool, nargs='?', const=True, default=False,
-                        help="verbose mode - print details every batch")
-    # Experimental options
-    parser.add_argument('--batch_size', type=int, default=256)
-    parser.add_argument('--mode', help="Parallelization mode: [none], dp, ddp1, ddp2", default='none')
-    parser.add_argument('--disable_sync', action='store_true', default=False, help='Disable Sync BN')
-    parser.add_argument('--disable_boost', action='store_true', default=False, help='Disable eval boost')
-    parser.add_argument('--name', help="Provide a name to the experiment", default='main')
-    parser.add_argument('--local_rank', help="", nargs='+', default=list(range(torch.cuda.device_count())))
-    parser.add_argument('--master', type=int, default=0)
-    parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
-    parser.add_argument('--hsm_cycle', type=int, default=8)
-    parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="Enables Adversarial Attack")
-    parser.add_argument('--color_space', default='YCbCr', help='Image color space - RGB, YCbCr, HSV, LAB')
-    parser.add_argument('--decay_type', default='none', help='none, step, exp, time')
-    parser.add_argument('--shape_type', default='triangular', help='triangular, flat')
-    parser.add_argument('--data_loader', default="cpu", help="cpu, dali_cpu, dali_gpu, dali_gpu_all")
-    args = parser.parse_args()
-
-    args.device = None
-    usingCuda = False
-    if torch.cuda.device_count() > 1 and args.mode == "none":
-        print("##################################################################################################")
-        print("You're running in non-Parallelization mode ['none'] on a multi-GPU machine.\n \
-        Make sure you're not using `-m torch.distributed.launch --nproc_per_node=<num devices>`\n \
-        which would just create multiple parallel runs on different GPUs without any synchronization.\n \
-        For no parallelization use              : --local_rank 0 --mode 'none' \n \
-        For data parallelization use            : --local_rank 0 1 2 3 --mode 'dp' \n \
-        For distributed DP1 use                 : -m torch.distributed.launch --nproc_per_node=1 --mode 'ddp1' \n \
-        For distributed DP2 use                 : -m torch.distributed.launch --nproc_per_node=4 --mode 'ddp2' \n \
-        ")
-        print("##################################################################################################")
-    args.master = args.local_rank[0] if args.mode == 'dp' else args.master
-    args.batch_size = args.batch_size * torch.cuda.device_count() if args.mode == 'ddp1' else args.batch_size
-    if not args.disable_cuda and torch.cuda.is_available() and len(args.local_rank) > 0:
-        usingCuda = True
-        # remove any device which doesn't exists
-        args.local_rank = [int(d) for d in args.local_rank if 0 <= int(d) < torch.cuda.device_count()]
-        # set args.local_rank[0] as the current device
-        torch.cuda.set_device(args.local_rank[0])
-        args.device = torch.device("cuda")
-        if args.mode != 'dp' and args.mode != 'ddp1' and torch.cuda.device_count() > 1:
-            args.name = args.name + "_" + str(args.local_rank[0])
-    else:
-        args.device = torch.device('cpu')
-
-    if args.verbose:
-        print('Number of arguments:', len(sys.argv), 'arguments.')
-        print('Argument List:', str(sys.argv))
-        print('===================================================')
-        print('args.epochs           = %s' % args.epochs)
-        print('args.reset            = %s' % args.reset)
-        print('args.test             = %s' % args.test)
-        print('args.validate         = %s' % args.validate)
-        print('args.workers          = %s' % args.workers)
-        print('args.data_path        = %s' % args.data_path)
-        print('args.output_path      = %s' % args.output_path)
-        print('args.save_checkpoints = %s' % args.save_checkpoints)
-        print('args.exportONNX       = %s' % args.exportONNX)
-        print('args.disable_cuda     = %d' % args.disable_cuda)
-        print('args.verbose          = %d' % args.verbose)
-        print('args.color_space      = %s' % args.color_space)
-        print('===================================================')
-
-    # Change there flags to control what happens.
-    doLoad = not args.reset  # Load checkpoint at the beginning
-    doTest = args.test  # Only run test, no training
-    doValidate = args.validate  # Only run validation, no training
-    dataPath = args.data_path
-    checkpointsPath = args.output_path
-    exportONNX = args.exportONNX
-    saveCheckpoints = args.save_checkpoints
-    verbose = args.verbose
-    workers = args.workers
-    epochs = args.epochs
-    dataset_limit = args.dataset_limit
-    device = args.device
-    color_space = args.color_space
-
-    if verbose:
-        print('===================================================')
-        print('doLoad                = %d' % doLoad)
-        print('doTest                = %d' % doTest)
-        print('doValidate            = %d' % doValidate)
-        print('dataPath              = %s' % dataPath)
-        print('checkpointsPath       = %s' % checkpointsPath)
-        print('saveCheckpoints       = %d' % saveCheckpoints)
-        print('workers               = %d' % workers)
-        print('epochs                = %d' % epochs)
-        print('exportONNX            = %d' % exportONNX)
-        print('color_space           = %s' % color_space)
-        print('===================================================')
-    return args, doLoad, doTest, doValidate, dataPath, checkpointsPath, exportONNX, saveCheckpoints, \
-           usingCuda, workers, epochs, dataset_limit, verbose, device, color_space
 
 
 if __name__ == "__main__":
