@@ -90,7 +90,7 @@ def main():
         os.mkdir(checkpointsPath)
 
     # Retrieve model
-    model = ITrackerModel().to(device=device)
+    model = ITrackerModel(color_space).to(device=device)
 
     # GPU optimizations and modes
     cudnn.benchmark = True
@@ -233,7 +233,7 @@ def main():
 
             args.vis.reset()
             # train for one epoch
-            print('\nEpoch:{} [device:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch, device, best_RMSError,
+            print('\nEpoch:{} [device:{}, deviceGroup:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch, device, args.device_group, best_RMSError,
                                                                                          args.hsm, args.adv))
             train_MSELoss, train_RMSError = train(datasets['train'], model, criterion, optimizer, scheduler, epoch,
                                                   batch_size, device, dataset_limit, verbose, args)
@@ -603,6 +603,30 @@ def test(datasets,
          verbose=False, args=None):
     return evaluate(datasets['test'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose, args)
 
+class LogCoshLoss(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, y_t, y_prime_t):
+        ey_t = y_t - y_prime_t
+        return torch.mean(torch.log(torch.cosh(ey_t + 1e-12)))
+
+class TanhLoss(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, y_t, y_prime_t):
+        ey_t = y_t - y_prime_t
+        return torch.mean(ey_t * torch.tanh(ey_t))
+
+class SigmoidLoss(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, y_t, y_prime_t):
+        ey_t = y_t - y_prime_t
+        return torch.mean(2 * ey_t / (1 + torch.exp(-ey_t)) - ey_t)
+
 # # SmoothL1Loss, 
 # class MultiCriterion(nn.Module):
 #     def __init__(self, reduction='mean'):
@@ -621,7 +645,12 @@ def test(datasets,
 class MultiCriterion(nn.Module):
     def __init__(self, reduction='mean'):
         super(MultiCriterion, self).__init__()
-        self.criterion  = [nn.MSELoss(reduction=reduction), nn.L1Loss(reduction=reduction)]
+        # self.criterion  = [nn.MSELoss(reduction=reduction), nn.L1Loss(reduction=reduction)]
+        # self.criterion  = [nn.SmoothL1Loss(reduction=reduction)]
+        # self.criterion  = [LogCoshLoss()] #gpu1
+        # self.criterion  = [TanhLoss()] #gpu2
+        # self.criterion  = [SigmoidLoss()] #gpu3
+        self.criterion  = [nn.MSELoss(reduction=reduction)] #gpu0
 
     def forward(self, input, target):
         return sum([criterion.forward(input, target) for criterion in self.criterion])
@@ -731,9 +760,7 @@ def parse_commandline_arguments():
     parser.add_argument('--data_path',
                         help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.",
                         default='/data/gc-data-prepped/')
-    parser.add_argument('--output_path',
-                        help="Path to checkpoint",
-                        default=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'checkpoints'))
+    parser.add_argument('--output_path', help="Path to checkpoint", default="")
     parser.add_argument('--save_checkpoints', type=str2bool, nargs='?', const=True, default=False,
                         help="Save each of the checkpoints as the run progresses.")
     parser.add_argument('--test', type=str2bool, nargs='?', const=True, default=False, help="Just test and terminate.")
@@ -759,12 +786,17 @@ def parse_commandline_arguments():
     parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
     parser.add_argument('--hsm_cycle', type=int, default=8)
     parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="Enables Adversarial Attack")
-    parser.add_argument('--color_space', default='YCbCr', help='Image color space - RGB, YCbCr, HSV, LAB')
+    parser.add_argument('--color_space', default='YCbCr', help='Image color space - RGB, YCbCr, HSV, LAB, L')
     parser.add_argument('--decay_type', default='none', help='none, step, exp, time')
     parser.add_argument('--shape_type', default='triangular', help='triangular, flat')
     parser.add_argument('--data_loader', default="cpu", help="cpu, dali_cpu, dali_gpu, dali_gpu_all")
     args = parser.parse_args()
 
+    args.device_group = "".join([str(device) for device in args.local_rank])
+    # Create a checkpoint directory per device (or device group) for multiple executions
+    if args.output_path == "":
+        args.output_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'checkpoints', 'gpu' + args.device_group)
+                      
     args.device = None
     usingCuda = False
     if torch.cuda.device_count() > 1 and args.mode == "none":

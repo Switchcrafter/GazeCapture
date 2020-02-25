@@ -42,7 +42,6 @@ TARGETS = [(-10., -3.),
            (10., -15.),
            ]
 
-
 def main():
     model = ITrackerModel().to(device='cpu')
     saved = torch.load('best_checkpoint.pth.tar', map_location='cpu')

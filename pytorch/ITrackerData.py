@@ -181,6 +181,7 @@ class ITrackerData(object):
     def loadImage(self, path):
         try:
             im = Image.open(path).convert(self.color_space)
+            print('==========---------------------===========', im.size)
         except OSError:
             raise RuntimeError('Could not read image: ' + path)
         return im
