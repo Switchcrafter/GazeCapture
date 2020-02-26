@@ -71,6 +71,20 @@ def parse_commandline_arguments():
     else:
         args.device = torch.device('cpu')
 
+    if args.using_cuda and torch.cuda.device_count() > 0:
+        # Change batch_size in commandLine args if out of cuda memory
+        args.batch_size = len(args.local_rank) * args.batch_size
+    else:
+        args.batch_size = 1
+
+    args.mode = 'Train'
+    if args.test:
+        args.mode = 'Test'
+    elif args.validate:
+        args.mode = 'Validate'
+    elif args.exportONNX:
+        args.mode = 'ExportONNX'
+
     if args.verbose:
         print('Number of arguments:', len(sys.argv), 'arguments.')
         print('Argument List:', str(sys.argv))

@@ -14,7 +14,8 @@ import torch.optim
 import torch.utils.data
 
 from ITrackerModel import ITrackerModel
-from Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations
+from ITrackerData import load_all_data
+from Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations, resize, set_print_policy
 import checkpoint_manager
 
 import cyclical_learning_rate
@@ -62,24 +63,7 @@ EPOCHS_PER_STEP = 4
 def main():
     args = argument_parser.parse_commandline_arguments()
 
-    # Initialize the visualization environment open => http://localhost:8097
-    args.vis = Visualizations(args.name)
-    args.vis.resetAll()
-
-    from ITrackerData import load_all_data
-
-    if args.using_cuda and torch.cuda.device_count() > 0:
-        # Change batch_size in commandLine args if out of cuda memory
-        batch_size = len(args.local_rank) * args.batch_size
-    else:
-        batch_size = 1
-
-    if args.verbose:
-        print('')
-        if args.using_cuda:
-            print('Using cuda devices:', args.local_rank)
-            # print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
-        print('')
+    initialize_visualization(args)
 
     # make sure checkpoints directory exists
     if not os.path.exists(args.output_path):
@@ -96,67 +80,15 @@ def main():
                              IMAGE_SIZE,
                              FACE_GRID_SIZE,
                              args.workers,
-                             batch_size,
+                             args.batch_size,
                              args.verbose,
                              args.color_space,
                              args.data_loader,
                              not args.disable_boost)
 
-    #     criterion = nn.MSELoss(reduction='sum').to(device=device)
-    criterion = nn.MSELoss(reduction='mean').to(device=args.device)
+    criterion, optimizer, scheduler = initialize_hyper_parameters(args, datasets, model)
 
-    optimizer = torch.optim.SGD(model.parameters(), START_LR,
-                                momentum=MOMENTUM,
-                                weight_decay=WEIGHT_DECAY)
-
-    batch_count = math.ceil(datasets['train'].size / batch_size)
-    step_size = EPOCHS_PER_STEP * batch_count
-    clr = cyclical_learning_rate.cyclical_lr(batch_count,
-                                             shape=cyclical_learning_rate.shape_function(args.shape_type,
-                                                                                         step_size),
-                                             decay=cyclical_learning_rate.decay_function(args.decay_type,
-                                                                                         EPOCHS_PER_STEP),
-                                             min_lr=END_LR / LR_FACTOR,
-                                             max_lr=END_LR)
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr])
-
-    if args.test:
-        # Quick test
-        start_time = datetime.now()
-        eval_MSELoss, eval_RMSError = evaluate(datasets['test'],
-                                               model,
-                                               criterion,
-                                               1,
-                                               args.output_path,
-                                               batch_size,
-                                               args.device,
-                                               args.dataset_limit,
-                                               args.verbose,
-                                               args)
-        time_elapsed = datetime.now() - start_time
-        print('')
-        print('Testing MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
-        print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-    elif args.validate:
-        start_time = datetime.now()
-        eval_MSELoss, eval_RMSError = evaluate(datasets['val'],
-                                               model,
-                                               criterion,
-                                               1,
-                                               args.output_path,
-                                               batch_size,
-                                               args.device,
-                                               args.dataset_limit,
-                                               args.verbose,
-                                               args)
-        time_elapsed = datetime.now() - start_time
-        print('')  # print blank line after loading data
-        print('Validation MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
-        print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-    elif args.exportONNX:
-        # export the model for use in other frameworks
-        export_onnx_model(model, args.device, args.verbose)
-    else:  # Train
+    if args.mode == 'Train':
         # resize variables to epochs size
         resize(learning_rates, args.epochs)
         resize(best_RMSErrors, args.epochs)
@@ -174,14 +106,15 @@ def main():
         args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", None, None)
         # Populate visualizations with checkpoint info
         for epoch_num in range(1, epoch):
-            args.vis.plotAll('LearningRate', 'lr_history', "LearningRate (Overall)", epoch_num, learning_rates[epoch_num], 'dot')
+            args.vis.plotAll('LearningRate', 'lr_history', "LearningRate (Overall)", epoch_num,
+                             learning_rates[epoch_num], 'dot')
             args.vis.plotAll('RMSError', 'val_history', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num], 'dot')
-            args.vis.plotAll('BestRMSError', 'val_history', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num], 'dot')
-            if epoch_num == epoch-1:
+            args.vis.plotAll('BestRMSError', 'val_history', "Best RMSError (Overall)", epoch_num,
+                             best_RMSErrors[epoch_num], 'dot')
+            if epoch_num == epoch - 1:
                 args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch_num, learning_rates[epoch_num])
                 args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num])
                 args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num])
-
 
         # now start training from last best epoch
         for epoch in range(epoch, args.epochs + 1):
@@ -202,7 +135,7 @@ def main():
                                                   optimizer,
                                                   scheduler,
                                                   epoch,
-                                                  batch_size,
+                                                  args.batch_size,
                                                   args.device,
                                                   args.dataset_limit,
                                                   args.verbose,
@@ -214,7 +147,6 @@ def main():
                                                    criterion,
                                                    epoch,
                                                    args.output_path,
-                                                   batch_size,
                                                    args.device,
                                                    args.dataset_limit,
                                                    args.verbose,
@@ -265,12 +197,59 @@ def main():
             print('\'RMS_Errors\': {0},'.format(RMSErrors))
             print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
             print('')
+    elif args.mode == 'Test':
+        # Quick test
+        start_time = datetime.now()
+        eval_MSELoss, eval_RMSError = evaluate(datasets['test'],
+                                               model,
+                                               criterion,
+                                               1,
+                                               args.output_path,
+                                               args.device,
+                                               args.dataset_limit,
+                                               args.verbose,
+                                               args)
+        time_elapsed = datetime.now() - start_time
+        print('')
+        print('Testing MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
+        print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
+    elif args.mode == 'Validate':
+        start_time = datetime.now()
+        eval_MSELoss, eval_RMSError = evaluate(datasets['val'],
+                                               model,
+                                               criterion,
+                                               1,
+                                               args.output_path,
+                                               args.device,
+                                               args.dataset_limit,
+                                               args.verbose,
+                                               args)
+        time_elapsed = datetime.now() - start_time
+        print('')  # print blank line after loading data
+        print('Validation MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
+        print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
+    elif args.mode == 'ExportONNX':
+        # export the model for use in other frameworks
+        export_onnx_model(model, args.device, args.verbose)
 
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
 
 
+def initialize_visualization(args):
+    # Initialize the visualization environment open => http://localhost:8097
+    args.vis = Visualizations(args.name)
+    args.vis.resetAll()
+
+
 def initialize_model(args):
+    if args.verbose:
+        print('')
+        if args.using_cuda:
+            print('Using cuda devices:', args.local_rank)
+            # print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
+        print('')
+
     # Retrieve model
     model = ITrackerModel().to(device=args.device)
     # GPU optimizations and modes
@@ -298,7 +277,7 @@ def initialize_model(args):
             model = torch.nn.parallel.DistributedDataParallel(model, device_ids=args.local_rank,
                                                               output_device=args.local_rank[0])
             ###### code after this place runs in their own process #####
-            setPrintPolicy(args.master, torch.distributed.get_rank())
+            set_print_policy(args.master, torch.distributed.get_rank())
             print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
         else:
             print("No Parallelization")
@@ -309,8 +288,26 @@ def initialize_model(args):
     return RMSErrors, best_RMSError, best_RMSErrors, epoch, learning_rates, model
 
 
+def initialize_hyper_parameters(args, datasets, model):
+    criterion = nn.MSELoss(reduction='mean').to(device=args.device)
+    optimizer = torch.optim.SGD(model.parameters(), START_LR,
+                                momentum=MOMENTUM,
+                                weight_decay=WEIGHT_DECAY)
+    batch_count = math.ceil(datasets['train'].size / args.batch_size)
+    step_size = EPOCHS_PER_STEP * batch_count
+    clr = cyclical_learning_rate.cyclical_lr(batch_count,
+                                             shape=cyclical_learning_rate.shape_function(args.shape_type,
+                                                                                         step_size),
+                                             decay=cyclical_learning_rate.decay_function(args.decay_type,
+                                                                                         EPOCHS_PER_STEP),
+                                             min_lr=END_LR / LR_FACTOR,
+                                             max_lr=END_LR)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr])
+    return criterion, optimizer, scheduler
+
+
 # Fast Gradient Sign Attack (FGSA)
-def adversarialAttack(image, data_grad, epsilon=0.1):
+def adversarial_attack(image, data_grad, epsilon=0.1):
     # Collect the element-wise sign of the data gradient
     sign_data_grad = data_grad.sign()
     # Create the perturbed image by adjusting each pixel of the input image
@@ -321,7 +318,7 @@ def adversarialAttack(image, data_grad, epsilon=0.1):
     return perturbed_image
 
 
-def euclideanBatchError(output, target):
+def euclidean_batch_error(output, target):
     """ For a batch of output and target returns corresponding batch of euclidean errors
     """
     # Batch Euclidean Distance sqrt(dx^2 + dy^2)
@@ -375,17 +372,19 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
     # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(loader):
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "cpu":
-            (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) =  data
+            (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) = data
         else:  # dali modes
             if args.data_loader == "dali_gpu_all":
-                #TODO test with dp mode
+                # TODO test with dp mode
                 batch_data = data[int(args.local_rank[0])]
-            else: # dali_gpu, dali_cpu
+            else:  # dali_gpu, dali_cpu
                 batch_data = data[0]
-            row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"],\
-                                            batch_data["imEyeL"], batch_data["imEyeR"], batch_data["faceGrid"],\
-                                            batch_data["gaze"], batch_data["frame"], batch_data["indices"]
-        
+            row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"], \
+                                                                          batch_data["imEyeL"], batch_data["imEyeR"], \
+                                                                          batch_data["faceGrid"], \
+                                                                          batch_data["gaze"], batch_data["frame"], \
+                                                                          batch_data["indices"]
+
         batchNum = i + 1
         actual_batch_size = imFace.size(0)
         num_samples += actual_batch_size
@@ -408,7 +407,7 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
         output = model(imFace, imEyeL, imEyeR, faceGrid)
 
         loss = criterion(output, gaze)
-        error = euclideanBatchError(output, gaze)
+        error = euclidean_batch_error(output, gaze)
 
         if args.hsm:
             # update sample weights to be the loss, so that harder samples have larger chances to be drawn in the next epoch
@@ -437,10 +436,10 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
             faceGrid_grad = faceGrid.grad.data
 
             # Generate perturbed input for Adversarial Attack
-            perturbed_imFace = adversarialAttack(imFace, imFace_grad)
-            perturbed_imEyeL = adversarialAttack(imEyeL, imEyeL_grad)
-            perturbed_imEyeR = adversarialAttack(imEyeR, imEyeR_grad)
-            perturbed_faceGrid = adversarialAttack(faceGrid, faceGrid_grad)
+            perturbed_imFace = adversarial_attack(imFace, imFace_grad)
+            perturbed_imEyeL = adversarial_attack(imEyeL, imEyeL_grad)
+            perturbed_imEyeR = adversarial_attack(imEyeR, imEyeR_grad)
+            perturbed_faceGrid = adversarial_attack(faceGrid, faceGrid_grad)
 
             # Regenerate output for the perturbed input
             output_adv = model(perturbed_imFace, perturbed_imEyeL, perturbed_imEyeR, perturbed_faceGrid)
@@ -497,7 +496,6 @@ def evaluate(dataset,
              criterion,
              epoch,
              checkpoints_path,
-             batch_size,
              device,
              dataset_limit=None,
              verbose=False,
@@ -521,18 +519,18 @@ def evaluate(dataset,
     # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(dataset.loader):
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "cpu":
-            (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) =  data
-        else: # dali modes
+            (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) = data
+        else:  # dali modes
             if args.data_loader == "dali_gpu_all":
-                #TODO test with dp mode
+                # TODO test with dp mode
                 batch_data = data[int(args.local_rank[0])]
-            else: # dali_gpu, #dali_cpu
+            else:  # dali_gpu, #dali_cpu
                 batch_data = data[0]
             row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], \
-                                                                          batch_data["imFace"],\
+                                                                          batch_data["imFace"], \
                                                                           batch_data["imEyeL"], \
                                                                           batch_data["imEyeR"], \
-                                                                          batch_data["faceGrid"],\
+                                                                          batch_data["faceGrid"], \
                                                                           batch_data["gaze"], \
                                                                           batch_data["frame"], \
                                                                           batch_data["indices"]
@@ -548,12 +546,6 @@ def evaluate(dataset,
         imEyeR = imEyeR.to(device=device)
         faceGrid = faceGrid.to(device=device)
         gaze = gaze.to(device=device)
-
-        imFace = torch.autograd.Variable(imFace, requires_grad=False)
-        imEyeL = torch.autograd.Variable(imEyeL, requires_grad=False)
-        imEyeR = torch.autograd.Variable(imEyeR, requires_grad=False)
-        faceGrid = torch.autograd.Variable(faceGrid, requires_grad=False)
-        gaze = torch.autograd.Variable(gaze, requires_grad=False)
 
         # compute output
         with torch.no_grad():
@@ -571,7 +563,7 @@ def evaluate(dataset,
 
         results += list(map(convertResult, r1))
         loss = criterion(output, gaze)
-        error = euclideanBatchError(output, gaze)
+        error = euclidean_batch_error(output, gaze)
 
         # average over the batch
         error = torch.mean(error)
@@ -641,21 +633,6 @@ def export_onnx_model(model, device, verbose):
                           input_names=in_names,
                           output_names=out_names,
                           verbose=verbose)
-
-
-def resize(l, newsize, filling=None):
-    if newsize > len(l):
-        l.extend([filling for x in range(len(l), newsize)])
-    else:
-        del l[newsize:]
-
-
-def setPrintPolicy(master, local_rank):
-    print("[PrintPolicy]", master, local_rank, "Verbatim" if local_rank == master else "Silent")
-    if local_rank == master:
-        sys.stdout = sys.__stdout__
-    else:
-        sys.stdout = open(os.devnull, 'w')
 
 
 if __name__ == "__main__":
