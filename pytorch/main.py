@@ -120,7 +120,7 @@ def main():
         for epoch in range(epoch, args.epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, args.epochs))
             start_time = datetime.now()
-            learning_rates[epoch - 1] = scheduler.get_last_lr()
+            learning_rates[epoch - 1] = scheduler.get_lr()
 
             args.vis.reset()
             # train for one epoch
@@ -159,7 +159,7 @@ def main():
             best_RMSErrors[epoch - 1] = best_RMSError
             RMSErrors[epoch - 1] = eval_RMSError
 
-            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, scheduler.get_last_lr())
+            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, scheduler.get_lr())
             args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
             args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, eval_RMSError)
             args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
