@@ -28,6 +28,9 @@ def extract_checkpoint_data(args, model):
                     best_rms_error)
             )
 
+            # We should start training on the epoch after the last full epoch
+            epoch = epoch + 1
+
             try:
                 state = saved['state_dict']
                 model.load_state_dict(state)
@@ -39,6 +42,7 @@ def extract_checkpoint_data(args, model):
                 model.load_state_dict(state)
         else:
             print('Warning: Could not read checkpoint!')
+
     return rms_errors, best_rms_error, best_rms_errors, epoch, learning_rates
 
 
