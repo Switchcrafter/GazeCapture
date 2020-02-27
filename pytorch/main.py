@@ -18,6 +18,7 @@ import torch.utils.data
 
 from ITrackerModel import ITrackerModel
 from Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations
+from Criterion import MultiCriterion, LogCoshLoss, TanhLoss, SigmoidLoss
 
 import cyclical_learning_rate
 
@@ -162,7 +163,11 @@ def main():
 
     datasets = load_all_data(dataPath, IMAGE_SIZE, FACE_GRID_SIZE, workers, batch_size, verbose, color_space, args.data_loader, not args.disable_boost)
 
-    criterion = MultiCriterion(reduction='mean').to(device=device)
+    # criterion = MultiCriterion(reduction='mean').to(device=device)
+
+    criteria  = [nn.MSELoss, nn.L1Loss]
+    weights = [0.80, 0.20]
+    criterion = MultiCriterion(criteria, weights, reduction='mean').to(device=device)
 
     optimizer = torch.optim.SGD(model.parameters(), START_LR,
                                 momentum=MOMENTUM,
@@ -602,61 +607,6 @@ def test(datasets,
          dataset_limit=None,
          verbose=False, args=None):
     return evaluate(datasets['test'], model, criterion, epoch, checkpointsPath, batch_size, device, dataset_limit, verbose, args)
-
-class LogCoshLoss(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, y_t, y_prime_t):
-        ey_t = y_t - y_prime_t
-        return torch.mean(torch.log(torch.cosh(ey_t + 1e-12)))
-
-class TanhLoss(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, y_t, y_prime_t):
-        ey_t = y_t - y_prime_t
-        return torch.mean(ey_t * torch.tanh(ey_t))
-
-class SigmoidLoss(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, y_t, y_prime_t):
-        ey_t = y_t - y_prime_t
-        return torch.mean(2 * ey_t / (1 + torch.exp(-ey_t)) - ey_t)
-
-# # SmoothL1Loss, 
-# class MultiCriterion(nn.Module):
-#     def __init__(self, reduction='mean'):
-#         super(MultiCriterion, self).__init__()
-#         self.weights = [0.80, 0.20]
-#         self.criterion  = [nn.MSELoss(reduction=reduction), nn.L1Loss(reduction=reduction)]
-#         # Normalize weights here to sum upto 1
-#         self.weights = [float(w)/sum(self.weights) for w in self.weights]
-
-#     def forward(self, input, target):
-#         return sum([self.weights[i] * self.criterion[i].forward(input, target) for i in range(len(self.criterion))])
-    
-#     def backward(self, retain_graph):
-#         return sum([self.weights[i] * self.criterion[i].backward(retain_graph=retain_graph) for i in range(len(self.criterion))])
-
-class MultiCriterion(nn.Module):
-    def __init__(self, reduction='mean'):
-        super(MultiCriterion, self).__init__()
-        # self.criterion  = [nn.MSELoss(reduction=reduction), nn.L1Loss(reduction=reduction)]
-        # self.criterion  = [nn.SmoothL1Loss(reduction=reduction)]
-        # self.criterion  = [LogCoshLoss()] #gpu1
-        # self.criterion  = [TanhLoss()] #gpu2
-        # self.criterion  = [SigmoidLoss()] #gpu3
-        self.criterion  = [nn.MSELoss(reduction=reduction)] #gpu0
-
-    def forward(self, input, target):
-        return sum([criterion.forward(input, target) for criterion in self.criterion])
-    
-    def backward(self, retain_graph):
-        return sum([criterion.backward(retain_graph=retain_graph) for criterion in self.criterion])
 
 def export_onnx_model(model, device, verbose):
     # switch to evaluate mode

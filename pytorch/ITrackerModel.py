@@ -30,7 +30,7 @@ class ItrackerImageModel(nn.Module):
     def __init__(self, color_space):
         super(ItrackerImageModel, self).__init__()
         self.model = models.resnet18(pretrained=True)
-        # # For L-channel (greyscale) only model
+        # ToDo For L-channel (greyscale) only model
         # if color_space == 'L':
         #     self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.conv = nn.Sequential(*list(self.model.children())[:-2])
