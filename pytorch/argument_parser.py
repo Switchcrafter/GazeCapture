@@ -60,7 +60,7 @@ def parse_commandline_arguments():
     args.master = args.local_rank[0] if args.mode == 'dp' else args.master
     args.batch_size = args.batch_size * torch.cuda.device_count() if args.mode == 'ddp1' else args.batch_size
     if not args.disable_cuda and torch.cuda.is_available() and len(args.local_rank) > 0:
-        using_cuda = True
+        args.using_cuda = True
         # remove any device which doesn't exists
         args.local_rank = [int(d) for d in args.local_rank if 0 <= int(d) < torch.cuda.device_count()]
         # set args.local_rank[0] as the current device
@@ -101,9 +101,11 @@ def parse_commandline_arguments():
         print('args.disable_cuda     = %d' % args.disable_cuda)
         print('args.verbose          = %d' % args.verbose)
         print('args.color_space      = %s' % args.color_space)
+        print('args.using_cuda       = %s' % args.using_cuda)
         print('===================================================')
 
     return args
+
 
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
