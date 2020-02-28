@@ -209,15 +209,18 @@ def generate_face_eye_images(face_rect, left_eye_rect_relative, right_eye_rect_r
     face_image = face_image[face_rect[1]:face_rect[1]+face_rect[3], face_rect[0]:face_rect[0]+face_rect[2]]
     face_image = imutils.resize(face_image, width=IMAGE_WIDTH)
 
-    left_eye_image = webcam_image.copy()
-    left_eye_image = left_eye_image[face_rect[1]+left_eye_rect_relative[1]:face_rect[1]+left_eye_rect_relative[1]+left_eye_rect_relative[3],
-                                    face_rect[0]+left_eye_rect_relative[0]:face_rect[0]+left_eye_rect_relative[0]+left_eye_rect_relative[2]]
-    left_eye_image = imutils.resize(left_eye_image, width=IMAGE_WIDTH)
+    # left_eye_image = webcam_image.copy()
+    # left_eye_image = left_eye_image[face_rect[1]+left_eye_rect_relative[1]:face_rect[1]+left_eye_rect_relative[1]+left_eye_rect_relative[3],
+    #                                 face_rect[0]+left_eye_rect_relative[0]:face_rect[0]+left_eye_rect_relative[0]+left_eye_rect_relative[2]]
+    # left_eye_image = imutils.resize(left_eye_image, width=IMAGE_WIDTH)
 
-    right_eye_image = webcam_image.copy()
-    right_eye_image = right_eye_image[face_rect[1]+right_eye_rect_relative[1]:face_rect[1]+right_eye_rect_relative[1]+right_eye_rect_relative[3],
-                                      face_rect[0]+right_eye_rect_relative[0]:face_rect[0]+right_eye_rect_relative[0]+right_eye_rect_relative[2]]
-    right_eye_image = imutils.resize(right_eye_image, width=IMAGE_WIDTH)
+    # right_eye_image = webcam_image.copy()
+    # right_eye_image = right_eye_image[face_rect[1]+right_eye_rect_relative[1]:face_rect[1]+right_eye_rect_relative[1]+right_eye_rect_relative[3],
+    #                                   face_rect[0]+right_eye_rect_relative[0]:face_rect[0]+right_eye_rect_relative[0]+right_eye_rect_relative[2]]
+    # right_eye_image = imutils.resize(right_eye_image, width=IMAGE_WIDTH)
+
+    left_eye_image = np.zeros((IMAGE_WIDTH, IMAGE_HEIGHT, 3), dtype=np.uint8)
+    right_eye_image = np.zeros((IMAGE_WIDTH, IMAGE_HEIGHT, 3), dtype=np.uint8)
 
     return face_image, left_eye_image, right_eye_image
 

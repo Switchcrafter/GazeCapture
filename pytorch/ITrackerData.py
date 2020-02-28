@@ -233,12 +233,16 @@ class ITrackerData(object):
         if self.data_loader == 'cpu':
             # Image loading, transformation and normalization happen here
             imFace = self.loadImage(imFacePath)
-            imEyeL = self.loadImage(imEyeLPath)
-            imEyeR = self.loadImage(imEyeRPath)
+            # imEyeL = self.loadImage(imEyeLPath)
+            # imEyeR = self.loadImage(imEyeRPath)
 
             imFace = self.normalize_image(imFace)
-            imEyeL = self.normalize_image(imEyeL)
-            imEyeR = self.normalize_image(imEyeR)
+            # imEyeL = self.normalize_image(imEyeL)
+            # imEyeR = self.normalize_image(imEyeR)
+
+            imEyeL = torch.FloatTensor(np.zeros((3, 224, 224), dtype=np.uint8))
+            imEyeR = torch.FloatTensor(np.zeros((3, 224, 224), dtype=np.uint8))
+
             # to tensor
             row = torch.LongTensor([int(index)])
             faceGrid = torch.FloatTensor(faceGrid)

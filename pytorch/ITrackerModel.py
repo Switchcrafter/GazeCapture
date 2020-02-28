@@ -107,30 +107,17 @@ class FaceGridModel(nn.Module):
 class ITrackerModel(nn.Module):
     def __init__(self):
         super(ITrackerModel, self).__init__()
-        # 3Cx224Hx224W --> 25088
-        self.eyeModel = ItrackerImageModel()
         # 3Cx224Hx224W --> 64
         self.faceModel = FaceImageModel()
         # 1Cx25Hx25W --> 128
         self.gridModel = FaceGridModel()
 
-        # Joining both eyes
-        self.eyesFC = nn.Sequential(
-            # FC-E1
-            nn.Dropout(0.1),
-            # 50176
-            nn.Linear(2 * 25088, 128),
-            # 128
-            nn.ReLU(inplace=True),
-            # 128
-        )
-
         # Joining everything
         self.fc = nn.Sequential(
             # FC1
             nn.Dropout(0.1),
-            # 384 FC-E1 (128) + FC-F2(64) + FC-FG2(128)
-            nn.Linear(128 + 64 + 128, 128),
+            # 192 FC-F2(64) + FC-FG2(128)
+            nn.Linear(64 + 128, 128),
             # 128
             nn.ReLU(inplace=True),
             # 128
@@ -143,20 +130,12 @@ class ITrackerModel(nn.Module):
         )
 
     def forward(self, faces, eyesLeft, eyesRight, faceGrids):
-        # Eye nets
-        xEyeL = self.eyeModel(eyesLeft)     # CONV-E1 -> ... -> CONV-E4
-        xEyeR = self.eyeModel(eyesRight)    # CONV-E1 -> ... -> CONV-E4
-
-        # Cat Eyes and FC
-        xEyes = torch.cat((xEyeL, xEyeR), 1)
-        xEyes = self.eyesFC(xEyes)          # FC-E1
-
         # Face net
         xFace = self.faceModel(faces)       # CONV-F1 -> ... -> CONV-E4 -> FC-F1 -> FC-F2
         xGrid = self.gridModel(faceGrids)   # FC-FG1 -> FC-FG2
 
         # Cat all
-        x = torch.cat((xEyes, xFace, xGrid), 1)
+        x = torch.cat((xFace, xGrid), 1)
         x = self.fc(x)                      # FC1 -> FC2
 
         return x
