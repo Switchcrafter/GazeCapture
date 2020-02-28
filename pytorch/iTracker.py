@@ -1,19 +1,22 @@
 from datetime import datetime  # for timing
 
 import cv2
-import dlib
-import imutils
 import numpy as np
 import torch
-from PIL import Image
-from imutils import face_utils
+
 from screeninfo import get_monitors
-from skimage import exposure
-from skimage import feature
 
 from ITrackerData import normalize_image_transform
 from ITrackerModel import ITrackerModel
 from cam2screen import cam2screen
+
+from face_utilities import find_face_dlib,\
+                           landmarksToRects,\
+                           generate_face_eye_images,\
+                           generate_face_grid, \
+                           prepare_image_inputs
+
+import onnxruntime
 
 MEAN_PATH = '.'
 
@@ -43,17 +46,16 @@ TARGETS = [(-10., -3.),
            ]
 
 def main():
-    model = ITrackerModel().to(device='cpu')
-    saved = torch.load('best_checkpoint.pth.tar', map_location='cpu')
+    use_torch = True
+    use_onnx = False
+    color_space = 'YCbCr'
 
-    model.load_state_dict(saved['state_dict'])
-    model.eval()
+    if use_torch:
+        model = initialize_torch()
+    elif use_onnx:
+        session = initialize_onnx()
 
     monitor = get_monitors()[0]
-
-    p = "shape_predictor_68_face_landmarks.dat"
-    detector = dlib.get_frontal_face_detector()
-    predictor = dlib.shape_predictor(p)
 
     cap = cv2.VideoCapture(0)
 
@@ -63,188 +65,59 @@ def main():
 
     stimulusX, stimulusY = change_target(target, monitor)
 
+    screenOffsetX = 0
+    screenOffsetY = 100
+
     while True:
         _, webcam_image = cap.read()
 
-        face_image = None
-        right_eye_image = None
-        left_eye_image = None
-        face_grid = None
-        is_valid = False
-
-        gray = cv2.cvtColor(webcam_image, cv2.COLOR_BGR2GRAY)
-        face_rectangles = detector(gray, 0)
-
-        # if face_rectangles length != 1, then not valid
-
-        for (i, rect) in enumerate(face_rectangles):
-            shape = predictor(gray, rect)
-            shape_np = face_utils.shape_to_np(shape)
-
-            (leftEyeLandmarksStart, leftEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
-            (rightEyeLandmarksStart, rightEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
-
-            (x, y, w, h) = cv2.boundingRect(shape_np)
-
-            if x >= 0 and y >= 0 \
-                    and x + w <= webcam_image.shape[1] \
-                    and y + h <= webcam_image.shape[0] \
-                    and rect.tl_corner().y >= 0 \
-                    and rect.tl_corner().x >= 0:
-                is_valid = True
-                face_image = webcam_image.copy()
-                face_image = face_image[rect.tl_corner().y:rect.br_corner().y, rect.tl_corner().x:rect.br_corner().x]
-                face_image = imutils.resize(face_image, width=IMAGE_WIDTH)
-
-                (x, y, w, h) = cv2.boundingRect(shape_np[leftEyeLandmarksStart:leftEyeLandmarksEnd])
-                left_eye_image = webcam_image.copy()
-                left_eye_image = left_eye_image[y - 15:y + h + 15, x - 5:x + w + 5]
-                left_eye_image = imutils.resize(left_eye_image, width=IMAGE_WIDTH)
-
-                (x, y, w, h) = cv2.boundingRect(shape_np[rightEyeLandmarksStart:rightEyeLandmarksEnd])
-                right_eye_image = webcam_image.copy()
-                right_eye_image = right_eye_image[y - 15:y + h + 15, x - 5:x + w + 5]
-                right_eye_image = imutils.resize(right_eye_image, width=IMAGE_WIDTH)
-
-                if rect.tl_corner().x < 0 or rect.tl_corner().y < 0:
-                    is_valid = False
-
-                cv2.rectangle(webcam_image,
-                              (rect.tl_corner().x, rect.tl_corner().y),
-                              (rect.br_corner().x, rect.br_corner().y),
-                              (255, 255, 00),
-                              2)
-
-                image_width = webcam_image.shape[1]
-                image_height = webcam_image.shape[0]
-
-                faceGridX = int((rect.tl_corner().x / image_width) * GRID_SIZE)
-                faceGridY = int((rect.tl_corner().y / image_height) * GRID_SIZE)
-                faceGridW = int((rect.br_corner().x / image_width) * GRID_SIZE) - faceGridX
-                faceGridH = int((rect.br_corner().y / image_height) * GRID_SIZE) - faceGridY
-
-                faceGridImage = np.zeros((GRID_SIZE, GRID_SIZE, 3), dtype=np.uint8)
-                face_grid = np.zeros((GRID_SIZE, GRID_SIZE, 1), dtype=np.uint8)
-                faceGridImage.fill(255)
-                for m in range(faceGridW):
-                    for n in range(faceGridH):
-                        faceGridImage[faceGridY + n, faceGridX + m] = (0, 0, 0)
-                        face_grid[faceGridY + n, faceGridX + m] = 1
-
-                face_grid = face_grid.flatten()  # flatten from 2d (25, 25) to 1d (625)
-
-                # Draw on our image, all the found coordinate points (x,y)
-                for (x, y) in shape_np:
-                    cv2.circle(webcam_image, (x, y), 2, (0, 255, 0), -1)
-
-        screenOffsetX = 0
-        screenOffsetY = 100
-
         display = np.zeros((monitor.height - screenOffsetY, monitor.width - screenOffsetX, 3), dtype=np.uint8)
 
-        display = draw_overlay(display, 0, 100, webcam_image)
+        shape_np, isValid = find_face_dlib(webcam_image)
 
-        display = draw_text(display,
-                            20,
-                            20,
-                            f'Face ({x:4d}, {y:4d}, {w:4d}, {h:4d})',
-                            fill=(255, 255, 255))
+        if isValid:
+            face_rect, left_eye_rect_relative, right_eye_rect_relative, isValid = landmarksToRects(shape_np, isValid)
 
-        if is_valid:
-            faceGridImage = imutils.resize(faceGridImage, width=IMAGE_WIDTH)
-            input_images = np.concatenate((face_image,
-                                           right_eye_image,
-                                           left_eye_image,
-                                           faceGridImage),
-                                          axis=0)
+            display = generate_baseline_display_data(display, screenOffsetX, screenOffsetY, webcam_image, face_rect)
 
-            # hog_images = np.concatenate((hogImage(face_image),
-            #                                        hogImage(right_eye_image),
-            #                                        hogImage(left_eye_image)),
-            #                                       axis=0)
-            # cv2.imshow("HoG images", hog_images)
+            face_image, left_eye_image, right_eye_image = generate_face_eye_images(face_rect,
+                                                                                   left_eye_rect_relative,
+                                                                                   right_eye_rect_relative,
+                                                                                   webcam_image)
 
-            # Run inference using face, right_eye_image, left_eye_image and face_grid
-            imFace = Image.fromarray(cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB), 'RGB').convert('YCbCr')
-            imEyeL = Image.fromarray(cv2.cvtColor(left_eye_image, cv2.COLOR_BGR2RGB), 'RGB').convert('YCbCr')
-            imEyeR = Image.fromarray(cv2.cvtColor(right_eye_image, cv2.COLOR_BGR2RGB), 'RGB').convert('YCbCr')
+            face_grid_image, face_grid = generate_face_grid(face_rect, webcam_image)
+            imEyeL, imEyeR, imFace = prepare_image_inputs(face_grid_image,
+                                                          face_image,
+                                                          left_eye_image,
+                                                          right_eye_image)
 
-            imFace = normalize_image(imFace)
-            imEyeL = normalize_image(imEyeL)
-            imEyeR = normalize_image(imEyeR)
-            faceGrid = torch.FloatTensor(face_grid)
+            face_grid, image_eye_left, image_eye_right, image_face = prepare_image_tensors(color_space,
+                                                                                           face_grid,
+                                                                                           image_eye_left,
+                                                                                           image_eye_right,
+                                                                                           image_face,
+                                                                                           normalize_image)
 
-            # convert the 3 dimensional array into a 4 dimensional array, making it a batch size of 1
-            imFace.unsqueeze_(0)
-            imEyeL.unsqueeze_(0)
-            imEyeR.unsqueeze_(0)
-            faceGrid.unsqueeze_(0)
+            start_time = datetime.now()
+            if use_torch:
+                gaze_prediction_np = run_torch_inference(model,
+                                                         normalize_image,
+                                                         imFace,
+                                                         imEyeL,
+                                                         imEyeR,
+                                                         face_grid)
+            elif use_onnx:
+                gaze_prediction_np = run_onnx_inference(session,
+                                                        normalize_image,
+                                                        imFace,
+                                                        imEyeL,
+                                                        imEyeR,
+                                                        face_grid)
 
-            imFace = torch.autograd.Variable(imFace, requires_grad=False)
-            imEyeL = torch.autograd.Variable(imEyeL, requires_grad=False)
-            imEyeR = torch.autograd.Variable(imEyeR, requires_grad=False)
-            faceGrid = torch.autograd.Variable(faceGrid, requires_grad=False)
+            time_elapsed = datetime.now() - start_time
 
-            # compute output
-            with torch.no_grad():
-                start_time = datetime.now()
-
-                output = model(imFace, imEyeL, imEyeR, faceGrid)
-                gaze_prediction_np = output.numpy()[0]
-
-                time_elapsed = datetime.now() - start_time
-                # print(f'GazePrediction(cam) - {gaze_prediction_np} - time elapsed {time_elapsed}')
-
-                (gazePredictionScreenPixelXFromCamera, gazePredictionScreenPixelYFromCamera) = cam2screen(
-                    gaze_prediction_np[0],
-                    gaze_prediction_np[1],
-                    1,
-                    monitor.width,
-                    monitor.height,
-                    deviceName="Alienware 51m"
-                )
-
-                display = draw_overlay(display, monitor.width - 324, 0, input_images)
-
-                display = draw_crosshair(display,
-                                         int(gazePredictionScreenPixelXFromCamera),  # Screen offset?
-                                         int(gazePredictionScreenPixelYFromCamera),
-                                         radius=25,
-                                         fill=(255, 0, 0),
-                                         width=3)
-
-                display = draw_circle(display,
-                                      int(stimulusX),
-                                      int(stimulusY),
-                                      radius=20,
-                                      fill=(0, 0, 255),
-                                      width=3)
-                display = draw_circle(display,
-                                      int(stimulusX),
-                                      int(stimulusY),
-                                      radius=5,
-                                      fill=(0, 0, 255),
-                                      width=5)
-
-                display = draw_text(display,
-                                    20,
-                                    40,
-                                    f'time elapsed {time_elapsed}',
-                                    fill=(255, 255, 255))
-
-                display = draw_text(display,
-                                    20,
-                                    60,
-                                    f'GazePrediction(cam) - ({gaze_prediction_np.item(0):.4f},'
-                                    f' {gaze_prediction_np.item(1):.4f})',
-                                    fill=(255, 255, 255))
-
-                display = draw_text(display,
-                                    20,
-                                    80,
-                                    f'GazePrediction(screen) - ({gazePredictionScreenPixelXFromCamera:.4f},'
-                                    f' {gazePredictionScreenPixelYFromCamera:.4f})',
-                                    fill=(255, 255, 255))
+            display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image,
+                                            monitor, right_eye_image, stimulusX, stimulusY, time_elapsed)
 
         cv2.imshow("display", display)
 
@@ -259,6 +132,130 @@ def main():
 
     cv2.destroyAllWindows()
     cap.release()
+
+
+def generate_baseline_display_data(display, screenOffsetX, screenOffsetY, webcam_image, face_rect):
+    display = draw_overlay(display, screenOffsetX, screenOffsetY, webcam_image)
+    # display = draw_text(display,
+    #                     20,
+    #                     20,
+    #                     f'Face ({x:4d}, {y:4d}, {w:4d}, {h:4d})',
+    #                     fill=(255, 255, 255))
+    return display
+
+
+def generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image, monitor,
+                          right_eye_image, stimulus_x, stimulus_y, time_elapsed):
+    (gazePredictionScreenPixelXFromCamera, gazePredictionScreenPixelYFromCamera) = cam2screen(
+        gaze_prediction_np[0],
+        gaze_prediction_np[1],
+        1,
+        monitor.width,
+        monitor.height,
+        deviceName="Alienware 51m"
+    )
+    input_images = np.concatenate((face_image,
+                                   right_eye_image,
+                                   left_eye_image),
+                                  axis=0)
+    display = draw_overlay(display, monitor.width - 324, 0, input_images)
+    display = draw_crosshair(display,
+                             int(gazePredictionScreenPixelXFromCamera),  # Screen offset?
+                             int(gazePredictionScreenPixelYFromCamera),
+                             radius=25,
+                             fill=(255, 0, 0),
+                             width=3)
+    display = draw_circle(display,
+                          int(stimulus_x),
+                          int(stimulus_y),
+                          radius=20,
+                          fill=(0, 0, 255),
+                          width=3)
+    display = draw_circle(display,
+                          int(stimulus_x),
+                          int(stimulus_y),
+                          radius=5,
+                          fill=(0, 0, 255),
+                          width=5)
+    display = draw_text(display,
+                        20,
+                        40,
+                        f'time elapsed {time_elapsed}',
+                        fill=(255, 255, 255))
+    display = draw_text(display,
+                        20,
+                        60,
+                        f'GazePrediction(cam) - ({gaze_prediction_np.item(0):.4f},'
+                        f' {gaze_prediction_np.item(1):.4f})',
+                        fill=(255, 255, 255))
+    display = draw_text(display,
+                        20,
+                        80,
+                        f'GazePrediction(screen) - ({gazePredictionScreenPixelXFromCamera:.4f},'
+                        f' {gazePredictionScreenPixelYFromCamera:.4f})',
+                        fill=(255, 255, 255))
+    return display
+
+
+def initialize_torch():
+    model = ITrackerModel().to(device='cpu')
+    saved = torch.load('best_checkpoint.pth.tar', map_location='cpu')
+    model.load_state_dict(saved['state_dict'])
+    model.eval()
+    return model
+
+
+def initialize_onnx():
+    session = onnxruntime.InferenceSession('itracker.onnx')
+    return session
+
+
+def run_torch_inference(model, normalize_image, image_face, image_eye_left, image_eye_right, face_grid, color_space):
+    # compute output
+    with torch.no_grad():
+        output = model(image_face, image_eye_left, image_eye_right, face_grid)
+        gaze_prediction_np = output.numpy()[0]
+    return gaze_prediction_np
+
+
+def run_onnx_inference(session, normalize_image, image_face, image_eye_left, image_eye_right, face_grid, color_space):
+    # compute output
+    output = session.run(None,
+                         {"face": image_face.numpy(),
+                          "eyesLeft": image_eye_left.numpy(),
+                          "eyesRight": image_eye_right.numpy(),
+                          "faceGrid": face_grid.numpy()})
+
+    gaze_prediction_np = (output[0])[0]
+
+    return gaze_prediction_np
+
+
+def prepare_image_tensors(color_space, face_grid, image_eye_left, image_eye_right, image_face, normalize_image):
+    # Convert to the desired color space
+    image_face = image_face.convert(color_space)
+    image_eye_left = image_eye_left.convert(color_space)
+    image_eye_right = image_eye_right.convert(color_space)
+
+    # normalize the image, results in tensors
+    image_face = normalize_image(image_face)
+    image_eye_left = normalize_image(image_eye_left)
+    image_eye_right = normalize_image(image_eye_right)
+    face_grid = torch.FloatTensor(face_grid)
+
+    # convert the 3 dimensional array into a 4 dimensional array, making it a batch size of 1
+    image_face.unsqueeze_(0)
+    image_eye_left.unsqueeze_(0)
+    image_eye_right.unsqueeze_(0)
+    face_grid.unsqueeze_(0)
+
+    # Convert the tensors into
+    image_face = torch.autograd.Variable(image_face, requires_grad=False)
+    image_eye_left = torch.autograd.Variable(image_eye_left, requires_grad=False)
+    image_eye_right = torch.autograd.Variable(image_eye_right, requires_grad=False)
+    face_grid = torch.autograd.Variable(face_grid, requires_grad=False)
+
+    return face_grid, image_eye_left, image_eye_right, image_face
 
 
 def change_target(target, monitor):
@@ -312,16 +309,6 @@ def draw_text(image, x, y, string, scale=0.5, fill=(0, 0, 0), thickness=1):
     cv2.putText(image, string, (x, y), font, scale, fill, thickness, cv2.LINE_AA)
 
     return image
-
-
-def hogImage(image):
-    (H, hogImage) = feature.hog(image, orientations=9, pixels_per_cell=(10, 10),
-                                cells_per_block=(3, 3), transform_sqrt=True, block_norm="L1",
-                                visualize=True)
-    hogImage = exposure.rescale_intensity(hogImage, out_range=(0, 255))
-    hogImage = hogImage.astype("uint8")
-
-    return hogImage
 
 
 if __name__ == "__main__":

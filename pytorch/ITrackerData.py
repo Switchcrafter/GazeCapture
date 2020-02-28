@@ -4,20 +4,33 @@ import os
 import os.path
 import scipy.io as sio
 import numpy as np
-# import collections
+
 from random import shuffle
 
 # CPU data loader
 from PIL import Image
 import torchvision.transforms as transforms
 
-# GPU data loader
-from nvidia.dali.pipeline import Pipeline
-import nvidia.dali.ops as ops
-import nvidia.dali.types as types
-from nvidia.dali.plugin.pytorch import DALIGenericIterator
+try:
+    # GPU data loader
+    from nvidia.dali.pipeline import Pipeline
+    import nvidia.dali.ops as ops
+    import nvidia.dali.types as types
+    from nvidia.dali.plugin.pytorch import DALIGenericIterator
+except ImportError:
+    # If running on a non-CUDA system, stub out Pipeline to prevent code crash
+    class Pipeline:
+        def __init__(self, *args):
+            return
 
-from Utilities import centeredText
+
+    # If running on a non-CUDA system, stub out DALIGenericIterator to prevent code crash
+    class DALIGenericIterator:
+        def __init__(self, *args):
+            return
+
+from Utilities import centered_text
+
 
 def normalize_image_transform(image_size, split, jitter, color_space):
     normalize_image = []
@@ -37,12 +50,13 @@ def normalize_image_transform(image_size, split, jitter, color_space):
 
     return transforms.Compose(normalize_image)
 
+
 class ExternalSourcePipeline(Pipeline):
     def __init__(self, data, batch_size, image_size, split, silent, num_threads, device_id, data_loader, color_space, shuffle=False):
         super(ExternalSourcePipeline, self).__init__(batch_size,
-                                      num_threads,
-                                      device_id,
-                                      seed=12)
+                                                     num_threads,
+                                                     device_id,
+                                                     seed=12)
 
         self.split = split
         if shuffle:
@@ -108,7 +122,6 @@ class ExternalSourcePipeline(Pipeline):
                                                 image_type=output_type,
                                                 mean=mean,
                                                 std=std)
-            # self.cast = ops.Cast(device='gpu', dtype=types.FLOAT)#types.INT32,types.UINT8,types.FLOAT
 
     def define_graph(self):
         self.row = self.rowBatch()
@@ -137,7 +150,8 @@ class ExternalSourcePipeline(Pipeline):
         return len(self.sourceIterator)
 
     def iter_setup(self):
-        (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, faceGridBatch, gazeBatch, frameBatch, indexBatch) = self.sourceIterator.next()
+        (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, faceGridBatch, gazeBatch, frameBatch,
+         indexBatch) = self.sourceIterator.next()
         self.feed_input(self.row, rowBatch)
         self.feed_input(self.imFace, imFaceBatch)
         self.feed_input(self.imEyeL, imEyeLBatch)
@@ -146,6 +160,7 @@ class ExternalSourcePipeline(Pipeline):
         self.feed_input(self.gaze, gazeBatch)
         self.feed_input(self.frame, frameBatch)
         self.feed_input(self.index, indexBatch)
+
 
 class ITrackerMetadata(object):
     def __init__(self, dataPath, silent=True):
@@ -166,6 +181,7 @@ class ITrackerMetadata(object):
             raise RuntimeError('Could not read metadata file %s! Provide a valid dataset path.' % filename)
         return metadata
 
+
 class Dataset:
     def __init__(self, split, data, size, loader):
         self.split = split
@@ -173,8 +189,19 @@ class Dataset:
         self.size = size
         self.loader = loader
 
+
 class ITrackerData(object):
-    def __init__(self, dataPath, metadata, batch_size, imSize, gridSize, split, silent=True, jitter=True, color_space='YCbCr', data_loader='cpu'):
+    def __init__(self,
+                 dataPath,
+                 metadata,
+                 batch_size,
+                 imSize,
+                 gridSize,
+                 split,
+                 silent=True,
+                 jitter=True,
+                 color_space='YCbCr',
+                 data_loader='cpu'):
         self.dataPath = dataPath
         self.metadata = metadata
         self.batch_size = batch_size
@@ -227,8 +254,8 @@ class ITrackerData(object):
         gaze = np.array([self.metadata['labelDotXCam'][rowIndex], self.metadata['labelDotYCam'][rowIndex]], np.float32)
         frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]])
         faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][rowIndex, :])
-        row = np.array([int(rowIndex)], dtype = np.uint8)
-        index = np.array([int(index)], dtype = np.uint8)
+        row = np.array([int(rowIndex)], dtype=np.uint8)
+        index = np.array([int(index)], dtype=np.uint8)
 
         if self.data_loader == 'cpu':
             # Image loading, transformation and normalization happen here
@@ -243,6 +270,7 @@ class ITrackerData(object):
             row = torch.LongTensor([int(index)])
             faceGrid = torch.FloatTensor(faceGrid)
             gaze = torch.FloatTensor(gaze)
+
             return row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, index
         else:
             # image loading, transformation and normalization happen in ExternalDataPipeline
@@ -288,9 +316,9 @@ class ITrackerData(object):
             imEyeR = open(imEyeRPath, 'rb')
 
             rowBatch.append(row)
-            imFaceBatch.append(np.frombuffer(imFace.read(), dtype = np.uint8))
-            imEyeLBatch.append(np.frombuffer(imEyeL.read(), dtype = np.uint8))
-            imEyeRBatch.append(np.frombuffer(imEyeR.read(), dtype = np.uint8))
+            imFaceBatch.append(np.frombuffer(imFace.read(), dtype=np.uint8))
+            imEyeLBatch.append(np.frombuffer(imEyeL.read(), dtype=np.uint8))
+            imEyeRBatch.append(np.frombuffer(imEyeR.read(), dtype=np.uint8))
             faceGridBatch.append(faceGrid)
             gazeBatch.append(gaze)
             frameBatch.append(frame)
@@ -301,18 +329,38 @@ class ITrackerData(object):
             imEyeR.close()
 
             self.index = (self.index + 1) % self.size
-        return (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, faceGridBatch, gazeBatch, frameBatch, indexBatch)
+        return rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, faceGridBatch, gazeBatch, frameBatch, indexBatch
 
     next = __next__
 
-def load_data(split, dataPath, metadata, image_size, grid_size, workers, batch_size, verbose, color_space, data_loader, eval_boost):
+
+def load_data(split,
+              dataPath,
+              metadata,
+              image_size,
+              grid_size,
+              workers,
+              batch_size,
+              verbose,
+              color_space,
+              data_loader,
+              eval_boost):
     shuffle = True if split == 'train' else False
-    data = ITrackerData(dataPath, metadata, batch_size, image_size, grid_size, split, silent=not verbose, jitter=True, color_space=color_space, data_loader=data_loader)
+    data = ITrackerData(dataPath,
+                        metadata,
+                        batch_size,
+                        image_size,
+                        grid_size,
+                        split,
+                        silent=not verbose,
+                        jitter=True,
+                        color_space=color_space,
+                        data_loader=data_loader)
     size = len(data)
 
     if data_loader == "cpu":
         if eval_boost:
-            batch_size = batch_size if split == 'train' else batch_size*2
+            batch_size = batch_size if split == 'train' else batch_size * 2
         loader = torch.utils.data.DataLoader(
             data,
             batch_size=batch_size,
@@ -322,23 +370,65 @@ def load_data(split, dataPath, metadata, image_size, grid_size, workers, batch_s
     else:
         num_gpus = torch.cuda.device_count()
         if data_loader == "dali_gpu" or data_loader == "dali_cpu":
-            pipes = [ExternalSourcePipeline(data, batch_size=batch_size, image_size=image_size, split=split, silent=not verbose, num_threads=8, device_id = num_gpus-1, data_loader=data_loader, color_space=color_space, shuffle=shuffle)]
+            pipes = [ExternalSourcePipeline(data,
+                                            batch_size=batch_size,
+                                            image_size=image_size,
+                                            split=split,
+                                            silent=not verbose,
+                                            num_threads=8,
+                                            device_id=num_gpus - 1,
+                                            data_loader=data_loader,
+                                            color_space=color_space,
+                                            shuffle=shuffle)]
         elif data_loader == "dali_gpu_all":
-            pipes = [ExternalSourcePipeline(data, batch_size=batch_size, image_size=image_size, split=split, silent=not verbose, num_threads=1, device_id = i, data_loader=data_loader, color_space=color_space, shuffle=shuffle) for i in range(num_gpus)]
+            pipes = [ExternalSourcePipeline(data,
+                                            batch_size=batch_size,
+                                            image_size=image_size,
+                                            split=split,
+                                            silent=not verbose,
+                                            num_threads=1,
+                                            device_id=i,
+                                            data_loader=data_loader,
+                                            color_space=color_space,
+                                            shuffle=shuffle) for i in range(num_gpus)]
         else:
             # todo raise error
             print("Invalid data_loader mode", data_loader)
-        # Todo: pin memory, auto_reset=True for auto reset iterator
+        # Todo: pin memory
+        # auto_reset=True resets the iterator after each epoch
         # DALIGenericIterator has inbuilt build for all pipelines
-        loader = DALIGenericIterator(pipes, ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'], size=len(data), fill_last_batch=False, last_batch_padded=True, auto_reset=True)
+        loader = DALIGenericIterator(pipes,
+                                     ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'],
+                                     size=len(data),
+                                     fill_last_batch=False,
+                                     last_batch_padded=True, auto_reset=True)
 
     return Dataset(split, data, size, loader)
 
-def load_all_data(path, image_size, grid_size, workers, batch_size, verbose, color_space='YCbCr', data_loader='cpu', eval_boost=False):
-    print(centeredText('Loading Data'))
+
+def load_all_data(path,
+                  image_size,
+                  grid_size,
+                  workers,
+                  batch_size,
+                  verbose,
+                  color_space='YCbCr',
+                  data_loader='cpu',
+                  eval_boost=False):
+    print(centered_text('Loading Data'))
     metadata = ITrackerMetadata(path, silent=not verbose).metadata
     splits = ['train', 'val', 'test']
-    all_data = { split : load_data(split, path, metadata, image_size, grid_size, workers, batch_size, verbose, color_space, data_loader, eval_boost) for split in splits }
+    all_data = {
+        split: load_data(split,
+                         path,
+                         metadata,
+                         image_size,
+                         grid_size,
+                         workers,
+                         batch_size,
+                         verbose,
+                         color_space,
+                         data_loader,
+                         eval_boost)
+        for split in splits}
     return all_data
-
-

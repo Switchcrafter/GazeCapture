@@ -1,9 +1,12 @@
+import sys
 import shutil
+import os
 from datetime import datetime
 
 import torch
 import visdom
 import numpy as np
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -154,10 +157,11 @@ class SamplingBar(Bar):
         print('\033[F' + self.label + self.left + code + self.right, end='\n')
 
 
-def centeredText(infoString, marker='-', length=40):
+def centered_text(infoString, marker='-', length=40):
     marker = marker * length
     index = (len(marker) - len(infoString)) // 2
     return marker[:index] + infoString + marker[index + len(infoString):]
+
 
 class Visualizations(object):
     """Plots to Visdom"""
@@ -241,27 +245,17 @@ class Visualizations(object):
             self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.epoch_plots[var_name], name=split_name,
             update = 'append', opts=dict(linecolor=self.getColor(split_name), dash=self.getStyle(style)))
 
-# Custom lodd functions
-class LogCoshLoss(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
 
-    def forward(self, y_t, y_prime_t):
-        ey_t = y_t - y_prime_t
-        return torch.mean(torch.log(torch.cosh(ey_t + 1e-12)))
+def resize(arr, new_size, filling=None):
+    if new_size > len(arr):
+        arr.extend([filling for x in range(len(arr), new_size)])
+    else:
+        del arr[new_size:]
 
-class TanhLoss(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
 
-    def forward(self, y_t, y_prime_t):
-        ey_t = y_t - y_prime_t
-        return torch.mean(ey_t * torch.tanh(ey_t))
-
-class SigmoidLoss(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, y_t, y_prime_t):
-        ey_t = y_t - y_prime_t
-        return torch.mean(2 * ey_t / (1 + torch.exp(-ey_t)) - ey_t)
+def set_print_policy(master, local_rank):
+    print("[PrintPolicy]", master, local_rank, "Verbatim" if local_rank == master else "Silent")
+    if local_rank == master:
+        sys.stdout = sys.__stdout__
+    else:
+        sys.stdout = open(os.devnull, 'w')

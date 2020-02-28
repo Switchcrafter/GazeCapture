@@ -7,7 +7,7 @@ from torchvision import models
 
 '''
 Pytorch model for the iTracker.
-Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018. 
+Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018.
 Website: http://gazecapture.csail.mit.edu/
 
 Cite:
@@ -68,7 +68,7 @@ class FaceImageModel(nn.Module):
             nn.ReLU(inplace=True),
             # 64
         )
-        
+
     def forward(self, x):
         # 3C x 224H x 224W
         x = self.conv(x)

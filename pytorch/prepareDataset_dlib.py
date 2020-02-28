@@ -1,116 +1,285 @@
+import argparse
 import json
-
-import cv2
 import os
+import re
+import shutil
+import sys
 
-import dlib
 import numpy as np
+import scipy.io as sio
 from PIL import Image
-from imutils import face_utils
 
-p = "shape_predictor_68_face_landmarks.dat"
-detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor(p)
+'''
+Prepares the GazeCapture dataset for use with the pytorch code. Crops images, compiles JSONs into metadata.mat
+
+Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018. 
+
+Website: http://gazecapture.csail.mit.edu/
+
+Cite:
+
+Eye Tracking for Everyone
+K.Krafka*, A. Khosla*, P. Kellnhofer, H. Kannan, S. Bhandarkar, W. Matusik and A. Torralba
+IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2016
+
+@inproceedings{cvpr2016_gazecapture,
+Author = {Kyle Krafka and Aditya Khosla and Petr Kellnhofer and Harini Kannan and Suchendra Bhandarkar and Wojciech Matusik and Antonio Torralba},
+Title = {Eye Tracking for Everyone},
+Year = {2016},
+Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
+}
+
+'''
+
+parser = argparse.ArgumentParser(description='iTracker-pytorch-PrepareDataset.')
+parser.add_argument('--dataset_path', help="Path to extracted files. It should have folders called '%%05d' in it.",
+                    default=None)
+parser.add_argument('--output_path', default=None,
+                    help="Where to write the output. Can be the same as dataset_path if you wish (=default).")
+args = parser.parse_args()
 
 
 def main():
-    dataset_path = "/data/gc-data"
-    recordings = os.listdir(dataset_path)
+    if args.output_path is None:
+        args.output_path = args.dataset_path
 
-    for recording in sorted(recordings):
-        recording_path = os.path.join(dataset_path, recording)
-        print('Processing recording %s' % recording_path)
+    if args.dataset_path is None or not os.path.isdir(args.dataset_path):
+        raise RuntimeError('No such dataset folder %s!' % args.dataset_path)
 
-        face_dict = {
-            'H': [],
-            'W': [],
-            'X': [],
-            'Y': [],
-            'IsValid': []
-        }
+    preparePath(args.output_path)
 
-        left_eye_dict = {
-            'H': [],
-            'W': [],
-            'X': [],
-            'Y': [],
-            'IsValid': []
-        }
+    # list recordings
+    recordings = os.listdir(args.dataset_path)
+    recordings = np.array(recordings, np.object)
+    recordings = recordings[[os.path.isdir(os.path.join(args.dataset_path, r)) for r in recordings]]
+    recordings.sort()
 
-        right_eye_dict = {
-            'H': [],
-            'W': [],
-            'X': [],
-            'Y': [],
-            'IsValid': []
-        }
+    # Output structure
+    meta = {
+        'labelRecNum': [],
+        'frameIndex': [],
+        'labelDotXCam': [],
+        'labelDotYCam': [],
+        'labelFaceGrid': [],
+    }
 
-        with open(os.path.join(recording_path, 'frames.json'), "r") as read_file:
-            frames = json.load(read_file)
+    for i, recording in enumerate(recordings):
+        print('[%d/%d] Processing recording %s (%.2f%%)' % (i, len(recordings), recording, i / len(recordings) * 100))
+        recDir = os.path.join(args.dataset_path, recording)
+        recDirOut = os.path.join(args.output_path, recording)
+        dlibDir = os.path.join('/data/gc-output-dlib', recording)
 
-        for image_name in frames:
-            print(image_name)
+        # Read JSONs
+        appleFace = readJson(os.path.join(dlibDir, 'dlibFace.json'))
+        if appleFace is None:
+            continue
+        appleLeftEye = readJson(os.path.join(dlibDir, 'dlibLeftEye.json'))
+        if appleLeftEye is None:
+            continue
+        appleRightEye = readJson(os.path.join(dlibDir, 'dlibRightEye.json'))
+        if appleRightEye is None:
+            continue
+        dotInfo = readJson(os.path.join(recDir, 'dotInfo.json'))
+        if dotInfo is None:
+            continue
+        faceGrid = readJson(os.path.join(recDir, 'faceGrid.json'))
+        if faceGrid is None:
+            continue
+        frames = readJson(os.path.join(recDir, 'frames.json'))
+        if frames is None:
+            continue
+        # info = readJson(os.path.join(recDir, 'info.json'))
+        # if info is None:
+        #     continue
+        # screen = readJson(os.path.join(recDir, 'screen.json'))
+        # if screen is None:
+        #     continue
 
-            face_rect, left_eye_rect, right_eye_rect, isValid = \
-                find_face_dlib(os.path.join(recording_path, 'frames', image_name))
-            face_dict['X'].append(face_rect[0])
-            face_dict['Y'].append(face_rect[1])
-            face_dict['W'].append(face_rect[2])
-            face_dict['H'].append(face_rect[3])
-            face_dict['IsValid'].append(isValid)
+        facePath = preparePath(os.path.join(recDirOut, 'appleFace'))
+        leftEyePath = preparePath(os.path.join(recDirOut, 'appleLeftEye'))
+        rightEyePath = preparePath(os.path.join(recDirOut, 'appleRightEye'))
 
-            left_eye_dict['X'].append(left_eye_rect[0])
-            left_eye_dict['Y'].append(left_eye_rect[1])
-            left_eye_dict['W'].append(left_eye_rect[2])
-            left_eye_dict['H'].append(left_eye_rect[3])
-            left_eye_dict['IsValid'].append(isValid)
+        # Preprocess
+        allValid = np.logical_and(np.logical_and(appleFace['IsValid'], appleLeftEye['IsValid']),
+                                  np.logical_and(appleRightEye['IsValid'], faceGrid['IsValid']))
+        if not np.any(allValid):
+            continue
 
-            right_eye_dict['X'].append(right_eye_rect[0])
-            right_eye_dict['Y'].append(right_eye_rect[1])
-            right_eye_dict['W'].append(right_eye_rect[2])
-            right_eye_dict['H'].append(right_eye_rect[3])
-            right_eye_dict['IsValid'].append(isValid)
+        frames = np.array([int(re.match('(\d{5})\.jpg$', x).group(1)) for x in frames])
 
-        with open(os.path.join(recording_path, 'dlibFace.json'), "w") as write_file:
-            json.dump(face_dict, write_file)
-        with open(os.path.join(recording_path, 'dlibLeftEye.json'), "w") as write_file:
-            json.dump(left_eye_dict, write_file)
-        with open(os.path.join(recording_path, 'dlibRightEye.json'), "w") as write_file:
-            json.dump(right_eye_dict, write_file)
+        bboxFromJson = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H']), axis=1).astype(int)
+        faceBbox = bboxFromJson(appleFace) + [-1, -1, 1, 1]  # for compatibility with matlab code
+        leftEyeBbox = bboxFromJson(appleLeftEye) + [0, -1, 0, 0]
+        rightEyeBbox = bboxFromJson(appleRightEye) + [0, -1, 0, 0]
+        leftEyeBbox[:, :2] += faceBbox[:, :2]  # relative to face
+        rightEyeBbox[:, :2] += faceBbox[:, :2]
+        faceGridBbox = bboxFromJson(faceGrid)
 
+        for j, frame in enumerate(frames):
+            # Can we use it?
+            if not allValid[j]:
+                continue
 
-def find_face_dlib(image_path):
-    face_rect = (0, 0, 0, 0)
-    left_eye_rect = (0, 0, 0, 0)
-    right_eye_rect = (0, 0, 0, 0)
-    isValid = 0
+            # Load image
+            imgFile = os.path.join(recDir, 'frames', '%05d.jpg' % frame)
+            if not os.path.isfile(imgFile):
+                logError('Warning: Could not read image file %s!' % imgFile)
+                continue
+            img = Image.open(imgFile)
+            if img is None:
+                logError('Warning: Could not read image file %s!' % imgFile)
+                continue
+            img = np.array(img.convert('RGB'))
 
-    image = Image.open(image_path)
-    if image is None:
-        print('Warning: Could not read image file %s!' % image_path)
+            # Crop images
+            imFace = cropImage(img, faceBbox[j, :])
+            imEyeL = cropImage(img, leftEyeBbox[j, :])
+            imEyeR = cropImage(img, rightEyeBbox[j, :])
+
+            # Save images
+            Image.fromarray(imFace).save(os.path.join(facePath, '%05d.jpg' % frame), quality=95)
+            Image.fromarray(imEyeL).save(os.path.join(leftEyePath, '%05d.jpg' % frame), quality=95)
+            Image.fromarray(imEyeR).save(os.path.join(rightEyePath, '%05d.jpg' % frame), quality=95)
+
+            # Collect metadata
+            meta['labelRecNum'] += [int(recording)]
+            meta['frameIndex'] += [frame]
+            meta['labelDotXCam'] += [dotInfo['XCam'][j]]
+            meta['labelDotYCam'] += [dotInfo['YCam'][j]]
+            meta['labelFaceGrid'] += [faceGridBbox[j, :]]
+
+    # Integrate
+    meta['labelRecNum'] = np.stack(meta['labelRecNum'], axis=0).astype(np.int16)
+    meta['frameIndex'] = np.stack(meta['frameIndex'], axis=0).astype(np.int32)
+    meta['labelDotXCam'] = np.stack(meta['labelDotXCam'], axis=0)
+    meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
+    meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
+
+    # Load reference metadata
+    print('Will compare to the reference GitHub dataset metadata.mat...')
+    reference = sio.loadmat('./reference_metadata.mat', struct_as_record=False)
+    reference['labelRecNum'] = reference['labelRecNum'].flatten()
+    reference['frameIndex'] = reference['frameIndex'].flatten()
+    reference['labelDotXCam'] = reference['labelDotXCam'].flatten()
+    reference['labelDotYCam'] = reference['labelDotYCam'].flatten()
+    reference['labelTrain'] = reference['labelTrain'].flatten()
+    reference['labelVal'] = reference['labelVal'].flatten()
+    reference['labelTest'] = reference['labelTest'].flatten()
+
+    # Find mapping
+    mKey = np.array(['%05d_%05d' % (rec, frame) for rec, frame in zip(meta['labelRecNum'], meta['frameIndex'])],
+                    np.object)
+    rKey = np.array(
+        ['%05d_%05d' % (rec, frame) for rec, frame in zip(reference['labelRecNum'], reference['frameIndex'])],
+        np.object)
+    mIndex = {k: i for i, k in enumerate(mKey)}
+    rIndex = {k: i for i, k in enumerate(rKey)}
+    mToR = np.zeros((len(mKey, )), int) - 1
+    for i, k in enumerate(mKey):
+        if k in rIndex:
+            mToR[i] = rIndex[k]
+        else:
+            logError('Did not find rec_frame %s from the new dataset in the reference dataset!' % k)
+    rToM = np.zeros((len(rKey, )), int) - 1
+    for i, k in enumerate(rKey):
+        if k in mIndex:
+            rToM[i] = mIndex[k]
+        else:
+            logError('Did not find rec_frame %s from the reference dataset in the new dataset!' % k, critical=False)
+            # break
+
+    # Copy split from reference
+    meta['labelTrain'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
+    meta['labelVal'] = np.ones((len(meta['labelRecNum'], )), np.bool)  # default choice
+    meta['labelTest'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
+
+    validMappingMask = mToR >= 0
+    meta['labelTrain'][validMappingMask] = reference['labelTrain'][mToR[validMappingMask]]
+    meta['labelVal'][validMappingMask] = reference['labelVal'][mToR[validMappingMask]]
+    meta['labelTest'][validMappingMask] = reference['labelTest'][mToR[validMappingMask]]
+
+    # Write out metadata
+    metaFile = os.path.join(args.output_path, 'metadata.mat')
+    print('Writing out the metadata.mat to %s...' % metaFile)
+    sio.savemat(metaFile, meta)
+
+    # Statistics
+    nMissing = np.sum(rToM < 0)
+    nExtra = np.sum(mToR < 0)
+    totalMatch = len(mKey) == len(rKey) and np.all(np.equal(mKey, rKey))
+    print('======================\n\tSummary\n======================')
+    print('Total added %d frames from %d recordings.' % (len(meta['frameIndex']), len(np.unique(meta['labelRecNum']))))
+    if nMissing > 0:
+        print(
+            'There are %d frames missing in the new dataset. This may affect the results. Check the log to see which files are missing.' % nMissing)
     else:
-        image = np.array(image.convert('RGB'))
+        print('There are no missing files.')
+    if nExtra > 0:
+        print(
+            'There are %d extra frames in the new dataset. This is generally ok as they were marked for validation split only.' % nExtra)
+    else:
+        print('There are no extra files that were not in the reference dataset.')
+    if totalMatch:
+        print('The new metadata.mat is an exact match to the reference from GitHub (including ordering)')
 
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        face_rectangles = detector(gray, 0)
-
-        if len(face_rectangles) == 1:
-            isValid = 1
-            rect = face_rectangles[0]
-
-            shape = predictor(gray, rect)
-            shape_np = face_utils.shape_to_np(shape)
-
-            (leftEyeLandmarksStart, leftEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
-            (rightEyeLandmarksStart, rightEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
-
-            face_rect = cv2.boundingRect(shape_np)
-            left_eye_rect = cv2.boundingRect(shape_np[leftEyeLandmarksStart:leftEyeLandmarksEnd])
-            right_eye_rect = cv2.boundingRect(shape_np[rightEyeLandmarksStart:rightEyeLandmarksEnd])
-
-            # need to pad y by 15 and x by 5 for right and left eye
-
-    return face_rect, left_eye_rect, right_eye_rect, isValid
+    # import pdb; pdb.set_trace()
+    input("Press Enter to continue...")
 
 
-main()
+def readJson(filename):
+    if not os.path.isfile(filename):
+        logError('Warning: No such file %s!' % filename)
+        return None
+
+    with open(filename) as f:
+        try:
+            data = json.load(f)
+        except:
+            data = None
+
+    if data is None:
+        logError('Warning: Could not read file %s!' % filename)
+        return None
+
+    return data
+
+
+def preparePath(path, clear=False):
+    if not os.path.isdir(path):
+        os.makedirs(path, 0o777)
+    if clear:
+        files = os.listdir(path)
+        for f in files:
+            fPath = os.path.join(path, f)
+            if os.path.isdir(fPath):
+                shutil.rmtree(fPath)
+            else:
+                os.remove(fPath)
+
+    return path
+
+
+def logError(msg, critical=False):
+    print(msg)
+    if critical:
+        sys.exit(1)
+
+
+def cropImage(img, bbox):
+    bbox = np.array(bbox, int)
+
+    aSrc = np.maximum(bbox[:2], 0)
+    bSrc = np.minimum(bbox[:2] + bbox[2:], (img.shape[1], img.shape[0]))
+
+    aDst = aSrc - bbox[:2]
+    bDst = aDst + (bSrc - aSrc)
+
+    res = np.zeros((bbox[3], bbox[2], img.shape[2]), img.dtype)
+    res[aDst[1]:bDst[1], aDst[0]:bDst[0], :] = img[aSrc[1]:bSrc[1], aSrc[0]:bSrc[0], :]
+
+    return res
+
+
+if __name__ == "__main__":
+    main()
+    print('DONE')
