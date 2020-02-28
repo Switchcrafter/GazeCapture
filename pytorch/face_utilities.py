@@ -222,6 +222,24 @@ def generate_face_eye_images(face_rect, left_eye_rect_relative, right_eye_rect_r
     return face_image, left_eye_image, right_eye_image
 
 
+# def generate_face_grid(face_rect, webcam_image):
+#     image_width = webcam_image.shape[1]
+#     image_height = webcam_image.shape[0]
+#     faceGridX = int((face_rect[0] / image_width) * GRID_SIZE)
+#     faceGridY = int((face_rect[1] / image_height) * GRID_SIZE)
+#     faceGridW = int(((face_rect[0] + face_rect[2]) / image_width) * GRID_SIZE) - faceGridX
+#     faceGridH = int(((face_rect[1] + face_rect[3]) / image_height) * GRID_SIZE) - faceGridY
+#     faceGridImage = np.zeros((GRID_SIZE, GRID_SIZE, 3), dtype=np.uint8)
+#     face_grid = np.zeros((GRID_SIZE, GRID_SIZE, 1), dtype=np.uint8)
+#     faceGridImage.fill(255)
+#     for m in range(faceGridW):
+#         for n in range(faceGridH):
+#             faceGridImage[faceGridY + n, faceGridX + m] = (0, 0, 0)
+#             face_grid[faceGridY + n, faceGridX + m] = 1
+#     face_grid = face_grid.flatten()  # flatten from 2d (25, 25) to 1d (625)
+
+#     return faceGridImage, face_grid
+
 def generate_face_grid(face_rect, webcam_image):
     image_width = webcam_image.shape[1]
     image_height = webcam_image.shape[0]
@@ -234,12 +252,35 @@ def generate_face_grid(face_rect, webcam_image):
     faceGridImage.fill(255)
     for m in range(faceGridW):
         for n in range(faceGridH):
-            faceGridImage[faceGridY + n, faceGridX + m] = (0, 0, 0)
-            face_grid[faceGridY + n, faceGridX + m] = 1
+            y = min(24, faceGridY + n)
+            x = min(24, faceGridX + m)
+            # print(faceGridX, x, faceGridY, y)
+            faceGridImage[y, x] = (0, 0, 0)
+            face_grid[y, x] = 1
     face_grid = face_grid.flatten()  # flatten from 2d (25, 25) to 1d (625)
 
     return faceGridImage, face_grid
 
+# def generate_face_grid(face_rect, webcam_image):
+#     image_height = webcam_image.shape[0]
+#     image_width = webcam_image.shape[1]
+#     print(face_rect)
+#     print(image_height, image_width)
+#     faceGridY = int((face_rect[0] / image_height) * GRID_SIZE)
+#     faceGridX = int((face_rect[1] / image_width) * GRID_SIZE)
+#     print(faceGridX, faceGridY)
+#     faceGridH = int((face_rect[2] / image_height) * GRID_SIZE)
+#     faceGridW = int((face_rect[3] / image_width) * GRID_SIZE)
+#     faceGridImage = np.zeros((GRID_SIZE, GRID_SIZE, 3), dtype=np.uint8)
+#     face_grid = np.zeros((GRID_SIZE, GRID_SIZE, 1), dtype=np.uint8)
+#     faceGridImage.fill(255)
+#     print(faceGridW, faceGridH)
+#     for h in range(faceGridH):
+#         for w in range(faceGridW):
+#             faceGridImage[faceGridY + h, faceGridX + w] = (0, 0, 0)
+#             face_grid[faceGridY + h, faceGridX + w] = 1
+#     face_grid = face_grid.flatten()  # flatten from 2d (25, 25) to 1d (625)
+#     return faceGridImage, face_grid
 
 def prepare_image_inputs(face_grid_image, face_image, left_eye_image, right_eye_image):
     imFace = Image.fromarray(cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB), 'RGB')
