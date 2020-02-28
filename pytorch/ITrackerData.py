@@ -83,6 +83,8 @@ class ExternalSourcePipeline(Pipeline):
             output_type = types.GRAY
         elif color_space == 'BGR':
             output_type = types.BGR
+        else:
+            print("Unsupported color_space:", color_space)
 
         # Variation range for Saturation, Contrast, Brightness and Hue
         self.dSaturation = ops.Uniform(range=[0.9, 1.1])
