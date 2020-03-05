@@ -40,20 +40,9 @@ def landmarksToRects(shape_np, isValid):
     right_eye_rect_relative = (0, 0, 0, 0)
 
     if isValid:
-        (leftEyeLandmarksStart, leftEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
-        (rightEyeLandmarksStart, rightEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
-
-        left_eye_shape_np = shape_np[leftEyeLandmarksStart:leftEyeLandmarksEnd]
-        right_eye_shape_np = shape_np[rightEyeLandmarksStart:rightEyeLandmarksEnd]
-
         face_rect = cv2.boundingRect(shape_np)
-        left_eye_rect = cv2.boundingRect(left_eye_shape_np)
-        right_eye_rect = cv2.boundingRect(right_eye_shape_np)
 
-        left_eye_rect_relative = getEyeRectRelative(face_rect, left_eye_rect)
-        right_eye_rect_relative = getEyeRectRelative(face_rect, right_eye_rect)
-
-    return face_rect, left_eye_rect_relative, right_eye_rect_relative, isValid
+    return face_rect, isValid
 
 
 def getFaceBox(faceDict, idx):
@@ -67,34 +56,6 @@ def getFaceBox(faceDict, idx):
     return shape
 
 
-def getEyeBox(faceDict, eyeDict, idx):
-    faceX = faceDict['X'][idx]
-    faceY = faceDict['Y'][idx]
-    faceW = faceDict['W'][idx]
-    faceH = faceDict['H'][idx]
-
-    eyeX = eyeDict['X'][idx]
-    eyeY = eyeDict['Y'][idx]
-    eyeW = eyeDict['W'][idx]
-    eyeH = eyeDict['H'][idx]
-
-    # the eye box is referenced from the TL of the face box
-    shape = [(faceX + eyeX, faceY + eyeY), (faceX + eyeX + eyeW, faceY + eyeY + eyeH)]
-
-    return shape
-
-
-def drawEyeBox(draw, eyeBox, offset, color):
-    draw.rectangle(eyeBox, outline=color)
-
-    tl = eyeBox[0]  # TL
-    br = eyeBox[1]  # BR
-
-    tinyEyeBox = [((br[0] - tl[0]) / 2 + tl[0] - offset, (br[1] - tl[1]) / 2 + tl[1] - offset),
-                  ((br[0] - tl[0]) / 2 + tl[0] + offset, (br[1] - tl[1]) / 2 + tl[1] + offset)]
-    draw.rectangle(tinyEyeBox, outline=color)
-
-
 def invertBLtoTL(box, height):
     # the boxes need oriended to the TL instead of the BR, so flip them along Y axis
     return [(box[0][0], height - box[0][1]), (box[1][0], height - box[1][1])]
@@ -102,48 +63,17 @@ def invertBLtoTL(box, height):
 
 def drawBoundingBoxes(draw, faceInfoDict, frameImageSize, idx, inverted=False, offset=0):
     faceDict = faceInfoDict["Face"]
-    leftEyeDict = faceInfoDict["LeftEye"]
-    rightEyeDict = faceInfoDict["RightEye"]
     color = faceInfoDict["Color"]
 
     height = frameImageSize[1]
 
     faceBox = getFaceBox(faceDict, idx)
-    leftEyeBox = getEyeBox(faceDict, leftEyeDict, idx)
-    rightEyeBox = getEyeBox(faceDict, rightEyeDict, idx)
 
     if inverted:
         faceBox = invertBLtoTL(faceBox, height)
-        leftEyeBox = invertBLtoTL(leftEyeBox, height)
-        rightEyeBox = invertBLtoTL(rightEyeBox, height)
 
     if faceDict["IsValid"][idx] == 1:
         draw.rectangle(faceBox, outline=color)
-
-    if leftEyeDict["IsValid"][idx] == 1:
-        drawEyeBox(draw, leftEyeBox, offset, color)
-    if rightEyeDict["IsValid"][idx] == 1:
-        drawEyeBox(draw, rightEyeBox, offset, color)
-
-
-def getEyeRectRelative(face_rect, eye_rect):
-    # find center of eye
-    eye_center = (eye_rect[0] + int(eye_rect[2] / 2), eye_rect[1] + int(eye_rect[3] / 2))
-
-    # eye box is 3/10 of the face width
-    eye_side = int(3 * face_rect[2] / 10)
-    face_top_left = (face_rect[0], face_rect[1])
-
-    # eye positions are face Top Left relative. ie: eye is at (120, 120) absolute, but stored (20,20)
-    # for a face located at (100,100)
-
-    # take eye center & expand to a square with sides eye_side
-    eye_tl = (eye_center[0] - int(eye_side / 2), eye_center[1] - int(eye_side / 2))
-
-    # adjust coordinates to be relative to TL of face, converting the lower right to width and height
-    eye_rect_relative = (eye_tl[0] - face_top_left[0], eye_tl[1] - face_top_left[1], eye_side, eye_side)
-
-    return eye_rect_relative
 
 
 def newFaceInfoDict(color="blue"):
@@ -175,10 +105,8 @@ def newFaceInfoDict(color="blue"):
     return faceInfoDict
 
 
-def faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect, right_eye_rect, isValid):
+def faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, isValid):
     face_dict = faceInfoDict["Face"]
-    left_eye_dict = faceInfoDict["LeftEye"]
-    right_eye_dict = faceInfoDict["RightEye"]
 
     face_dict['X'].append(face_rect[0])
     face_dict['Y'].append(face_rect[1])
@@ -186,43 +114,18 @@ def faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect, right_eye
     face_dict['H'].append(face_rect[3])
     face_dict['IsValid'].append(isValid)
 
-    left_eye_dict['X'].append(left_eye_rect[0])
-    left_eye_dict['Y'].append(left_eye_rect[1])
-    left_eye_dict['W'].append(left_eye_rect[2])
-    left_eye_dict['H'].append(left_eye_rect[3])
-    left_eye_dict['IsValid'].append(isValid)
-
-    right_eye_dict['X'].append(right_eye_rect[0])
-    right_eye_dict['Y'].append(right_eye_rect[1])
-    right_eye_dict['W'].append(right_eye_rect[2])
-    right_eye_dict['H'].append(right_eye_rect[3])
-    right_eye_dict['IsValid'].append(isValid)
-
     idx = len(face_dict['X']) - 1
 
     return faceInfoDict, idx
 
 
-def generate_face_eye_images(face_rect, left_eye_rect_relative, right_eye_rect_relative, webcam_image):
+def generate_face_eye_images(face_rect, webcam_image):
     face_image = webcam_image.copy()
 
     face_image = face_image[face_rect[1]:face_rect[1]+face_rect[3], face_rect[0]:face_rect[0]+face_rect[2]]
     face_image = imutils.resize(face_image, width=IMAGE_WIDTH)
 
-    # left_eye_image = webcam_image.copy()
-    # left_eye_image = left_eye_image[face_rect[1]+left_eye_rect_relative[1]:face_rect[1]+left_eye_rect_relative[1]+left_eye_rect_relative[3],
-    #                                 face_rect[0]+left_eye_rect_relative[0]:face_rect[0]+left_eye_rect_relative[0]+left_eye_rect_relative[2]]
-    # left_eye_image = imutils.resize(left_eye_image, width=IMAGE_WIDTH)
-
-    # right_eye_image = webcam_image.copy()
-    # right_eye_image = right_eye_image[face_rect[1]+right_eye_rect_relative[1]:face_rect[1]+right_eye_rect_relative[1]+right_eye_rect_relative[3],
-    #                                   face_rect[0]+right_eye_rect_relative[0]:face_rect[0]+right_eye_rect_relative[0]+right_eye_rect_relative[2]]
-    # right_eye_image = imutils.resize(right_eye_image, width=IMAGE_WIDTH)
-
-    left_eye_image = np.zeros((IMAGE_WIDTH, IMAGE_HEIGHT, 3), dtype=np.uint8)
-    right_eye_image = np.zeros((IMAGE_WIDTH, IMAGE_HEIGHT, 3), dtype=np.uint8)
-
-    return face_image, left_eye_image, right_eye_image
+    return face_image
 
 
 def generate_face_grid(face_rect, webcam_image):
@@ -244,12 +147,10 @@ def generate_face_grid(face_rect, webcam_image):
     return faceGridImage, face_grid
 
 
-def prepare_image_inputs(face_grid_image, face_image, left_eye_image, right_eye_image):
+def prepare_image_inputs(face_grid_image, face_image):
     imFace = Image.fromarray(cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB), 'RGB')
-    imEyeL = Image.fromarray(cv2.cvtColor(left_eye_image, cv2.COLOR_BGR2RGB), 'RGB')
-    imEyeR = Image.fromarray(cv2.cvtColor(right_eye_image, cv2.COLOR_BGR2RGB), 'RGB')
 
-    return imEyeL, imEyeR, imFace
+    return imFace
 
 
 def hogImage(image):

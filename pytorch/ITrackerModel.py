@@ -129,7 +129,7 @@ class ITrackerModel(nn.Module):
             # 2
         )
 
-    def forward(self, faces, eyesLeft, eyesRight, faceGrids):
+    def forward(self, faces, faceGrids):
         # Face net
         xFace = self.faceModel(faces)       # CONV-F1 -> ... -> CONV-E4 -> FC-F1 -> FC-F2
         xGrid = self.gridModel(faceGrids)   # FC-FG1 -> FC-FG2

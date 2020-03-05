@@ -65,8 +65,6 @@ class ExternalSourcePipeline(Pipeline):
         self.sourceIterator = iter(data)
         self.rowBatch = ops.ExternalSource()
         self.imFaceBatch = ops.ExternalSource()
-        self.imEyeLBatch = ops.ExternalSource()
-        self.imEyeRBatch = ops.ExternalSource()
         self.faceGridBatch = ops.ExternalSource()
         self.gazeBatch = ops.ExternalSource()
         self.frameBatch = ops.ExternalSource()
@@ -105,30 +103,24 @@ class ExternalSourcePipeline(Pipeline):
     def define_graph(self):
         self.row = self.rowBatch()
         self.imFace = self.imFaceBatch()
-        self.imEyeL = self.imEyeLBatch()
-        self.imEyeR = self.imEyeRBatch()
         self.faceGrid = self.faceGridBatch()
         self.gaze = self.gazeBatch()
         self.frame = self.frameBatch()
         self.index = self.indexBatch()
 
         imFaceD = self.norm(self.resize(self.decode(self.imFace)))
-        imEyeLD = self.norm(self.resize(self.decode(self.imEyeL)))
-        imEyeRD = self.norm(self.resize(self.decode(self.imEyeR)))
 
-        return self.row, imFaceD, imEyeLD, imEyeRD, self.faceGrid, self.gaze, self.frame, self.index
+        return self.row, imFaceD, self.faceGrid, self.gaze, self.frame, self.index
 
     @property
     def size(self):
         return len(self.sourceIterator)
 
     def iter_setup(self):
-        (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, faceGridBatch, gazeBatch, frameBatch,
+        (rowBatch, imFaceBatch, faceGridBatch, gazeBatch, frameBatch,
          indexBatch) = self.sourceIterator.next()
         self.feed_input(self.row, rowBatch)
         self.feed_input(self.imFace, imFaceBatch)
-        self.feed_input(self.imEyeL, imEyeLBatch)
-        self.feed_input(self.imEyeR, imEyeRBatch)
         self.feed_input(self.faceGrid, faceGridBatch)
         self.feed_input(self.gaze, gazeBatch)
         self.feed_input(self.frame, frameBatch)
@@ -218,12 +210,6 @@ class ITrackerData(object):
         imFacePath = os.path.join(self.dataPath,
                                   '%05d/appleFace/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                self.metadata['frameIndex'][rowIndex]))
-        imEyeLPath = os.path.join(self.dataPath,
-                                  '%05d/appleLeftEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
-                                                                  self.metadata['frameIndex'][rowIndex]))
-        imEyeRPath = os.path.join(self.dataPath,
-                                  '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
-                                                                   self.metadata['frameIndex'][rowIndex]))
         gaze = np.array([self.metadata['labelDotXCam'][rowIndex], self.metadata['labelDotYCam'][rowIndex]], np.float32)
         frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]])
         faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][rowIndex, :])
@@ -233,26 +219,19 @@ class ITrackerData(object):
         if self.data_loader == 'cpu':
             # Image loading, transformation and normalization happen here
             imFace = self.loadImage(imFacePath)
-            # imEyeL = self.loadImage(imEyeLPath)
-            # imEyeR = self.loadImage(imEyeRPath)
 
             imFace = self.normalize_image(imFace)
-            # imEyeL = self.normalize_image(imEyeL)
-            # imEyeR = self.normalize_image(imEyeR)
-
-            imEyeL = torch.FloatTensor(np.zeros((3, 224, 224), dtype=np.uint8))
-            imEyeR = torch.FloatTensor(np.zeros((3, 224, 224), dtype=np.uint8))
 
             # to tensor
             row = torch.LongTensor([int(index)])
             faceGrid = torch.FloatTensor(faceGrid)
             gaze = torch.FloatTensor(gaze)
 
-            return row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, index
+            return row, imFace, faceGrid, gaze, frame, index
         else:
             # image loading, transformation and normalization happen in ExternalDataPipeline
             # we just pass imagePaths
-            return row, imFacePath, imEyeLPath, imEyeRPath, faceGrid, gaze, frame, index
+            return row, imFacePath, faceGrid, gaze, frame, index
 
     def makeGrid(self, params):
         gridLen = self.gridSize[0] * self.gridSize[1]
@@ -278,35 +257,27 @@ class ITrackerData(object):
     def __next__(self):
         rowBatch = []
         imFaceBatch = []
-        imEyeLBatch = []
-        imEyeRBatch = []
         faceGridBatch = []
         gazeBatch = []
         frameBatch = []
         indexBatch = []
         labels = []
         for _ in range(self.batch_size):
-            row, imFacePath, imEyeLPath, imEyeRPath, faceGrid, gaze, frame, index = self.__getitem__(self.index)
+            row, imFacePath, faceGrid, gaze, frame, index = self.__getitem__(self.index)
             # print(row, index, self.index, self.size)
             imFace = open(imFacePath, 'rb')
-            imEyeL = open(imEyeLPath, 'rb')
-            imEyeR = open(imEyeRPath, 'rb')
 
             rowBatch.append(row)
             imFaceBatch.append(np.frombuffer(imFace.read(), dtype=np.uint8))
-            imEyeLBatch.append(np.frombuffer(imEyeL.read(), dtype=np.uint8))
-            imEyeRBatch.append(np.frombuffer(imEyeR.read(), dtype=np.uint8))
             faceGridBatch.append(faceGrid)
             gazeBatch.append(gaze)
             frameBatch.append(frame)
             indexBatch.append(index)
 
             imFace.close()
-            imEyeL.close()
-            imEyeR.close()
 
             self.index = (self.index + 1) % self.size
-        return rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, faceGridBatch, gazeBatch, frameBatch, indexBatch
+        return rowBatch, imFaceBatch, faceGridBatch, gazeBatch, frameBatch, indexBatch
 
     next = __next__
 
@@ -371,7 +342,7 @@ def load_data(split,
         # Todo: pin memory, auto_reset=True for auto reset iterator
         # DALIGenericIterator has inbuilt build for all pipelines
         loader = DALIGenericIterator(pipes,
-                                     ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'],
+                                     ['row', 'imFace', 'faceGrid', 'gaze', 'frame', 'indices'],
                                      size=len(data),
                                      fill_last_batch=False,
                                      last_batch_padded=True)
