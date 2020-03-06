@@ -95,7 +95,11 @@ def main():
         if isValid:
             face_rect, left_eye_rect_relative, right_eye_rect_relative, isValid = landmarksToRects(shape_np, isValid)
 
-            display = generate_baseline_display_data(display, screenOffsetX, screenOffsetY, webcam_image, face_rect)
+            display = generate_baseline_display_data(display,
+                                                     screenOffsetX,
+                                                     screenOffsetY,
+                                                     webcam_image,
+                                                     face_rect)
 
             face_image, left_eye_image, right_eye_image = generate_face_eye_images(face_rect,
                                                                                    left_eye_rect_relative,
@@ -103,16 +107,16 @@ def main():
                                                                                    webcam_image)
 
             face_grid_image, face_grid = generate_face_grid(face_rect, webcam_image)
-            imEyeL, imEyeR, imFace = prepare_image_inputs(face_grid_image,
-                                                          face_image,
-                                                          left_eye_image,
-                                                          right_eye_image)
+            image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_grid_image,
+                                                                               face_image,
+                                                                               left_eye_image,
+                                                                               right_eye_image)
 
-            face_grid, image_eye_left, image_eye_right, image_face = prepare_image_tensors(color_space,
+            image_face, image_eye_left, image_eye_right, face_grid = prepare_image_tensors(color_space,
+                                                                                           image_face,
+                                                                                           image_eye_left,
+                                                                                           image_eye_right,
                                                                                            face_grid,
-                                                                                           imEyeL,
-                                                                                           imEyeR,
-                                                                                           imFace,
                                                                                            normalize_image)
 
             start_time = datetime.now()
@@ -131,8 +135,16 @@ def main():
 
             time_elapsed = datetime.now() - start_time
 
-            display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image,
-                                            monitor, right_eye_image, stimulusX, stimulusY, time_elapsed)
+            display = generate_display_data(display,
+                                            face_image,
+                                            left_eye_image,
+                                            right_eye_image,
+                                            gaze_prediction_np,
+                                            monitor,
+                                            stimulusX,
+                                            stimulusY,
+                                            time_elapsed,
+                                            device_name)
 
         cv2.imshow("display", display)
 
@@ -149,7 +161,11 @@ def main():
     cap.release()
 
 
-def generate_baseline_display_data(display, screenOffsetX, screenOffsetY, webcam_image, face_rect):
+def generate_baseline_display_data(display,
+                                   screenOffsetX,
+                                   screenOffsetY,
+                                   webcam_image,
+                                   face_rect):
     display = draw_overlay(display, screenOffsetX, screenOffsetY, webcam_image)
     # display = draw_text(display,
     #                     20,
@@ -159,15 +175,23 @@ def generate_baseline_display_data(display, screenOffsetX, screenOffsetY, webcam
     return display
 
 
-def generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image, monitor,
-                          right_eye_image, stimulus_x, stimulus_y, time_elapsed):
+def generate_display_data(display,
+                          face_image,
+                          left_eye_image,
+                          right_eye_image,
+                          gaze_prediction_np,
+                          monitor,
+                          stimulus_x,
+                          stimulus_y,
+                          time_elapsed,
+                          device_name):
     (gazePredictionScreenPixelXFromCamera, gazePredictionScreenPixelYFromCamera) = cam2screen(
         gaze_prediction_np[0],
         gaze_prediction_np[1],
         1,
         monitor.width,
         monitor.height,
-        deviceName="Alienware 51m"
+        deviceName=device_name
     )
     input_images = np.concatenate((face_image,
                                    right_eye_image,
@@ -246,7 +270,7 @@ def run_onnx_inference(session, image_face, image_eye_left, image_eye_right, fac
     return gaze_prediction_np
 
 
-def prepare_image_tensors(color_space, face_grid, image_eye_left, image_eye_right, image_face, normalize_image):
+def prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_right, face_grid, normalize_image):
     # Convert to the desired color space
     image_face = image_face.convert(color_space)
     image_eye_left = image_eye_left.convert(color_space)
@@ -270,7 +294,7 @@ def prepare_image_tensors(color_space, face_grid, image_eye_left, image_eye_righ
     image_eye_right = torch.autograd.Variable(image_eye_right, requires_grad=False)
     face_grid = torch.autograd.Variable(face_grid, requires_grad=False)
 
-    return face_grid, image_eye_left, image_eye_right, image_face
+    return image_face, image_eye_left, image_eye_right, face_grid
 
 
 def change_target(target, monitor, device_name):
