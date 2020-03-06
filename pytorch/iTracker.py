@@ -94,25 +94,24 @@ def main():
 
             face_grid, image_eye_left, image_eye_right, image_face = prepare_image_tensors(color_space,
                                                                                            face_grid,
-                                                                                           image_eye_left,
-                                                                                           image_eye_right,
-                                                                                           image_face,
+                                                                                           imEyeL,
+                                                                                           imEyeR,
+                                                                                           imFace,
                                                                                            normalize_image)
 
             start_time = datetime.now()
             if use_torch:
                 gaze_prediction_np = run_torch_inference(model,
-                                                         normalize_image,
-                                                         imFace,
-                                                         imEyeL,
-                                                         imEyeR,
+                                                         image_face,
+                                                         image_eye_left,
+                                                         image_eye_right,
                                                          face_grid)
             elif use_onnx:
                 gaze_prediction_np = run_onnx_inference(session,
                                                         normalize_image,
-                                                        imFace,
-                                                        imEyeL,
-                                                        imEyeR,
+                                                        image_face,
+                                                        image_eye_left,
+                                                        image_eye_right,
                                                         face_grid)
 
             time_elapsed = datetime.now() - start_time
@@ -211,7 +210,7 @@ def initialize_onnx():
     return session
 
 
-def run_torch_inference(model, normalize_image, image_face, image_eye_left, image_eye_right, face_grid, color_space):
+def run_torch_inference(model, image_face, image_eye_left, image_eye_right, face_grid):
     # compute output
     with torch.no_grad():
         output = model(image_face, image_eye_left, image_eye_right, face_grid)
@@ -219,7 +218,7 @@ def run_torch_inference(model, normalize_image, image_face, image_eye_left, imag
     return gaze_prediction_np
 
 
-def run_onnx_inference(session, normalize_image, image_face, image_eye_left, image_eye_right, face_grid, color_space):
+def run_onnx_inference(session, image_face, image_eye_left, image_eye_right, face_grid):
     # compute output
     output = session.run(None,
                          {"face": image_face.numpy(),
