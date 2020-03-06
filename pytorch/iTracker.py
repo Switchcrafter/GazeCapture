@@ -1,3 +1,4 @@
+import argparse
 from datetime import datetime  # for timing
 
 import cv2
@@ -26,8 +27,6 @@ IMAGE_SIZE = (IMAGE_WIDTH, IMAGE_HEIGHT)
 GRID_SIZE = 25
 FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
 
-DEVICE_NAME = "Alienware 51m"
-
 TARGETS = [(-10., -3.),
            (-10., -6.),
            (-10., -9.),
@@ -47,16 +46,33 @@ TARGETS = [(-10., -3.),
 
 
 def main():
-    use_torch = True
+    args = parse_arguments()
+
+    device_name = args.device_name
+
+    if device_name is None:
+        print(f"Invalid argument - must specify device_name: {args.device_name}")
+        return
+
+    color_space = args.color_space
+
+    use_torch = False
     use_onnx = False
-    color_space = 'YCbCr'
+
+    if args.mode == "torch":
+        use_torch = True
+    elif args.mode == "onnx":
+        use_onnx = True
+    else:
+        print(f"Invalid argument - must specify valid mode: {args.mode}")
+        return
 
     if use_torch:
-        model = initialize_torch()
+        model = initialize_torch(args.torch_model_path)
     elif use_onnx:
-        session = initialize_onnx()
+        session = initialize_onnx(args.onnx_model_path)
 
-    monitor = get_monitors()[0]
+    monitor = get_monitors()[0]  # Assume only one monitor
 
     cap = cv2.VideoCapture(0)
 
@@ -64,7 +80,7 @@ def main():
 
     target = 0
 
-    stimulusX, stimulusY = change_target(target, monitor)
+    stimulusX, stimulusY = change_target(target, monitor, device_name)
 
     screenOffsetX = 0
     screenOffsetY = 100
@@ -79,14 +95,23 @@ def main():
         if isValid:
             face_rect, isValid = landmarksToRects(shape_np, isValid)
 
-            display = generate_baseline_display_data(display, screenOffsetX, screenOffsetY, webcam_image, face_rect)
+            display = generate_baseline_display_data(display,
+                                                     screenOffsetX,
+                                                     screenOffsetY,
+                                                     webcam_image,
+                                                     face_rect)
 
-            face_image = generate_face_eye_images(face_rect, webcam_image)
+            face_image = generate_face_eye_images(face_rect,
+                                                   webcam_image)
 
             face_grid_image, face_grid = generate_face_grid(face_rect, webcam_image)
-            image_face = prepare_image_inputs(face_grid_image, face_image)
+            image_face = prepare_image_inputs(face_grid_image,
+                                              face_image)
 
-            face_grid, image_face = prepare_image_tensors(color_space, face_grid, image_face, normalize_image)
+            image_face, face_grid = prepare_image_tensors(color_space,
+                                                          image_face,
+                                                          face_grid,
+                                                          normalize_image)
 
             start_time = datetime.now()
             if use_torch:
@@ -100,8 +125,14 @@ def main():
 
             time_elapsed = datetime.now() - start_time
 
-            display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, monitor,
-                                            stimulusX, stimulusY, time_elapsed)
+            display = generate_display_data(display,
+                                            face_image,
+                                            gaze_prediction_np,
+                                            monitor,
+                                            stimulusX,
+                                            stimulusY,
+                                            time_elapsed,
+                                            device_name)
 
         cv2.imshow("display", display)
 
@@ -118,7 +149,11 @@ def main():
     cap.release()
 
 
-def generate_baseline_display_data(display, screenOffsetX, screenOffsetY, webcam_image, face_rect):
+def generate_baseline_display_data(display,
+                                   screenOffsetX,
+                                   screenOffsetY,
+                                   webcam_image,
+                                   face_rect):
     display = draw_overlay(display, screenOffsetX, screenOffsetY, webcam_image)
     # display = draw_text(display,
     #                     20,
@@ -128,17 +163,23 @@ def generate_baseline_display_data(display, screenOffsetX, screenOffsetY, webcam
     return display
 
 
-def generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, monitor,
-                          stimulus_x, stimulus_y, time_elapsed):
+def generate_display_data(display,
+                          face_image,
+                          gaze_prediction_np,
+                          monitor,
+                          stimulus_x,
+                          stimulus_y,
+                          time_elapsed,
+                          device_name):
     (gazePredictionScreenPixelXFromCamera, gazePredictionScreenPixelYFromCamera) = cam2screen(
         gaze_prediction_np[0],
         gaze_prediction_np[1],
         1,
         monitor.width,
         monitor.height,
-        deviceName="Alienware 51m"
+        deviceName=device_name
     )
-    
+
     display = draw_overlay(display, monitor.width - 324, 0, face_image)
     display = draw_crosshair(display,
                              int(gazePredictionScreenPixelXFromCamera),  # Screen offset?
@@ -178,16 +219,16 @@ def generate_display_data(display, face_grid_image, face_image, gaze_prediction_
     return display
 
 
-def initialize_torch():
+def initialize_torch(path):
     model = ITrackerModel().to(device='cpu')
-    saved = torch.load('best_checkpoint.pth.tar', map_location='cpu')
+    saved = torch.load(path, map_location='cpu')
     model.load_state_dict(saved['state_dict'])
     model.eval()
     return model
 
 
-def initialize_onnx():
-    session = onnxruntime.InferenceSession('itracker.onnx')
+def initialize_onnx(path):
+    session = onnxruntime.InferenceSession(path)
     return session
 
 
@@ -210,7 +251,7 @@ def run_onnx_inference(session, image_face, face_grid):
     return gaze_prediction_np
 
 
-def prepare_image_tensors(color_space, face_grid, image_face, normalize_image):
+def prepare_image_tensors(color_space, image_face, face_grid, normalize_image):
     # Convert to the desired color space
     image_face = image_face.convert(color_space)
 
@@ -226,17 +267,17 @@ def prepare_image_tensors(color_space, face_grid, image_face, normalize_image):
     image_face = torch.autograd.Variable(image_face, requires_grad=False)
     face_grid = torch.autograd.Variable(face_grid, requires_grad=False)
 
-    return face_grid, image_face
+    return image_face, face_grid
 
 
-def change_target(target, monitor):
+def change_target(target, monitor, device_name):
     (stimulusX, stimulusY) = cam2screen(
         (TARGETS[target])[0],
         (TARGETS[target])[1],
         1,
         monitor.width,
         monitor.height,
-        deviceName=DEVICE_NAME
+        deviceName=device_name
     )
 
     return stimulusX, stimulusY
@@ -281,6 +322,34 @@ def draw_text(image, x, y, string, scale=0.5, fill=(0, 0, 0), thickness=1):
     cv2.putText(image, string, (x, y), font, scale, fill, thickness, cv2.LINE_AA)
 
     return image
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='iTracker realtime inference.')
+    parser.add_argument('--mode', default='torch', help='Inference Engine - torch, onnx')
+    parser.add_argument('--torch_model_path',
+                        help="Path to torch model (best_checkpoint.pth.tar).",
+                        default='best_checkpoint.pth.tar')
+    parser.add_argument('--onnx_model_path',
+                        help="Path to onnx model (itracker.onnx).",
+                        default='itracker.onnx')
+    parser.add_argument('--color_space',
+                        default='YCbCr',
+                        help='Model\'s color space - RGB, YCbCr, HSV, LAB')
+    parser.add_argument('--device_name',
+                        default=None,
+                        help='from device_metrics.json - Alienware 51m, Surface Pro 6, etc.')
+    args = parser.parse_args()
+    return args
+
+
+def str2bool(v):
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
 if __name__ == "__main__":
