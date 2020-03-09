@@ -68,9 +68,9 @@ def main():
         return
 
     if use_torch:
-        model = initialize_torch(args.torch_model_path)
+        model = initialize_torch(args.torch_model_path, args.device)
     elif use_onnx:
-        session = initialize_onnx(args.onnx_model_path)
+        session = initialize_onnx(args.onnx_model_path, args.device)
 
     monitor = get_monitors()[0]  # Assume only one monitor
 
@@ -112,26 +112,27 @@ def main():
                                                                                left_eye_image,
                                                                                right_eye_image)
 
-            image_face, image_eye_left, image_eye_right, face_grid = prepare_image_tensors(color_space,
-                                                                                           image_face,
-                                                                                           image_eye_left,
-                                                                                           image_eye_right,
-                                                                                           face_grid,
-                                                                                           normalize_image)
+            tensor_face, tensor_eye_left, tensor_eye_right, tensor_face_grid = prepare_image_tensors(color_space,
+                                                                                                     image_face,
+                                                                                                     image_eye_left,
+                                                                                                     image_eye_right,
+                                                                                                     face_grid,
+                                                                                                     normalize_image,
+                                                                                                     args.device)
 
             start_time = datetime.now()
             if use_torch:
                 gaze_prediction_np = run_torch_inference(model,
-                                                         image_face,
-                                                         image_eye_left,
-                                                         image_eye_right,
-                                                         face_grid)
+                                                         tensor_face,
+                                                         tensor_eye_left,
+                                                         tensor_eye_right,
+                                                         tensor_face_grid)
             elif use_onnx:
                 gaze_prediction_np = run_onnx_inference(session,
-                                                        image_face,
-                                                        image_eye_left,
-                                                        image_eye_right,
-                                                        face_grid)
+                                                        tensor_face,
+                                                        tensor_eye_left,
+                                                        tensor_eye_right,
+                                                        tensor_face_grid)
 
             time_elapsed = datetime.now() - start_time
 
@@ -236,16 +237,20 @@ def generate_display_data(display,
     return display
 
 
-def initialize_torch(path):
-    model = ITrackerModel().to(device='cpu')
-    saved = torch.load(path, map_location='cpu')
+def initialize_torch(path, device):
+    model = ITrackerModel().to(device=device)
+    saved = torch.load(path, map_location=device)
     model.load_state_dict(saved['state_dict'])
     model.eval()
     return model
 
 
-def initialize_onnx(path):
+def initialize_onnx(path, device):
+    # if device == 'cuda':
+    #     session = onnxruntime-gpu.InferenceSession(path)
+    # elif device == 'cpu':
     session = onnxruntime.InferenceSession(path)
+
     return session
 
 
@@ -253,7 +258,7 @@ def run_torch_inference(model, image_face, image_eye_left, image_eye_right, face
     # compute output
     with torch.no_grad():
         output = model(image_face, image_eye_left, image_eye_right, face_grid)
-        gaze_prediction_np = output.numpy()[0]
+        gaze_prediction_np = output.cpu().numpy()[0]
     return gaze_prediction_np
 
 
@@ -270,31 +275,31 @@ def run_onnx_inference(session, image_face, image_eye_left, image_eye_right, fac
     return gaze_prediction_np
 
 
-def prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_right, face_grid, normalize_image):
+def prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_right, face_grid, normalize_image, device):
     # Convert to the desired color space
     image_face = image_face.convert(color_space)
     image_eye_left = image_eye_left.convert(color_space)
     image_eye_right = image_eye_right.convert(color_space)
 
     # normalize the image, results in tensors
-    image_face = normalize_image(image_face)
-    image_eye_left = normalize_image(image_eye_left)
-    image_eye_right = normalize_image(image_eye_right)
-    face_grid = torch.FloatTensor(face_grid)
+    tensor_face = normalize_image(image_face).to(device)
+    tensor_eye_left = normalize_image(image_eye_left).to(device)
+    tensor_eye_right = normalize_image(image_eye_right).to(device)
+    tensor_face_grid = torch.FloatTensor(face_grid).to(device)
 
     # convert the 3 dimensional array into a 4 dimensional array, making it a batch size of 1
-    image_face.unsqueeze_(0)
-    image_eye_left.unsqueeze_(0)
-    image_eye_right.unsqueeze_(0)
-    face_grid.unsqueeze_(0)
+    tensor_face.unsqueeze_(0)
+    tensor_eye_left.unsqueeze_(0)
+    tensor_eye_right.unsqueeze_(0)
+    tensor_face_grid.unsqueeze_(0)
 
     # Convert the tensors into
-    image_face = torch.autograd.Variable(image_face, requires_grad=False)
-    image_eye_left = torch.autograd.Variable(image_eye_left, requires_grad=False)
-    image_eye_right = torch.autograd.Variable(image_eye_right, requires_grad=False)
-    face_grid = torch.autograd.Variable(face_grid, requires_grad=False)
+    tensor_face = torch.autograd.Variable(tensor_face, requires_grad=False)
+    tensor_eye_left = torch.autograd.Variable(tensor_eye_left, requires_grad=False)
+    tensor_eye_right = torch.autograd.Variable(tensor_eye_right, requires_grad=False)
+    tensor_face_grid = torch.autograd.Variable(tensor_face_grid, requires_grad=False)
 
-    return image_face, image_eye_left, image_eye_right, face_grid
+    return tensor_face, tensor_eye_left, tensor_eye_right, tensor_face_grid
 
 
 def change_target(target, monitor, device_name):
@@ -366,6 +371,7 @@ def parse_arguments():
     parser.add_argument('--device_name',
                         default=None,
                         help='from device_metrics.json - Alienware 51m, Surface Pro 6, etc.')
+    parser.add_argument('--device', default='cpu', help='Select either cpu or cuda')
     args = parser.parse_args()
     return args
 
