@@ -290,6 +290,10 @@ def initialize_model(args):
 
 def initialize_hyper_parameters(args, datasets, model):
     criterion = nn.MSELoss(reduction='mean').to(device=args.device)
+    # for multi criteria experiments use criteria and weights as list below
+    # criteria = [nn.MSELoss]
+    # weights = [1.0]
+    # criterion = MultiCriterion(criteria, weights, reduction='mean').to(device=args.device)
     optimizer = torch.optim.SGD(model.parameters(), START_LR,
                                 momentum=MOMENTUM,
                                 weight_decay=WEIGHT_DECAY)
