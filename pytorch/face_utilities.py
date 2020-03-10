@@ -291,10 +291,12 @@ def prepare_image_inputs(face_grid_image, face_image, left_eye_image, right_eye_
 
 
 def hogImage(image):
-    (H, hogImage) = feature.hog(image, orientations=9, pixels_per_cell=(10, 10),
-                                cells_per_block=(3, 3), transform_sqrt=True, block_norm="L1",
-                                visualize=True)
-    hogImage = exposure.rescale_intensity(hogImage, out_range=(0, 255))
-    hogImage = hogImage.astype("uint8")
+    H, hogImage = feature.hog(image,
+                              orientations=8,
+                              pixels_per_cell=(16, 16),
+                              cells_per_block=(1, 1),
+                              visualize=True,
+                              multichannel=True)
+    hogImage = exposure.rescale_intensity(hogImage, in_range=(0, 10), out_range=(0,255))
 
     return hogImage

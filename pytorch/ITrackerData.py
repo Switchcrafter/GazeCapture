@@ -10,6 +10,7 @@ from random import shuffle
 # CPU data loader
 from PIL import Image
 import torchvision.transforms as transforms
+from face_utilities import hogImage
 
 try:
     # GPU data loader
@@ -240,6 +241,19 @@ class ITrackerData(object):
         except OSError:
             raise RuntimeError('Could not read image: ' + path)
         return im
+    
+    def get_hog_descriptor(self, im):
+        # im = Image.fromarray(hogImage(im), im.mode)
+        # hog is failing below (20,20) so this should fix
+        if im.size[0] < 20:
+            im = transforms.functional.resize(im, (20,20), interpolation=2)
+        try:
+            hog = hogImage(im)
+            im = Image.fromarray(hog, im.mode)
+        except:
+            # print(im.size)
+            pass
+        return im
 
     # merge two
     def __getitem__(self, index):
@@ -265,9 +279,15 @@ class ITrackerData(object):
             imEyeL = self.loadImage(imEyeLPath)
             imEyeR = self.loadImage(imEyeRPath)
 
+            # for hog experiments
+            # imFace = self.get_hog_descriptor(imFace)
+            # imEyeL = self.get_hog_descriptor(imEyeL)
+            # imEyeR = self.get_hog_descriptor(imEyeR)
+
             imFace = self.normalize_image(imFace)
             imEyeL = self.normalize_image(imEyeL)
             imEyeR = self.normalize_image(imEyeR)
+
             # to tensor
             row = torch.LongTensor([int(index)])
             faceGrid = torch.FloatTensor(faceGrid)

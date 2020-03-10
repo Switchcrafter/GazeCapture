@@ -9,10 +9,10 @@ def parse_commandline_arguments():
     parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
     parser.add_argument('--data_path',
                         help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.",
-                        default='/data/gc-data-prepped/')
+                        default='/data/gc-data-prepped-dlib/')
     parser.add_argument('--output_path',
                         help="Path to checkpoint",
-                        default=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'checkpoints'))
+                        default="")
     parser.add_argument('--save_checkpoints', type=str2bool, nargs='?', const=True, default=False,
                         help="Save each of the checkpoints as the run progresses.")
     parser.add_argument('--test', type=str2bool, nargs='?', const=True, default=False, help="Just test and terminate.")
@@ -27,7 +27,6 @@ def parse_commandline_arguments():
     parser.add_argument('--disable-cuda', action='store_true', default=False, help='Disable CUDA')
     parser.add_argument('--verbose', type=str2bool, nargs='?', const=True, default=False,
                         help="verbose mode - print details every batch")
-    # Experimental options
     parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--mode', help="Parallelization mode: [none], dp, ddp1, ddp2", default='none')
     parser.add_argument('--disable_sync', action='store_true', default=False, help='Disable Sync BN')
@@ -44,6 +43,11 @@ def parse_commandline_arguments():
     parser.add_argument('--data_loader', default="cpu", help="cpu, dali_cpu, dali_gpu, dali_gpu_all")
     args = parser.parse_args()
 
+    args.device_group = "".join([str(device) for device in args.local_rank])
+    # Create a checkpoint directory per device (or device group) for multiple executions
+    if args.output_path == "":
+        args.output_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'checkpoints', 'gpu' + args.device_group)
+    
     args.device = None
     args.using_cuda = False
     if torch.cuda.device_count() > 1 and args.mode == "none":
