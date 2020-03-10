@@ -106,9 +106,8 @@ def main():
                                                                                    right_eye_rect_relative,
                                                                                    webcam_image)
 
-            face_grid_image, face_grid = generate_face_grid(face_rect, webcam_image)
-            image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_grid_image,
-                                                                               face_image,
+            face_grid, face_grid_image = generate_face_grid(face_rect, webcam_image.shape[0], webcam_image.shape[1])
+            image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_image,
                                                                                left_eye_image,
                                                                                right_eye_image)
 
@@ -140,6 +139,7 @@ def main():
                                             face_image,
                                             left_eye_image,
                                             right_eye_image,
+                                            face_grid_image,
                                             gaze_prediction_np,
                                             monitor,
                                             stimulusX,
@@ -180,6 +180,7 @@ def generate_display_data(display,
                           face_image,
                           left_eye_image,
                           right_eye_image,
+                          face_grid_image,
                           gaze_prediction_np,
                           monitor,
                           stimulus_x,
@@ -196,7 +197,8 @@ def generate_display_data(display,
     )
     input_images = np.concatenate((face_image,
                                    right_eye_image,
-                                   left_eye_image),
+                                   left_eye_image,
+                                   face_grid_image.resize((224, 224))),
                                   axis=0)
     display = draw_overlay(display, monitor.width - 324, 0, input_images)
     display = draw_crosshair(display,
