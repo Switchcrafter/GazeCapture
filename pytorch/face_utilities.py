@@ -293,28 +293,33 @@ def generate_face_eye_images(face_rect, left_eye_rect_relative, right_eye_rect_r
     return face_image, left_eye_image, right_eye_image
 
 
-def generate_face_grid(face_rect, webcam_image):
-    image_width = webcam_image.shape[1]
-    image_height = webcam_image.shape[0]
+def generate_face_grid_rect(face_rect, image_width, image_height):
     faceGridX = int((face_rect[0] / image_width) * GRID_SIZE)
     faceGridY = int((face_rect[1] / image_height) * GRID_SIZE)
     faceGridW = int(((face_rect[0] + face_rect[2]) / image_width) * GRID_SIZE) - faceGridX
     faceGridH = int(((face_rect[1] + face_rect[3]) / image_height) * GRID_SIZE) - faceGridY
-    faceGridImage = np.zeros((GRID_SIZE, GRID_SIZE, 3), dtype=np.uint8)
-    face_grid = np.zeros((GRID_SIZE, GRID_SIZE, 1), dtype=np.uint8)
-    faceGridImage.fill(255)
+
+    return faceGridX, faceGridY, faceGridW, faceGridH
+
+
+def generate_face_grid(face_rect, image_width, image_height):
+    faceGridX, faceGridY, faceGridW, faceGridH = generate_face_grid_rect(face_rect, image_width, image_height)
+
+    face_grid = np.zeros((GRID_SIZE, GRID_SIZE), dtype=np.uint8)
     for m in range(faceGridW):
         for n in range(faceGridH):
-            y = min(24, faceGridY + n)
-            x = min(24, faceGridX + m)
-            # print(faceGridX, x, faceGridY, y)
-            faceGridImage[y, x] = (0, 0, 0)
+            x = min(GRID_SIZE - 1, faceGridX + m)
+            y = min(GRID_SIZE - 1, faceGridY + n)
             face_grid[y, x] = 1
-    face_grid = face_grid.flatten()  # flatten from 2d (25, 25) to 1d (625)
+    face_grid_flat = face_grid.flatten()  # flatten from 2d (25, 25) to 1d (625)
+    face_grid_inverted = (255 - (255 * face_grid))
+    face_grid_stacked = np.stack((face_grid_inverted,)*3, axis=-1)
+    face_grid_image = Image.fromarray(face_grid_stacked).convert("RGB")
 
-    return faceGridImage, face_grid
+    return face_grid_flat, face_grid_image
 
-def prepare_image_inputs(face_grid_image, face_image, left_eye_image, right_eye_image):
+
+def prepare_image_inputs(face_image, left_eye_image, right_eye_image):
     imFace = Image.fromarray(cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB), 'RGB')
     imEyeL = Image.fromarray(cv2.cvtColor(left_eye_image, cv2.COLOR_BGR2RGB), 'RGB')
     imEyeR = Image.fromarray(cv2.cvtColor(right_eye_image, cv2.COLOR_BGR2RGB), 'RGB')

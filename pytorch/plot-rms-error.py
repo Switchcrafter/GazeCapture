@@ -281,6 +281,9 @@ All_RMS_Errors = {
                             1.7380785825994738, 1.7380785825994738]
     },
     'RESNET18-cyclops': {
+        # RESNET18-dlib-BlackEyes, but instead of zeroing out the eyes we completely remove the eyes from the
+        # dataloader. This results in a significant performance gain since there is one RESNET model used (face)
+        # instead of 3 (face + 2x eyes)
         'RMS_Errors': [2.4106292394720055, 2.3098669853480094, 2.2956152460582504, 2.171971679565709,
                        1.9770061113157336, 1.9686378896697059, 1.856874027611902, 1.805645029750293, 1.837330524649768,
                        1.9033938570470295, 1.9746833577301717, 1.9210104296697568, 1.8718571816019023,
