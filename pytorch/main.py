@@ -16,8 +16,8 @@ import torch.utils.data
 from ITrackerModel import ITrackerModel
 from ITrackerData import load_all_data
 from Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations, resize, set_print_policy
+from Criterion import MultiCriterion, LogCoshLoss, TanhLoss, SigmoidLoss
 import checkpoint_manager
-
 import cyclical_learning_rate
 import argument_parser
 
@@ -251,7 +251,7 @@ def initialize_model(args):
         print('')
 
     # Retrieve model
-    model = ITrackerModel().to(device=args.device)
+    model = ITrackerModel(args.color_space).to(device=args.device)
     # GPU optimizations and modes
     cudnn.benchmark = True
     if args.using_cuda:
@@ -290,6 +290,10 @@ def initialize_model(args):
 
 def initialize_hyper_parameters(args, datasets, model):
     criterion = nn.MSELoss(reduction='mean').to(device=args.device)
+    # for multi criteria experiments use criteria and weights as list below
+    # criteria = [nn.MSELoss]
+    # weights = [1.0]
+    # criterion = MultiCriterion(criteria, weights, reduction='mean').to(device=args.device)
     optimizer = torch.optim.SGD(model.parameters(), START_LR,
                                 momentum=MOMENTUM,
                                 weight_decay=WEIGHT_DECAY)

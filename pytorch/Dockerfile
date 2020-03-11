@@ -79,3 +79,5 @@ ENV NVIDIA_DRIVER_CAPABILITIES all
 # dp: (all 4 GPUs, 870 samples/sec)
 # sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --batch_size 256 --mode 'dp' --local_rank 0 1 2 3 --data_loader 'dali_cpu'
 
+# iTracker.py
+# sudo docker run --ipc=host --runtime=nvidia --gpus '"device=1"' -v /data:/data -v `pwd`:`pwd` -w `pwd` --rm -it gazepy iTracker.py 

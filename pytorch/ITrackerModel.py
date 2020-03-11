@@ -7,7 +7,7 @@ from torchvision import models
 
 '''
 Pytorch model for the iTracker.
-Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018. 
+Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018.
 Website: http://gazecapture.csail.mit.edu/
 
 Cite:
@@ -27,9 +27,12 @@ class ItrackerImageModel(nn.Module):
     # Used for both eyes (with shared weights) and the face (with unique weights)
     # output = (input-k+2p)/s + 1
     # ZeroPad = (k-1)/2
-    def __init__(self):
+    def __init__(self, color_space):
         super(ItrackerImageModel, self).__init__()
         self.model = models.resnet18(pretrained=True)
+        # ToDo For L-channel (greyscale) only model
+        if color_space == 'L':
+            self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.conv = nn.Sequential(*list(self.model.children())[:-2])
 
         # TODO Try fine tuning using RGB color space rather than YCbCr
@@ -47,9 +50,9 @@ class ItrackerImageModel(nn.Module):
 
 
 class FaceImageModel(nn.Module):
-    def __init__(self):
+    def __init__(self, color_space):
         super(FaceImageModel, self).__init__()
-        self.conv = ItrackerImageModel()
+        self.conv = ItrackerImageModel(color_space)
         self.fc = nn.Sequential(
             # FC-F1
             # 25088
@@ -65,7 +68,7 @@ class FaceImageModel(nn.Module):
             nn.ReLU(inplace=True),
             # 64
         )
-        
+
     def forward(self, x):
         # 3C x 224H x 224W
         x = self.conv(x)
@@ -105,12 +108,12 @@ class FaceGridModel(nn.Module):
 
 
 class ITrackerModel(nn.Module):
-    def __init__(self):
+    def __init__(self, color_space):
         super(ITrackerModel, self).__init__()
-        # 3Cx224Hx224W --> 25088
-        self.eyeModel = ItrackerImageModel()
-        # 3Cx224Hx224W --> 64
-        self.faceModel = FaceImageModel()
+        # 1C/3Cx224Hx224W --> 25088
+        self.eyeModel = ItrackerImageModel(color_space)
+        # 1C/3Cx224Hx224W --> 64
+        self.faceModel = FaceImageModel(color_space)
         # 1Cx25Hx25W --> 128
         self.gridModel = FaceGridModel()
 

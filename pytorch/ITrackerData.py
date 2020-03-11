@@ -10,6 +10,7 @@ from random import shuffle
 # CPU data loader
 from PIL import Image
 import torchvision.transforms as transforms
+from face_utilities import hogImage
 
 try:
     # GPU data loader
@@ -32,34 +33,33 @@ except ImportError:
 from Utilities import centered_text
 
 
-# TODO remove imageNet style normalization as they don't apply to YCbCr color space
-def normalize_image_transform(image_size, split, jitter):
-    if jitter and split == 'train':
-        normalize_image = transforms.Compose([
-            transforms.Resize(240),
-            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
-            transforms.RandomCrop(image_size),
-            transforms.Resize(image_size),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])  # Well known ImageNet values
-        ])
-    else:
-        normalize_image = transforms.Compose([
-            transforms.Resize(image_size),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])  # Well known ImageNet values
-        ])
+def normalize_image_transform(image_size, split, jitter, color_space):
+    normalize_image = []
+    
+    # Only for training
+    if split == 'train':
+        normalize_image.append(transforms.Resize(240))
+        if jitter:
+            normalize_image.append(transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1))
+        normalize_image.append(transforms.RandomCrop(image_size))
+    
+    # For training and Eval
+    normalize_image.append(transforms.Resize(image_size))
+    normalize_image.append(transforms.ToTensor())
+    if color_space == 'RGB':
+        normalize_image.append(transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])) # Well known ImageNet values
 
-    return normalize_image
+    return transforms.Compose(normalize_image)
 
 
 class ExternalSourcePipeline(Pipeline):
-    def __init__(self, data, batch_size, image_size, split, silent, num_threads, device_id, data_loader, shuffle=False):
+    def __init__(self, data, batch_size, image_size, split, silent, num_threads, device_id, data_loader, color_space, shuffle=False):
         super(ExternalSourcePipeline, self).__init__(batch_size,
                                                      num_threads,
                                                      device_id,
                                                      seed=12)
 
+        self.split = split
         if shuffle:
             data.shuffle()
         self.sourceIterator = iter(data)
@@ -72,35 +72,59 @@ class ExternalSourcePipeline(Pipeline):
         self.frameBatch = ops.ExternalSource()
         self.indexBatch = ops.ExternalSource()
 
+        mean = None
+        std = None
+        if color_space == 'RGB':
+            output_type = types.RGB
+            mean=[0.485 * 255, 0.456 * 255, 0.406 * 255]
+            std=[0.229 * 255, 0.224 * 255, 0.225 * 255]
+        elif color_space == 'YCbCr':
+            output_type = types.YCbCr
+        elif color_space == 'L':
+            output_type = types.GRAY
+        elif color_space == 'BGR':
+            output_type = types.BGR
+        else:
+            print("Unsupported color_space:", color_space)
+
+        # Variation range for Saturation, Contrast, Brightness and Hue
+        self.dSaturation = ops.Uniform(range=[0.9, 1.1])
+        self.dContrast = ops.Uniform(range=[0.9, 1.1])
+        self.dBright = ops.Uniform(range=[0.9, 1.1])
+        self.dHue = ops.Uniform(range=[-0.1, 0.1])
+
         if data_loader == "cpu":
             print("Error: cpu data loader shouldn't be handled by DALI")
         elif data_loader == "dali_cpu":
-            self.decode = ops.ImageDecoder(device="cpu", output_type=types.RGB)
-            self.resize = ops.Resize(device="cpu", resize_x=256, resize_y=256)
+            self.decode = ops.ImageDecoder(device = "cpu", output_type = output_type)
+            self.resize_big = ops.Resize(device="cpu", resize_x=240, resize_y=240)
+            # depreciated replace with HSV and ops.BrightnessContrast soon
+            self.color_jitter = ops.ColorTwist(device="cpu")
+            # random area 0.93-1.0 corresponds to croping randomly from an image of size between (224-240)
+            self.crop = ops.RandomResizedCrop(device="cpu", random_area=[0.93, 1.00], size=image_size)
+            self.resize = ops.Resize(device="cpu", resize_x=image_size[0], resize_y=image_size[1])
             self.norm = ops.CropMirrorNormalize(device="cpu",
                                                 output_dtype=types.FLOAT,
                                                 output_layout='CHW',
-                                                crop=(224, 224),
-                                                image_type=types.RGB,
-                                                mean=[0.485 * 255, 0.456 * 255, 0.406 * 255],
-                                                std=[0.229 * 255, 0.224 * 255, 0.225 * 255])
-            # self.cast = ops.Cast(device='cpu', dtype=types.FLOAT)
+                                                image_type=output_type,
+                                                mean=mean,
+                                                std=std)
         else:
             # data_loader == "dali_gpu" or data_loader == "dali_gpu_all":
-            # ImageDecoder below accepts  CPU inputs, but returns GPU outputs (hence device = "mixed"), HWC ordering
-            self.decode = ops.ImageDecoder(device="mixed", output_type=types.RGB)
-            # The rest of pre-processing is done on the GPU
-            self.resize = ops.Resize(device="gpu", resize_x=256, resize_y=256)
-            # self.res = ops.RandomResizedCrop(device="gpu", size =(224,224))
-            # HWC->CHW, crop (224,224), normalize
+            # ImageDecoder below accepts CPU inputs, but returns GPU outputs (hence device = "mixed"), HWC ordering
+            self.decode = ops.ImageDecoder(device = "mixed", output_type = output_type)
+            self.resize_big = ops.Resize(device="gpu", resize_x=240, resize_y=240)
+            # depreciated replace with HSV and ops.BrightnessContrast soon
+            self.color_jitter = ops.ColorTwist(device="gpu")
+            # random area 0.93-1.0 corresponds to croping randomly from an image of size between (224-240)
+            self.crop = ops.RandomResizedCrop(device="gpu", random_area=[0.93, 1.00], size=image_size)
+            self.resize = ops.Resize(device="gpu", resize_x=image_size[0], resize_y=image_size[1])
             self.norm = ops.CropMirrorNormalize(device="gpu",
                                                 output_dtype=types.FLOAT,
                                                 output_layout='CHW',
-                                                crop=(224, 224),
-                                                image_type=types.RGB,
-                                                mean=[0.485 * 255, 0.456 * 255, 0.406 * 255],
-                                                std=[0.229 * 255, 0.224 * 255, 0.225 * 255])
-            self.cast = ops.Cast(device='gpu', dtype=types.FLOAT)  # types.INT32,types.UINT8,types.FLOAT
+                                                image_type=output_type,
+                                                mean=mean,
+                                                std=std)
 
     def define_graph(self):
         self.row = self.rowBatch()
@@ -112,11 +136,17 @@ class ExternalSourcePipeline(Pipeline):
         self.frame = self.frameBatch()
         self.index = self.indexBatch()
 
-        imFaceD = self.norm(self.resize(self.decode(self.imFace)))
-        imEyeLD = self.norm(self.resize(self.decode(self.imEyeL)))
-        imEyeRD = self.norm(self.resize(self.decode(self.imEyeR)))
-
-        return self.row, imFaceD, imEyeLD, imEyeRD, self.faceGrid, self.gaze, self.frame, self.index
+        sat, con, bri, hue = self.dSaturation(), self.dContrast(), self.dBright(), self.dHue()
+        if self.split == 'train':
+            imFaceD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.decode(self.imFace)), saturation=sat, contrast=con, brightness=bri, hue=hue))))
+            imEyeLD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.decode(self.imEyeL)), saturation=sat, contrast=con, brightness=bri, hue=hue))))
+            imEyeRD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.decode(self.imEyeR)), saturation=sat, contrast=con, brightness=bri, hue=hue))))
+        else:
+            imFaceD = self.norm(self.resize(self.decode(self.imFace)))
+            imEyeLD = self.norm(self.resize(self.decode(self.imEyeL)))
+            imEyeRD = self.norm(self.resize(self.decode(self.imEyeR)))
+            
+        return (self.row, imFaceD, imEyeLD, imEyeRD, self.faceGrid, self.gaze, self.frame, self.index)
 
     @property
     def size(self):
@@ -200,7 +230,7 @@ class ITrackerData(object):
             print('Loaded iTracker dataset split "%s" with %d records.' % (split, len(self.indices)))
 
         if self.data_loader == 'cpu':
-            self.normalize_image = normalize_image_transform(image_size=self.imSize, jitter=jitter, split=split)
+            self.normalize_image = normalize_image_transform(image_size=self.imSize, jitter=jitter, split=split, color_space=self.color_space)
 
     def __len__(self):
         return len(self.indices)
@@ -210,6 +240,19 @@ class ITrackerData(object):
             im = Image.open(path).convert(self.color_space)
         except OSError:
             raise RuntimeError('Could not read image: ' + path)
+        return im
+    
+    def get_hog_descriptor(self, im):
+        # im = Image.fromarray(hogImage(im), im.mode)
+        # hog is failing below (20,20) so this should fix
+        if im.size[0] < 20:
+            im = transforms.functional.resize(im, (20,20), interpolation=2)
+        try:
+            hog = hogImage(im)
+            im = Image.fromarray(hog, im.mode)
+        except:
+            # print(im.size)
+            pass
         return im
 
     # merge two
@@ -236,9 +279,15 @@ class ITrackerData(object):
             imEyeL = self.loadImage(imEyeLPath)
             imEyeR = self.loadImage(imEyeRPath)
 
+            # for hog experiments
+            # imFace = self.get_hog_descriptor(imFace)
+            # imEyeL = self.get_hog_descriptor(imEyeL)
+            # imEyeR = self.get_hog_descriptor(imEyeR)
+
             imFace = self.normalize_image(imFace)
             imEyeL = self.normalize_image(imEyeL)
             imEyeR = self.normalize_image(imEyeR)
+
             # to tensor
             row = torch.LongTensor([int(index)])
             faceGrid = torch.FloatTensor(faceGrid)
@@ -345,32 +394,36 @@ def load_data(split,
         if data_loader == "dali_gpu" or data_loader == "dali_cpu":
             pipes = [ExternalSourcePipeline(data,
                                             batch_size=batch_size,
-                                            imageSize=image_size,
+                                            image_size=image_size,
                                             split=split,
                                             silent=not verbose,
                                             num_threads=8,
                                             device_id=num_gpus - 1,
                                             data_loader=data_loader,
+                                            color_space=color_space,
                                             shuffle=shuffle)]
         elif data_loader == "dali_gpu_all":
             pipes = [ExternalSourcePipeline(data,
                                             batch_size=batch_size,
-                                            imageSize=image_size,
+                                            image_size=image_size,
                                             split=split,
                                             silent=not verbose,
                                             num_threads=1,
                                             device_id=i,
                                             data_loader=data_loader,
+                                            color_space=color_space,
                                             shuffle=shuffle) for i in range(num_gpus)]
         else:
-            error("Invalid data_loader mode", data_loader)
-        # Todo: pin memory, auto_reset=True for auto reset iterator
+            # todo raise error
+            print("Invalid data_loader mode", data_loader)
+        # Todo: pin memory
+        # auto_reset=True resets the iterator after each epoch
         # DALIGenericIterator has inbuilt build for all pipelines
         loader = DALIGenericIterator(pipes,
                                      ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'],
                                      size=len(data),
                                      fill_last_batch=False,
-                                     last_batch_padded=True)
+                                     last_batch_padded=True, auto_reset=True)
 
     return Dataset(split, data, size, loader)
 

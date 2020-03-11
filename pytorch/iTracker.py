@@ -44,7 +44,6 @@ TARGETS = [(-10., -3.),
            (10., -15.),
            ]
 
-
 def main():
     args = parse_arguments()
 
@@ -68,7 +67,7 @@ def main():
         return
 
     if use_torch:
-        model = initialize_torch(args.torch_model_path, args.device)
+        model = initialize_torch(args.torch_model_path, args.device, color_space)
     elif use_onnx:
         session = initialize_onnx(args.onnx_model_path, args.device)
 
@@ -76,7 +75,7 @@ def main():
 
     cap = cv2.VideoCapture(0)
 
-    normalize_image = normalize_image_transform(image_size=IMAGE_SIZE, jitter=False, split='test')
+    normalize_image = normalize_image_transform(image_size=IMAGE_SIZE, jitter=False, split='test', color_space=color_space)
 
     target = 0
 
@@ -156,7 +155,7 @@ def main():
             target = target + 1
             if target >= len(TARGETS):
                 target = 0
-            stimulusX, stimulusY = change_target(target, monitor)
+            stimulusX, stimulusY = change_target(target, monitor, device_name)
 
     cv2.destroyAllWindows()
     cap.release()
@@ -239,8 +238,8 @@ def generate_display_data(display,
     return display
 
 
-def initialize_torch(path, device):
-    model = ITrackerModel().to(device=device)
+def initialize_torch(path, device, color_space):
+    model = ITrackerModel(color_space).to(device=device)
     saved = torch.load(path, map_location=device)
     model.load_state_dict(saved['state_dict'])
     model.eval()
