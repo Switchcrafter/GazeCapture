@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
+from imutils import face_utils
 
 from screeninfo import get_monitors
 
@@ -113,12 +114,18 @@ def live_demo():
 
         # find face landmarks/keypoints
         shape_np, isValid = find_face_dlib(webcam_image)
+        if mode == "pc":
+            webcam_image, anchor_indices = perspectiveCorrection(webcam_image, shape_np)
+            shape_np, isValid = find_face_dlib(webcam_image)
+        else:
+            anchor_indices = range(68)
 
         # basic display
         live_image = webcam_image.copy()
-        # if isValid:
-        #     draw_landmarks(live_image, shape_np)
-        #     draw_delaunay(live_image, shape_np, delaunay_color=(255, 255, 255))
+        if isValid:
+            draw_landmarks(live_image, shape_np, anchor_indices)
+            # draw_delaunay(live_image, shape_np, delaunay_color=(255, 255, 255))
+            # draw_outline(live_image, shape_np, color=(255, 255, 255))
         live_image = Image.fromarray(live_image)
         live_image = transforms.functional.hflip(live_image)
         live_image = transforms.functional.resize(live_image, (monitor.height, monitor.width), interpolation=2)
@@ -128,14 +135,7 @@ def live_demo():
 
          # do only for valid face objects
         if isValid:
-            face_image, left_eye_image, right_eye_image, face_grid, face_grid_image = rotationCorrectedCrop(webcam_image, shape_np, isValid)
-
-            # input_images = np.concatenate((face_image,
-            #                                 left_eye_image,
-            #                                 right_eye_image),
-            #                                 axis=0)
-            # # draw input images
-            # draw_overlay(display, monitor.width - 324, 0, input_images)
+            face_image, left_eye_image, right_eye_image, face_grid, face_grid_image = rotationCorrectedCrop(webcam_image, shape_np)
 
             # OpenCV BGR -> PIL RGB conversion
             image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_image,
@@ -150,8 +150,6 @@ def live_demo():
                                                                     face_grid,
                                                                     normalize_image)
             start_time = datetime.now()
-            # print("imFaceGrid", imFaceGrid.size())
-            # print("face_grid_image", face_grid_image.shape)
             gaze_prediction_np = inferenceEngine.run_inference(normalize_image,
                                                                 imFace,
                                                                 imEyeL,
@@ -161,6 +159,7 @@ def live_demo():
 
             display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image,
                                 monitor, right_eye_image, time_elapsed, target)
+
 
         # show default or updated display object on the screen
         cv2.imshow("display", display)
@@ -195,14 +194,15 @@ def generate_baseline_display_data(display, screenOffsetX, screenOffsetY, monito
     draw_reference_grid(display, monitor.height, monitor.width)
     return display
 
-def draw_landmarks(im, shape_np):
+def draw_landmarks(im, shape_np, anchor_indices):
     # loop over the (x, y)-coordinates for the facial landmarks
     # and draw them on the image
     idx = 0
-    for (x, y) in shape_np:
-        cv2.circle(im, (x, y), 1, (255, 0, 0), -1)
-        draw_text(im, x, y, str(idx), scale=0.5, fill=(255, 255, 255), thickness=1)
-        idx = idx + 1
+    for idx in range(len(shape_np)):
+        (x,y) = shape_np[idx]
+        if idx in anchor_indices:
+            draw_text(im, x, y, str(idx), scale=0.3, fill=(255, 255, 255), thickness=1)
+        cv2.circle(im, (x, y), 1, (255, 255, 255), -1)
 
 
 def generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image, monitor,
@@ -415,22 +415,32 @@ def perspectiveCorrection(im, shape_np):
     # all landmarks
     # src_pts = shape_np[::3]
     # dst_pts = dst_pts[::3]
-    src_pts = shape_np
-    dst_pts = dst_pts
-    # src_pts = shape_np[36:48]
-    # dst_pts = dst_pts[36:48]
 
-    # M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+    # homography_indices = [6, 10, 19, 24]
+    # src_pts = np.float32([[shape_np[i][0],shape_np[i][1]] for i in homography_indices])
+    # # dst_pts = np.float32([[dst_pts[i][0],dst_pts[i][1]] for i in homography_indices])
+    # h,w = 640,480
+    # dst_pts = np.float32([[0,h],[h,w],[0,0],[w,0]])
+    # M = cv2.getPerspectiveTransform(src_pts, dst_pts)
+
+
+    # least distortion : stable 4-point face square
+    homography_indices = [6, 10, 19, 24]
+    # #most aligned :
+    # homography_indices = [6, 10, 19, 24, 27, 33, 51]
+    # homography_indices = [6,10,19,24,39,42,29,33,51]
+    src_pts = np.float32([[shape_np[i][0],shape_np[i][1]] for i in homography_indices])
+    dst_pts = np.float32([[dst_pts[i][0],dst_pts[i][1]] for i in homography_indices])
     M, mask = cv2.findHomography(src_pts, dst_pts)
-    # matchesMask = mask.ravel().tolist()
-    h,w,c = im.shape
 
+
+    h,w,c = im.shape
     im2 = cv2.warpPerspective(im, M, (w, h))
 
     # pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
     # dst = cv2.perspectiveTransform(pts, M)
     # im2 = cv2.polylines(im,[np.int32(dst)],True, (255,0,0), 3, cv2.LINE_AA)
-    return im2
+    return im2, homography_indices
 
 
 # Check if a point is inside a rectangle
@@ -469,6 +479,15 @@ def draw_delaunay(img, landmarks, delaunay_color=(255, 255, 255)):
             cv2.line(img, pt1, pt2, delaunay_color, 1, cv2.LINE_AA, 0)
             cv2.line(img, pt2, pt3, delaunay_color, 1, cv2.LINE_AA, 0)
             cv2.line(img, pt3, pt1, delaunay_color, 1, cv2.LINE_AA, 0)
+
+def draw_outline(img, landmarks, color=(255, 255, 255)):
+    for key in face_utils.FACIAL_LANDMARKS_IDXS:
+        # print(face_utils.FACIAL_LANDMARKS_IDXS[key])
+        start, end = face_utils.FACIAL_LANDMARKS_IDXS[key]
+        for idx in range(start+1, end):
+            (x1,y1) = landmarks[idx-1]
+            (x2,y2) = landmarks[idx]
+            draw_line(img, (x1, y1), (x2, y2), color, 1)
 
 # drawing helper methods
 def draw_overlay(image, x_offset, y_offset, s_img):
