@@ -130,12 +130,12 @@ def live_demo():
         if isValid:
             face_image, left_eye_image, right_eye_image, face_grid, face_grid_image = rotationCorrectedCrop(webcam_image, shape_np, isValid)
 
-            input_images = np.concatenate((face_image,
-                                            left_eye_image,
-                                            right_eye_image),
-                                            axis=0)
-            # draw input images
-            draw_overlay(display, monitor.width - 324, 0, input_images)
+            # input_images = np.concatenate((face_image,
+            #                                 left_eye_image,
+            #                                 right_eye_image),
+            #                                 axis=0)
+            # # draw input images
+            # draw_overlay(display, monitor.width - 324, 0, input_images)
 
             # OpenCV BGR -> PIL RGB conversion
             image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_image,
@@ -162,65 +162,24 @@ def live_demo():
             display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image,
                                 monitor, right_eye_image, time_elapsed, target)
 
-
-            # try:
-
-            #     face_image, left_eye_image, right_eye_image, face_grid, face_grid_image = rotationCorrectedCrop(webcam_image, shape_np, isValid)
-
-            #     input_images = np.concatenate((face_image,
-            #                                     left_eye_image,
-            #                                     right_eye_image),
-            #                                     axis=0)
-            #     # draw input images
-            #     draw_overlay(display, monitor.width - 324, 0, input_images)
-
-            #     image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_image,
-            #                                                                 left_eye_image,
-            #                                                                 right_eye_image)
-            #     # convert images into tensors
-            #     imEyeL, imEyeR, imFace, imFaceGrid = prepare_image_tensors(color_space,
-            #                                                             image_face,
-            #                                                             image_eye_left,
-            #                                                             image_eye_right,
-            #                                                             face_grid,
-            #                                                             normalize_image)
-            #     start_time = datetime.now()
-            #     print("imFaceGrid", imFaceGrid.size())
-            #     gaze_prediction_np = inferenceEngine.run_inference(normalize_image,
-            #                                                         imFace,
-            #                                                         imEyeL,
-            #                                                         imEyeR,
-            #                                                         imFaceGrid)
-            #     time_elapsed = datetime.now() - start_time
-
-            #     face_image = Image.fromarray(face_image)
-            #     face_image = transforms.functional.hflip(face_image)
-            #     face_image = np.asarray(face_image)
-
-            #     left_eye_image = Image.fromarray(left_eye_image)
-            #     left_eye_image = transforms.functional.hflip(left_eye_image)
-            #     left_eye_image = np.asarray(left_eye_image)
-
-            #     right_eye_image = Image.fromarray(right_eye_image)
-            #     right_eye_image = transforms.functional.hflip(right_eye_image)
-            #     right_eye_image = np.asarray(right_eye_image)
-
-            #     display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image,
-            #                                     monitor, right_eye_image, time_elapsed, target)
-
-            # except:
-            #     print("Unexpected error:", sys.exc_info()[0])
-
-
         # show default or updated display object on the screen
         cv2.imshow("display", display)
 
         # keystroke detection
         k = cv2.waitKey(5) & 0xFF
+        #d=100, g=103, m=109
         if k == 27: # ESC
             break
         if k == 32: # Space
             target = (target + 1) % len(TARGETS)
+        # if k == 100: # d
+        #     delauny = ~delauny
+        # if k == 103: # g
+        #     grid = ~grid
+        # if k == 109: # m
+        #     mask = ~mask
+        # if k == 108: # l
+        #     landmarks = ~landmarks
 
     cv2.destroyAllWindows()
     cap.release()
@@ -234,7 +193,6 @@ def generate_baseline_display_data(display, screenOffsetX, screenOffsetY, monito
     display = draw_overlay(display, screenOffsetX, screenOffsetY, webcam_image)
     # draw reference grid
     draw_reference_grid(display, monitor.height, monitor.width)
-
     return display
 
 def draw_landmarks(im, shape_np):
@@ -272,7 +230,7 @@ def generate_display_data(display, face_grid_image, face_image, gaze_prediction_
     input_images = np.concatenate((face_image,
                                    right_eye_image,
                                    left_eye_image,
-                                   face_grid_image),
+                                   face_grid_image.resize((224, 224))),
                                   axis=0)
 
     hog_images = np.concatenate((hogImage(face_image),
@@ -358,10 +316,6 @@ def prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_rig
     image_eye_right = image_eye_right.convert(color_space)
 
     # normalize the image, results in tensors
-    # face_grid = transforms.functional.to_tensor(face_grid)
-    # print("face_grid_tensor", face_grid.size())
-    # face_grid = face_grid.flatten()
-    # print("face_grid", face_grid.size())
     tensor_face = normalize_image(image_face)
     tensor_eye_left = normalize_image(image_eye_left)
     tensor_eye_right = normalize_image(image_eye_right)
@@ -498,6 +452,9 @@ def draw_delaunay(img, landmarks, delaunay_color=(255, 255, 255)):
     rect = (0, 0, size[1], size[0])
     subdiv = cv2.Subdiv2D(rect)
     for x,y in landmarks:
+        # keep the coordinates within the rectangle limits
+        x = max(min(size[1]-1, x), 0)
+        y = max(min(size[0]-1, y), 0)
         subdiv.insert((int(x), int(y)))
 
     # Draw delaunay triangles
@@ -550,10 +507,10 @@ def draw_reference_grid(image, monitor_height, monitor_width, fill=(16,16,16), w
     draw_text(image, 200, 10+20, "X", scale=0.5, fill=(0, 255, 0), thickness=2)
 
     # draw grid
-    for x in range(0, monitor_width, 100):
+    for x in range(0, monitor_width, int(monitor_width/25)):
         draw_line(image, (x, 0), (x, monitor_height), fill, width)
 
-    for y in range(0, monitor_height, 100):
+    for y in range(0, monitor_height, int(monitor_height/25)):
         draw_line(image, (0, y), (monitor_width, y), fill, width)
 
     return image

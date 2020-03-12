@@ -158,7 +158,7 @@ def rotationCorrectedCrop(webcam_image, shape_np, isValid):
         face_image = imutils.resize(face_image, width=IMAGE_WIDTH)
 
         face_grid, face_grid_image = generate_grid(face_rect, webcam_image.copy())
-        face_grid_image = imutils.resize(face_grid_image, width=IMAGE_WIDTH)
+        # face_grid_image = imutils.resize(face_grid_image, width=IMAGE_WIDTH)
 
         left_eye_image, _ = crop_rect(webcam_image.copy(), left_eye_shape_np)
         left_eye_image = imutils.resize(left_eye_image, height = IMAGE_HEIGHT, width=IMAGE_WIDTH)
@@ -210,16 +210,6 @@ def crop_rect(img, shape_np):
     img_crop = cv2.getRectSubPix(img_rot, size, center)
     return img_crop, rect
 
-def generate_grid(face_rect, im):
-    box = np.int0((cv2.boxPoints(face_rect)))
-    face_grid_image = cv2.drawContours(im*0, [box], 0, (1,1,1), -1) #2 for line, -1 for filled
-    face_grid, _,_ = cv2.split(face_grid_image)
-    face_grid = cv2.resize(face_grid, (GRID_SIZE, GRID_SIZE))
-    face_grid_flat = face_grid.flatten()  # flatten from 2d (25, 25) to 1d (625)
-    face_grid_image = face_grid_image*255
-
-    return face_grid_flat, face_grid_image
-
 # def generate_grid(face_rect, im):
 #     box = np.int0((cv2.boxPoints(face_rect)))
 #     face_grid_image = cv2.drawContours(im*0, [box], 0, (1,1,1), -1) #2 for line, -1 for filled
@@ -228,11 +218,20 @@ def generate_grid(face_rect, im):
 #     face_grid_flat = face_grid.flatten()  # flatten from 2d (25, 25) to 1d (625)
 #     face_grid_image = face_grid_image*255
 
-#     face_grid_inverted = (255 - (255 * face_grid))
-#     face_grid_stacked = np.stack((face_grid_inverted,)*3, axis=-1)
-#     face_grid_image = Image.fromarray(face_grid_stacked).convert("RGB")
-
 #     return face_grid_flat, face_grid_image
+
+def generate_grid(face_rect, im):
+    box = np.int0((cv2.boxPoints(face_rect)))
+    face_grid_image = cv2.drawContours(im*0, [box], 0, (255,255,255), -1) #2 for line, -1 for filled
+    face_grid, _,_ = cv2.split(face_grid_image)
+    face_grid = cv2.resize(face_grid, (GRID_SIZE, GRID_SIZE), cv2.INTER_AREA)
+    face_grid_flat = face_grid.flatten()  # flatten from 2d (25, 25) to 1d (625)
+
+    face_grid_inverted = (255 - face_grid)
+    face_grid_stacked = np.stack((face_grid_inverted,)*3, axis=-1)
+    face_grid_image = Image.fromarray(face_grid_stacked).convert("RGB")
+
+    return face_grid_flat, face_grid_image
 
 def newFaceInfoDict(color="blue"):
     faceInfoDict = {
