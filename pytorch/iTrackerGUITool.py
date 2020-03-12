@@ -20,7 +20,6 @@ from face_utilities import find_face_dlib,\
                            generate_face_eye_images,\
                            generate_face_grid, \
                            prepare_image_inputs, \
-                           prepare_image_inputs2, \
                            hogImage
 
 import onnxruntime
@@ -129,62 +128,88 @@ def live_demo():
 
          # do only for valid face objects
         if isValid:
-            try:
-                if mode == "rc":
-                    # Rotation Correction
-                    face_image, left_eye_image, right_eye_image, face_grid_image, face_grid, face_rot = rotationCorrectedCrop(webcam_image,shape_np, isValid)
-                    # input_images = np.concatenate((face_rot, face_grid_image, face_image,
-                    #                             left_eye_image,
-                    #                             right_eye_image),
-                    #                             axis=0)
-                elif mode == "pc":
-                    pass
-                elif mode == "rc_dual":
-                    # rotationCorrectedCrop
-                    face_image, both_eyes_image = rotationCorrectedCropDualEye(webcam_image,shape_np, isValid)
-                    # input_images = np.concatenate((face_image,
-                    #                             both_eyes_image),
-                    #                             axis=0)
+            face_image, left_eye_image, right_eye_image, face_grid, face_grid_image = rotationCorrectedCrop(webcam_image, shape_np, isValid)
 
-                # # draw input images
-                # draw_overlay(display, monitor.width - 324, 0, input_images)
+            input_images = np.concatenate((face_image,
+                                            left_eye_image,
+                                            right_eye_image),
+                                            axis=0)
+            # draw input images
+            draw_overlay(display, monitor.width - 324, 0, input_images)
 
-                imEyeL, imEyeR, imFace, imFaceGrid = prepare_image_inputs2(face_grid,
-                                                                            face_image,
+            # OpenCV BGR -> PIL RGB conversion
+            image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_image,
                                                                             left_eye_image,
                                                                             right_eye_image)
-                # convert images into tensors
-                imEyeL, imEyeR, imFace, imFaceGrid = prepare_image_tensors(color_space,
-                                                                        imFaceGrid,
-                                                                        imEyeL,
-                                                                        imEyeR,
-                                                                        imFace,
-                                                                        normalize_image)
-                start_time = datetime.now()
-                gaze_prediction_np = inferenceEngine.run_inference(normalize_image,
-                                                                    imFace,
-                                                                    imEyeL,
-                                                                    imEyeR,
-                                                                    imFaceGrid)
-                time_elapsed = datetime.now() - start_time
 
-                # face_image = Image.fromarray(face_image)
-                # face_image = transforms.functional.hflip(face_image)
-                # face_image = np.asarray(face_image)
+            # PIL RGB -> PIL YCBCr. Then Convert images into tensors
+            imEyeL, imEyeR, imFace, imFaceGrid = prepare_image_tensors(color_space,
+                                                                    image_face,
+                                                                    image_eye_left,
+                                                                    image_eye_right,
+                                                                    face_grid,
+                                                                    normalize_image)
+            start_time = datetime.now()
+            # print("imFaceGrid", imFaceGrid.size())
+            # print("face_grid_image", face_grid_image.shape)
+            gaze_prediction_np = inferenceEngine.run_inference(normalize_image,
+                                                                imFace,
+                                                                imEyeL,
+                                                                imEyeR,
+                                                                imFaceGrid)
+            time_elapsed = datetime.now() - start_time
 
-                # left_eye_image = Image.fromarray(left_eye_image)
-                # left_eye_image = transforms.functional.hflip(left_eye_image)
-                # left_eye_image = np.asarray(left_eye_image)
+            display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image,
+                                monitor, right_eye_image, time_elapsed, target)
 
-                # right_eye_image = Image.fromarray(right_eye_image)
-                # right_eye_image = transforms.functional.hflip(right_eye_image)
-                # right_eye_image = np.asarray(right_eye_image)
 
-                display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image,
-                                                monitor, right_eye_image, face_rot, time_elapsed, target)
+            # try:
 
-            except:
-                print("Unexpected error:", sys.exc_info()[0])
+            #     face_image, left_eye_image, right_eye_image, face_grid, face_grid_image = rotationCorrectedCrop(webcam_image, shape_np, isValid)
+
+            #     input_images = np.concatenate((face_image,
+            #                                     left_eye_image,
+            #                                     right_eye_image),
+            #                                     axis=0)
+            #     # draw input images
+            #     draw_overlay(display, monitor.width - 324, 0, input_images)
+
+            #     image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_image,
+            #                                                                 left_eye_image,
+            #                                                                 right_eye_image)
+            #     # convert images into tensors
+            #     imEyeL, imEyeR, imFace, imFaceGrid = prepare_image_tensors(color_space,
+            #                                                             image_face,
+            #                                                             image_eye_left,
+            #                                                             image_eye_right,
+            #                                                             face_grid,
+            #                                                             normalize_image)
+            #     start_time = datetime.now()
+            #     print("imFaceGrid", imFaceGrid.size())
+            #     gaze_prediction_np = inferenceEngine.run_inference(normalize_image,
+            #                                                         imFace,
+            #                                                         imEyeL,
+            #                                                         imEyeR,
+            #                                                         imFaceGrid)
+            #     time_elapsed = datetime.now() - start_time
+
+            #     face_image = Image.fromarray(face_image)
+            #     face_image = transforms.functional.hflip(face_image)
+            #     face_image = np.asarray(face_image)
+
+            #     left_eye_image = Image.fromarray(left_eye_image)
+            #     left_eye_image = transforms.functional.hflip(left_eye_image)
+            #     left_eye_image = np.asarray(left_eye_image)
+
+            #     right_eye_image = Image.fromarray(right_eye_image)
+            #     right_eye_image = transforms.functional.hflip(right_eye_image)
+            #     right_eye_image = np.asarray(right_eye_image)
+
+            #     display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image,
+            #                                     monitor, right_eye_image, time_elapsed, target)
+
+            # except:
+            #     print("Unexpected error:", sys.exc_info()[0])
 
 
         # show default or updated display object on the screen
@@ -223,7 +248,7 @@ def draw_landmarks(im, shape_np):
 
 
 def generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image, monitor,
-                          right_eye_image, face_rot, time_elapsed, target):
+                          right_eye_image, time_elapsed, target):
 
     disp_offset_x, disp_offset_y = 40, 40
     tx, ty = (TARGETS[target])[0], (TARGETS[target])[1]
@@ -244,10 +269,10 @@ def generate_display_data(display, face_grid_image, face_image, gaze_prediction_
                                             deviceName=DEVICE_NAME
                                         )
 
-    input_images = np.concatenate((face_rot, face_grid_image), axis=0)
-    crop_images = np.concatenate((face_image,
+    input_images = np.concatenate((face_image,
                                    right_eye_image,
-                                   left_eye_image),
+                                   left_eye_image,
+                                   face_grid_image),
                                   axis=0)
 
     hog_images = np.concatenate((hogImage(face_image),
@@ -256,9 +281,7 @@ def generate_display_data(display, face_grid_image, face_image, gaze_prediction_
                                 axis=0)
 
     # draw input images
-    display = draw_overlay(display, monitor.width - 750, 0, input_images)
-    # draw input images
-    display = draw_overlay(display, monitor.width - 300, 0, crop_images)
+    display = draw_overlay(display, monitor.width - 300, 0, input_images)
     # draw hog images
     display = draw_overlay_hog(display, monitor.width - 525, 0, hog_images)
     # Draw prediction
@@ -328,32 +351,35 @@ def generate_display_data(display, face_grid_image, face_image, gaze_prediction_
     return display
 
 
-def prepare_image_tensors(color_space, face_grid, image_eye_left, image_eye_right, image_face, normalize_image):
+def prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_right, face_grid, normalize_image):
     # Convert to the desired color space
+    image_face = image_face.convert(color_space)
     image_eye_left = image_eye_left.convert(color_space)
     image_eye_right = image_eye_right.convert(color_space)
-    image_face = image_face.convert(color_space)
 
     # normalize the image, results in tensors
-    face_grid = transforms.functional.to_tensor(face_grid)
-    image_face = normalize_image(image_face)
-    image_eye_left = normalize_image(image_eye_left)
-    image_eye_right = normalize_image(image_eye_right)
-    # face_grid = torch.FloatTensor(face_grid)
+    # face_grid = transforms.functional.to_tensor(face_grid)
+    # print("face_grid_tensor", face_grid.size())
+    # face_grid = face_grid.flatten()
+    # print("face_grid", face_grid.size())
+    tensor_face = normalize_image(image_face)
+    tensor_eye_left = normalize_image(image_eye_left)
+    tensor_eye_right = normalize_image(image_eye_right)
+    tensor_face_grid = torch.FloatTensor(face_grid)
 
     # convert the 3 dimensional array into a 4 dimensional array, making it a batch size of 1
-    face_grid.unsqueeze_(0)
-    image_face.unsqueeze_(0)
-    image_eye_left.unsqueeze_(0)
-    image_eye_right.unsqueeze_(0)
+    tensor_face.unsqueeze_(0)
+    tensor_eye_left.unsqueeze_(0)
+    tensor_eye_right.unsqueeze_(0)
+    tensor_face_grid.unsqueeze_(0)
 
     # Convert the tensors into
-    image_face = torch.autograd.Variable(image_face, requires_grad=False)
-    image_eye_left = torch.autograd.Variable(image_eye_left, requires_grad=False)
-    image_eye_right = torch.autograd.Variable(image_eye_right, requires_grad=False)
-    face_grid = torch.autograd.Variable(face_grid, requires_grad=False)
+    tensor_face = torch.autograd.Variable(tensor_face, requires_grad=False)
+    tensor_eye_left = torch.autograd.Variable(tensor_eye_left, requires_grad=False)
+    tensor_eye_right = torch.autograd.Variable(tensor_eye_right, requires_grad=False)
+    tensor_face_grid = torch.autograd.Variable(tensor_face_grid, requires_grad=False)
 
-    return image_eye_left, image_eye_right, image_face, face_grid
+    return tensor_face, tensor_eye_left, tensor_eye_right, tensor_face_grid
 
 
 
