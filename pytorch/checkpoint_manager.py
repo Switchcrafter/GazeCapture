@@ -66,6 +66,7 @@ def save_checkpoint(state, is_best, checkpointsPath, saveCheckpoints, filename='
                         os.path.join(checkpointsPath, 'checkpoint' + str(state['epoch']) + '.pth.tar'))
         shutil.copyfile(resultsFilename, os.path.join(checkpointsPath, 'results' + str(state['epoch']) + '.json'))
         shutil.copyfile('ITrackerModel.py', os.path.join(checkpointsPath, 'ITrackerModel.py'))
+        shutil.copyfile('ITrackerData.py', os.path.join(checkpointsPath, 'ITrackerData.py'))
 
     bestFilename = os.path.join(checkpointsPath, 'best_' + filename)
     bestResultsFilename = os.path.join(checkpointsPath, 'best_results.json')
