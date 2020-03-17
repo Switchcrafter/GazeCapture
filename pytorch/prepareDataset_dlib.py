@@ -38,6 +38,8 @@ parser.add_argument('--dlib_path', default=None,
                     help="Path to dlib processed json files.")
 parser.add_argument('--output_path', default=None,
                     help="Where to write the output. Can be the same as dataset_path if you wish (=default).")
+parser.add_argument('--ignore_reference', default=False, action='store_true',
+                    help="Where to write the output. Can be the same as dataset_path if you wish (=default).")
 args = parser.parse_args()
 
 
@@ -170,48 +172,50 @@ def main():
     meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
     meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
 
-    # Load reference metadata
-    print('Will compare to the reference GitHub dataset metadata.mat...')
-    reference = sio.loadmat('./reference_metadata.mat', struct_as_record=False)
-    reference['labelRecNum'] = reference['labelRecNum'].flatten()
-    reference['frameIndex'] = reference['frameIndex'].flatten()
-    reference['labelDotXCam'] = reference['labelDotXCam'].flatten()
-    reference['labelDotYCam'] = reference['labelDotYCam'].flatten()
-    reference['labelTrain'] = reference['labelTrain'].flatten()
-    reference['labelVal'] = reference['labelVal'].flatten()
-    reference['labelTest'] = reference['labelTest'].flatten()
+    if not args.ignore_reference:
+        # Load reference metadata
+        print('Will compare to the reference GitHub dataset metadata.mat...')
+        reference = sio.loadmat('./reference_metadata.mat', struct_as_record=False)
+        reference['labelRecNum'] = reference['labelRecNum'].flatten()
+        reference['frameIndex'] = reference['frameIndex'].flatten()
+        reference['labelDotXCam'] = reference['labelDotXCam'].flatten()
+        reference['labelDotYCam'] = reference['labelDotYCam'].flatten()
+        reference['labelTrain'] = reference['labelTrain'].flatten()
+        reference['labelVal'] = reference['labelVal'].flatten()
+        reference['labelTest'] = reference['labelTest'].flatten()
 
-    # Find mapping
-    mKey = np.array(['%05d_%05d' % (rec, frame) for rec, frame in zip(meta['labelRecNum'], meta['frameIndex'])],
-                    np.object)
-    rKey = np.array(
-        ['%05d_%05d' % (rec, frame) for rec, frame in zip(reference['labelRecNum'], reference['frameIndex'])],
-        np.object)
-    mIndex = {k: i for i, k in enumerate(mKey)}
-    rIndex = {k: i for i, k in enumerate(rKey)}
-    mToR = np.zeros((len(mKey, )), int) - 1
-    for i, k in enumerate(mKey):
-        if k in rIndex:
-            mToR[i] = rIndex[k]
-        else:
-            logError('Did not find rec_frame %s from the new dataset in the reference dataset!' % k)
-    rToM = np.zeros((len(rKey, )), int) - 1
-    for i, k in enumerate(rKey):
-        if k in mIndex:
-            rToM[i] = mIndex[k]
-        else:
-            logError('Did not find rec_frame %s from the reference dataset in the new dataset!' % k, critical=False)
-            # break
+        # Find mapping
+        mKey = np.array(['%05d_%05d' % (rec, frame) for rec, frame in zip(meta['labelRecNum'], meta['frameIndex'])],
+                        np.object)
+        rKey = np.array(
+            ['%05d_%05d' % (rec, frame) for rec, frame in zip(reference['labelRecNum'], reference['frameIndex'])],
+            np.object)
+        mIndex = {k: i for i, k in enumerate(mKey)}
+        rIndex = {k: i for i, k in enumerate(rKey)}
+        mToR = np.zeros((len(mKey, )), int) - 1
+        for i, k in enumerate(mKey):
+            if k in rIndex:
+                mToR[i] = rIndex[k]
+            else:
+                logError('Did not find rec_frame %s from the new dataset in the reference dataset!' % k)
+        rToM = np.zeros((len(rKey, )), int) - 1
+        for i, k in enumerate(rKey):
+            if k in mIndex:
+                rToM[i] = mIndex[k]
+            else:
+                logError('Did not find rec_frame %s from the reference dataset in the new dataset!' % k, critical=False)
+                # break
 
     # Copy split from reference
     meta['labelTrain'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
     meta['labelVal'] = np.ones((len(meta['labelRecNum'], )), np.bool)  # default choice
     meta['labelTest'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
 
-    validMappingMask = mToR >= 0
-    meta['labelTrain'][validMappingMask] = reference['labelTrain'][mToR[validMappingMask]]
-    meta['labelVal'][validMappingMask] = reference['labelVal'][mToR[validMappingMask]]
-    meta['labelTest'][validMappingMask] = reference['labelTest'][mToR[validMappingMask]]
+    if not args.ignore_reference:
+        validMappingMask = mToR >= 0
+        meta['labelTrain'][validMappingMask] = reference['labelTrain'][mToR[validMappingMask]]
+        meta['labelVal'][validMappingMask] = reference['labelVal'][mToR[validMappingMask]]
+        meta['labelTest'][validMappingMask] = reference['labelTest'][mToR[validMappingMask]]
 
     # Write out metadata
     metaFile = os.path.join(args.output_path, 'metadata.mat')
@@ -219,23 +223,25 @@ def main():
     sio.savemat(metaFile, meta)
 
     # Statistics
-    nMissing = np.sum(rToM < 0)
-    nExtra = np.sum(mToR < 0)
-    totalMatch = len(mKey) == len(rKey) and np.all(np.equal(mKey, rKey))
     print('======================\n\tSummary\n======================')
     print('Total added %d frames from %d recordings.' % (len(meta['frameIndex']), len(np.unique(meta['labelRecNum']))))
-    if nMissing > 0:
-        print(
-            'There are %d frames missing in the new dataset. This may affect the results. Check the log to see which files are missing.' % nMissing)
-    else:
-        print('There are no missing files.')
-    if nExtra > 0:
-        print(
-            'There are %d extra frames in the new dataset. This is generally ok as they were marked for validation split only.' % nExtra)
-    else:
-        print('There are no extra files that were not in the reference dataset.')
-    if totalMatch:
-        print('The new metadata.mat is an exact match to the reference from GitHub (including ordering)')
+
+    if not args.ignore_reference:
+        nMissing = np.sum(rToM < 0)
+        nExtra = np.sum(mToR < 0)
+        totalMatch = len(mKey) == len(rKey) and np.all(np.equal(mKey, rKey))
+        if nMissing > 0:
+            print(
+                'There are %d frames missing in the new dataset. This may affect the results. Check the log to see which files are missing.' % nMissing)
+        else:
+            print('There are no missing files.')
+        if nExtra > 0:
+            print(
+                'There are %d extra frames in the new dataset. This is generally ok as they were marked for validation split only.' % nExtra)
+        else:
+            print('There are no extra files that were not in the reference dataset.')
+        if totalMatch:
+            print('The new metadata.mat is an exact match to the reference from GitHub (including ordering)')
 
     # import pdb; pdb.set_trace()
     input("Press Enter to continue...")
