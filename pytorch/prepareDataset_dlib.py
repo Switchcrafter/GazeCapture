@@ -34,6 +34,8 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 parser = argparse.ArgumentParser(description='iTracker-pytorch-PrepareDataset.')
 parser.add_argument('--dataset_path', help="Path to extracted files. It should have folders called '%%05d' in it.",
                     default=None)
+parser.add_argument('--dlib_path', default=None,
+                    help="Path to dlib processed json files.")
 parser.add_argument('--output_path', default=None,
                     help="Where to write the output. Can be the same as dataset_path if you wish (=default).")
 args = parser.parse_args()
@@ -67,18 +69,31 @@ def main():
         print('[%d/%d] Processing recording %s (%.2f%%)' % (i, len(recordings), recording, i / len(recordings) * 100))
         recDir = os.path.join(args.dataset_path, recording)
         recDirOut = os.path.join(args.output_path, recording)
-        dlibDir = os.path.join('/data/gc-output-dlib', recording)
 
-        # Read JSONs
-        appleFace = readJson(os.path.join(dlibDir, 'dlibFace.json'))
-        if appleFace is None:
-            continue
-        appleLeftEye = readJson(os.path.join(dlibDir, 'dlibLeftEye.json'))
-        if appleLeftEye is None:
-            continue
-        appleRightEye = readJson(os.path.join(dlibDir, 'dlibRightEye.json'))
-        if appleRightEye is None:
-            continue
+        if args.dlib_path == None:
+            # Read JSONs
+            appleFace = readJson(os.path.join(recDir, 'appleFace.json'))
+            if appleFace is None:
+                continue
+            appleLeftEye = readJson(os.path.join(recDir, 'appleLeftEye.json'))
+            if appleLeftEye is None:
+                continue
+            appleRightEye = readJson(os.path.join(recDir, 'appleRightEye.json'))
+            if appleRightEye is None:
+                continue
+        else:
+            dlibDir = os.path.join(args.dlib_path, recording)
+
+            # Read JSONs
+            appleFace = readJson(os.path.join(dlibDir, 'dlibFace.json'))
+            if appleFace is None:
+                continue
+            appleLeftEye = readJson(os.path.join(dlibDir, 'dlibLeftEye.json'))
+            if appleLeftEye is None:
+                continue
+            appleRightEye = readJson(os.path.join(dlibDir, 'dlibRightEye.json'))
+            if appleRightEye is None:
+                continue
         dotInfo = readJson(os.path.join(recDir, 'dotInfo.json'))
         if dotInfo is None:
             continue
