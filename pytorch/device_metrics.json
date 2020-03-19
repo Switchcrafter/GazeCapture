@@ -113,21 +113,28 @@
     },
     "Surface Pro 3": {
         "xCameraToScreenDisplacementInCm": 12.8,
-        "yCameraToScreenDisplacementInCm": 0.65,
+        "yCameraToScreenDisplacementInCm": 0.6,
         "widthScreenInCm": 25.45,
         "heightScreenInCm": 17.05,
         "ppi": 216
     },
     "Surface Pro 4": {
-        "xCameraToScreenDisplacementInCm": 13.02,
-        "yCameraToScreenDisplacementInCm": 0.65,
+        "xCameraToScreenDisplacementInCm": 13.0,
+        "yCameraToScreenDisplacementInCm": 0.6
         "widthScreenInCm": 26.03,
         "heightScreenInCm": 17.35,
         "ppi": 267
     },
     "Surface Pro 6": {
-        "xCameraToScreenDisplacementInCm": 13.02,
-        "yCameraToScreenDisplacementInCm": 0.65,
+        "xCameraToScreenDisplacementInCm": 13.0,
+        "yCameraToScreenDisplacementInCm": 0.6,
+        "widthScreenInCm": 26.03,
+        "heightScreenInCm": 17.35,
+        "ppi": 267
+    }
+    "Surface Pro 7": {
+        "xCameraToScreenDisplacementInCm": 13.0,
+        "yCameraToScreenDisplacementInCm": 0.6,
         "widthScreenInCm": 26.03,
         "heightScreenInCm": 17.35,
         "ppi": 267
