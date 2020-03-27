@@ -68,7 +68,7 @@ def main():
     # make sure checkpoints directory exists
     if not os.path.exists(args.output_path):
         print('{0} does not exist, creating...'.format(args.output_path))
-        os.mkdir(args.output_path)
+        os.makedirs(args.output_path, exist_ok=True)
 
     RMSErrors, best_RMSError, best_RMSErrors, epoch, learning_rates, model = initialize_model(args)
 
