@@ -13,19 +13,19 @@ def parse_commandline_arguments():
     parser.add_argument('--output_path',
                         help="Path to checkpoint",
                         default="")
-    parser.add_argument('--save_checkpoints', type=str2bool, nargs='?', const=True, default=False,
+    parser.add_argument('--save_checkpoints', action='store_true', default=False,
                         help="Save each of the checkpoints as the run progresses.")
-    parser.add_argument('--test', type=str2bool, nargs='?', const=True, default=False, help="Just test and terminate.")
-    parser.add_argument('--validate', type=str2bool, nargs='?', const=True, default=False,
+    parser.add_argument('--test', action='store_true', default=False, help="Just test and terminate.")
+    parser.add_argument('--validate', action='store_true', default=False,
                         help="Just validate and terminate.")
-    parser.add_argument('--reset', type=str2bool, nargs='?', const=True, default=False,
+    parser.add_argument('--reset', action='store_true', default=False,
                         help="Start from scratch (do not load).")
     parser.add_argument('--epochs', type=int, default=30)
     parser.add_argument('--workers', type=int, default=16)
     parser.add_argument('--dataset_limit', type=int, default=0, help="Limits the dataset size, useful for debugging")
-    parser.add_argument('--exportONNX', type=str2bool, nargs='?', const=True, default=False)
+    parser.add_argument('--exportONNX', action='store_true', default=False)
     parser.add_argument('--disable-cuda', action='store_true', default=False, help='Disable CUDA')
-    parser.add_argument('--verbose', type=str2bool, nargs='?', const=True, default=False,
+    parser.add_argument('--verbose', action='store_true', default=False,
                         help="verbose mode - print details every batch")
     parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--mode', help="Parallelization mode: [none], dp, ddp1, ddp2", default='none')
@@ -34,9 +34,9 @@ def parse_commandline_arguments():
     parser.add_argument('--name', help="Provide a name to the experiment", default='main')
     parser.add_argument('--local_rank', help="", nargs='+', default=list(range(torch.cuda.device_count())))
     parser.add_argument('--master', type=int, default=0)
-    parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
+    parser.add_argument('--hsm', action='store_true', default=False, help="")
     parser.add_argument('--hsm_cycle', type=int, default=8)
-    parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="Enables Adversarial Attack")
+    parser.add_argument('--adv', action='store_true', default=False, help="Enables Adversarial Attack")
     parser.add_argument('--color_space', default='YCbCr', help='Image color space - RGB, YCbCr, L, HSV, LAB')
     parser.add_argument('--decay_type', default='none', help='none, step, exp, time')
     parser.add_argument('--shape_type', default='triangular', help='triangular, flat')
@@ -109,12 +109,3 @@ def parse_commandline_arguments():
         print('===================================================')
 
     return args
-
-
-def str2bool(v):
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
