@@ -1,32 +1,25 @@
+import sys
 from datetime import datetime  # for timing
 
-import sys
 import cv2
 import numpy as np
+import onnxruntime
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
-
 from screeninfo import get_monitors
 
 from ITrackerData import normalize_image_transform
 from ITrackerModel import ITrackerModel
 from cam2screen import cam2screen
-
-from face_utilities import find_face_dlib,\
-                           landmarksToRects,\
-                           rotationCorrectedCrop, \
-                           rotationCorrectedCropDualEye, \
-                           generate_face_eye_images,\
-                           generate_face_grid, \
-                           prepare_image_inputs, \
-                           prepare_image_inputs2, \
-                           hogImage
-
-import onnxruntime
+from face_utilities import find_face_dlib, \
+    rotationCorrectedCrop, \
+    rotationCorrectedCropDualEye, \
+    prepare_image_inputs2, \
+    hogImage
 
 
-class InferenceEngine():
+class InferenceEngine:
     def __init__(self, mode, color_space):
         self.mode = mode
         self.color_space = color_space
