@@ -8,7 +8,15 @@ import dateutil.parser
 
 
 def findCaptureSessionDirs(path):
-    return os.listdir(path)
+    session_paths = []
+    devices = os.listdir(path)
+
+    for device in devices:
+        sessions = os.listdir(os.path.join(path, device))
+        for session in sessions:
+            session_paths.append(os.path.join(device, session))
+
+    return session_paths
 
 
 def findCapturesInSession(path):
@@ -75,7 +83,7 @@ def getCaptureTimeString(capture_data):
     return str(timedelta.total_seconds())
 
 
-data_directory = "EyeCapture/054be71eca564395a1984df3655ee837-054be71eca564395a1984df3655ee837"
+data_directory = "EyeCaptures"
 output_directory = "EyeCaptures-dlib"
 
 directories = sorted(findCaptureSessionDirs(data_directory))
