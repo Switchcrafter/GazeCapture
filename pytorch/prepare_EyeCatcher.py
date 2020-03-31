@@ -83,7 +83,7 @@ def getCaptureTimeString(capture_data):
     return str(timedelta.total_seconds())
 
 
-data_directory = "/data/EyeCapture/85d4ea2e5e564da8bfb1d176bd0a9b8e-85d4ea2e5e564da8bfb1d176bd0a9b8e"
+data_directory = "EyeCaptures"
 output_directory = "EyeCaptures-dlib"
 
 directories = sorted(findCaptureSessionDirs(data_directory))
