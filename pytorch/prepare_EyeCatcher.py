@@ -161,7 +161,7 @@ for directory_idx, directory in enumerate(directories):
         print(f"Processing {capture_idx + 1}/{total_captures} - {capture}")
 
         capture_json_path = os.path.join(data_directory, directory, capture + ".json")
-        capture_png_path = os.path.join(data_directory, directory, capture + ".png")
+        capture_png_path = os.path.join(data_directory, directory, capture + ".jpg")
 
         if os.path.isfile(capture_json_path) and os.path.isfile(capture_png_path):
             capture_data = loadJsonData(capture_json_path)
@@ -217,8 +217,8 @@ for directory_idx, directory in enumerate(directories):
             # PositionIndex == DotNum
             # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
             dotinfo["DotNum"].append(capture_data["PositionIndex"])
-            dotinfo["XPts"].append(capture_data["ScreenX"])
-            dotinfo["YPts"].append(capture_data["ScreenY"])
+            dotinfo["XPts"].append(capture_data["RawX"])
+            dotinfo["YPts"].append(capture_data["RawY"])
             dotinfo["XCam"].append(0)
             dotinfo["YCam"].append(0)
             dotinfo["Time"].append(getCaptureTimeString(capture_data))
