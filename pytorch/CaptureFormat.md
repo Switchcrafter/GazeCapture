@@ -38,7 +38,7 @@ And extracted images:
 
 ## Changes to schema
 
-Use DeviceSku in place of DeviceName (e.g. different metrics for different Surface Book 2's)
+Use DeviceSku in place of DeviceName (e.g. different metrics for different Surface Book 2s with different screen sizes)
 
 Capturing raw pixels vs. scaled pixels
     e.g. dotInfo.json should contain unscaled device pixels on screen (e.g. zoom mode independent)
@@ -49,14 +49,26 @@ Capture -> Prepare -> ML
 
 ### Capture
 
-00005\frames\*.jpg\json
+#### This is how MIT GazeCapture stores the data:
+
+{dataHome}\{sessionId}\frames\{frameId}.jpg
+{dataHome}\{sessionId}\dotInfo.json             JSON array of X/Y target point for each frame
+{dataHome}\{sessionId}\info.json                Facial feature recognition metadata &amp; device type
+{dataHome}\{sessionId}\screen.json              Screen W/H/Orientation for frames
+
+#### This is how we will store the data from EyeCapture
 
 {dataHome}\200331\{deviceSku}\{userName}\
 
-{frame}.jpg     Camera Images in JPG Lossless
-{frame}.json    XRaw, YRaw
+{frameId}.jpg     Camera Images in JPG Lossless
+{frameId}.json    XRaw, YRaw -- one file per frame captured next to the jpg camera data.
+                  X/Y coordinates are in device dependent pixel coordinates and take out any display zoom recalcuations.
 
-### Prepare
+### Prepare Dataset step
+
+This step using facial feature recognition to identify the face and eye bounding boxes and extract the face and eyes images.  It also calculates the camera distance offsets (dotCam) using screen metrics and device + orientation to camera position lookup table.
+
+Since we are only going to support capture and playback on 'identical' devices for now in a singular orientation, we can optionally skip the dotCam calculation step.
 
 dotCam.json
 faceGrid.json
