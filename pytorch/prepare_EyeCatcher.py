@@ -8,7 +8,15 @@ import dateutil.parser
 
 
 def findCaptureSessionDirs(path):
-    return os.listdir(path)
+    session_paths = []
+    devices = os.listdir(path)
+
+    for device in devices:
+        sessions = os.listdir(os.path.join(path, device))
+        for session in sessions:
+            session_paths.append(os.path.join(device, session))
+
+    return session_paths
 
 
 def findCapturesInSession(path):
