@@ -120,7 +120,7 @@
     },
     "Surface Pro 4": {
         "xCameraToScreenDisplacementInCm": 13.0,
-        "yCameraToScreenDisplacementInCm": 0.6
+        "yCameraToScreenDisplacementInCm": 0.6,
         "widthScreenInCm": 26.03,
         "heightScreenInCm": 17.35,
         "ppi": 267

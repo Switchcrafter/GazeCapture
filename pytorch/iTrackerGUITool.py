@@ -7,16 +7,22 @@ import onnxruntime
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
+from imutils import face_utils
+
 from screeninfo import get_monitors
 
 from ITrackerData import normalize_image_transform
 from ITrackerModel import ITrackerModel
 from cam2screen import cam2screen
-from face_utilities import find_face_dlib, \
-    rotationCorrectedCrop, \
-    rotationCorrectedCropDualEye, \
-    prepare_image_inputs2, \
-    hogImage
+
+from face_utilities import find_face_dlib,\
+                           landmarksToRects,\
+                           rotationCorrectedCrop, \
+                           rotationCorrectedCropDualEye, \
+                           generate_face_eye_images,\
+                           generate_face_grid, \
+                           prepare_image_inputs, \
+                           hogImage
 
 
 class InferenceEngine:
@@ -107,77 +113,53 @@ def live_demo():
 
         # find face landmarks/keypoints
         shape_np, isValid = find_face_dlib(webcam_image)
+        if mode == "pc":
+            webcam_image, anchor_indices = perspectiveCorrection(webcam_image, shape_np)
+            shape_np, isValid = find_face_dlib(webcam_image)
+        else:
+            anchor_indices = range(68)
 
         # basic display
         live_image = webcam_image.copy()
-        # if isValid:
-        #     draw_landmarks(live_image, shape_np)
-        #     draw_delaunay(live_image, shape_np, delaunay_color=(255, 255, 255))
+        if isValid:
+            draw_landmarks(live_image, shape_np, anchor_indices)
+            # live_image = draw_landmarks2(live_image, shape_np, anchor_indices)
+            # delaunay_correction(live_image, shape_np, delaunay_color=(255, 255, 255))
+            # draw_delaunay(live_image, shape_np, delaunay_color=(255, 255, 255))
+            # draw_outline(live_image, shape_np, color=(255, 255, 255))
         live_image = Image.fromarray(live_image)
         live_image = transforms.functional.hflip(live_image)
         live_image = transforms.functional.resize(live_image, (monitor.height, monitor.width), interpolation=2)
-        live_image = transforms.functional.adjust_brightness(live_image, 0.1)
+        live_image = transforms.functional.adjust_brightness(live_image, 0.4)
         live_image = np.asarray(live_image)
         generate_baseline_display_data(display, screenOffsetX, screenOffsetY, monitor, live_image)
 
          # do only for valid face objects
         if isValid:
-            try:
-                if mode == "rc":
-                    # Rotation Correction
-                    face_image, left_eye_image, right_eye_image, face_grid_image, face_grid, face_rot = rotationCorrectedCrop(webcam_image,shape_np, isValid)
-                    # input_images = np.concatenate((face_rot, face_grid_image, face_image,
-                    #                             left_eye_image,
-                    #                             right_eye_image),
-                    #                             axis=0)
-                elif mode == "pc":
-                    pass
-                elif mode == "rc_dual":
-                    # rotationCorrectedCrop
-                    face_image, both_eyes_image = rotationCorrectedCropDualEye(webcam_image,shape_np, isValid)
-                    # input_images = np.concatenate((face_image,
-                    #                             both_eyes_image),
-                    #                             axis=0)
+            face_image, left_eye_image, right_eye_image, face_grid, face_grid_image = rotationCorrectedCrop(webcam_image, shape_np)
 
-                # # draw input images
-                # draw_overlay(display, monitor.width - 324, 0, input_images)
-
-                imEyeL, imEyeR, imFace, imFaceGrid = prepare_image_inputs2(face_grid,
-                                                                            face_image,
+            # OpenCV BGR -> PIL RGB conversion
+            image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_image,
                                                                             left_eye_image,
                                                                             right_eye_image)
-                # convert images into tensors
-                imEyeL, imEyeR, imFace, imFaceGrid = prepare_image_tensors(color_space,
-                                                                        imFaceGrid,
-                                                                        imEyeL,
-                                                                        imEyeR,
-                                                                        imFace,
-                                                                        normalize_image)
-                start_time = datetime.now()
-                gaze_prediction_np = inferenceEngine.run_inference(normalize_image,
-                                                                    imFace,
-                                                                    imEyeL,
-                                                                    imEyeR,
-                                                                    imFaceGrid)
-                time_elapsed = datetime.now() - start_time
 
-                # face_image = Image.fromarray(face_image)
-                # face_image = transforms.functional.hflip(face_image)
-                # face_image = np.asarray(face_image)
+            # PIL RGB -> PIL YCBCr. Then Convert images into tensors
+            imEyeL, imEyeR, imFace, imFaceGrid = prepare_image_tensors(color_space,
+                                                                    image_face,
+                                                                    image_eye_left,
+                                                                    image_eye_right,
+                                                                    face_grid,
+                                                                    normalize_image)
+            start_time = datetime.now()
+            gaze_prediction_np = inferenceEngine.run_inference(normalize_image,
+                                                                imFace,
+                                                                imEyeL,
+                                                                imEyeR,
+                                                                imFaceGrid)
+            time_elapsed = datetime.now() - start_time
 
-                # left_eye_image = Image.fromarray(left_eye_image)
-                # left_eye_image = transforms.functional.hflip(left_eye_image)
-                # left_eye_image = np.asarray(left_eye_image)
-
-                # right_eye_image = Image.fromarray(right_eye_image)
-                # right_eye_image = transforms.functional.hflip(right_eye_image)
-                # right_eye_image = np.asarray(right_eye_image)
-
-                display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image,
-                                                monitor, right_eye_image, face_rot, time_elapsed, target)
-
-            except:
-                print("Unexpected error:", sys.exc_info()[0])
+            display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image,
+                                monitor, right_eye_image, time_elapsed, target)
 
 
         # show default or updated display object on the screen
@@ -185,10 +167,19 @@ def live_demo():
 
         # keystroke detection
         k = cv2.waitKey(5) & 0xFF
+        #d=100, g=103, m=109
         if k == 27: # ESC
             break
         if k == 32: # Space
             target = (target + 1) % len(TARGETS)
+        # if k == 100: # d
+        #     delauny = ~delauny
+        # if k == 103: # g
+        #     grid = ~grid
+        # if k == 109: # m
+        #     mask = ~mask
+        # if k == 108: # l
+        #     landmarks = ~landmarks
 
     cv2.destroyAllWindows()
     cap.release()
@@ -202,21 +193,52 @@ def generate_baseline_display_data(display, screenOffsetX, screenOffsetY, monito
     display = draw_overlay(display, screenOffsetX, screenOffsetY, webcam_image)
     # draw reference grid
     draw_reference_grid(display, monitor.height, monitor.width)
-
     return display
 
-def draw_landmarks(im, shape_np):
+def draw_landmarks(im, shape_np, anchor_indices):
     # loop over the (x, y)-coordinates for the facial landmarks
     # and draw them on the image
     idx = 0
-    for (x, y) in shape_np:
-        cv2.circle(im, (x, y), 1, (255, 0, 0), -1)
-        draw_text(im, x, y, str(idx), scale=0.5, fill=(255, 255, 255), thickness=1)
-        idx = idx + 1
+    for idx in range(len(shape_np)):
+        (x,y) = shape_np[idx]
+        if idx in anchor_indices:
+            draw_text(im, x, y, str(idx), scale=0.3, fill=(255, 255, 255), thickness=1)
+        cv2.circle(im, (x, y), 1, (255, 255, 255), -1)
+
+
+# # Driver code to test above function
+# a = -1.0
+# b = 1.0
+# c = 0.0
+# x1 = 1.0
+# y1 = 0.0
+
+# x, y = mirrorImage(a, b, c, x1, y1);
+# def mirrorImage( a, b, c, x1, y1):
+#     temp = -2 * (a * x1 + b * y1 + c) /(a * a + b * b)
+#     x = temp * a + x1
+#     y = temp * b + y1
+#     return (x, y)
+
+def draw_landmarks2(im, shape_np, anchor_indices):
+    im2 = cv2.flip(im, 1)
+    shape2_np = shape_np.copy()
+    # lp2 = shape_np
+    h,w,c = im.shape
+    for point in shape2_np:
+        # print('before', point)
+        point = [point[0], w-point[1]]
+        # point = [w-point[0], point[1]]
+        # print('after', point)
+
+    draw_landmarks(im2, shape2_np, anchor_indices)
+    draw_landmarks(im, shape_np, anchor_indices)
+    im = cv2.add(im, im2)
+    return im
 
 
 def generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image, monitor,
-                          right_eye_image, face_rot, time_elapsed, target):
+                          right_eye_image, time_elapsed, target):
 
     disp_offset_x, disp_offset_y = 40, 40
     tx, ty = (TARGETS[target])[0], (TARGETS[target])[1]
@@ -237,10 +259,10 @@ def generate_display_data(display, face_grid_image, face_image, gaze_prediction_
                                             deviceName=DEVICE_NAME
                                         )
 
-    input_images = np.concatenate((face_rot, face_grid_image), axis=0)
-    crop_images = np.concatenate((face_image,
+    input_images = np.concatenate((face_image,
                                    right_eye_image,
-                                   left_eye_image),
+                                   left_eye_image,
+                                   face_grid_image.resize((224, 224))),
                                   axis=0)
 
     hog_images = np.concatenate((hogImage(face_image),
@@ -249,9 +271,7 @@ def generate_display_data(display, face_grid_image, face_image, gaze_prediction_
                                 axis=0)
 
     # draw input images
-    display = draw_overlay(display, monitor.width - 750, 0, input_images)
-    # draw input images
-    display = draw_overlay(display, monitor.width - 300, 0, crop_images)
+    display = draw_overlay(display, monitor.width - 300, 0, input_images)
     # draw hog images
     display = draw_overlay_hog(display, monitor.width - 525, 0, hog_images)
     # Draw prediction
@@ -321,32 +341,31 @@ def generate_display_data(display, face_grid_image, face_image, gaze_prediction_
     return display
 
 
-def prepare_image_tensors(color_space, face_grid, image_eye_left, image_eye_right, image_face, normalize_image):
+def prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_right, face_grid, normalize_image):
     # Convert to the desired color space
+    image_face = image_face.convert(color_space)
     image_eye_left = image_eye_left.convert(color_space)
     image_eye_right = image_eye_right.convert(color_space)
-    image_face = image_face.convert(color_space)
 
     # normalize the image, results in tensors
-    face_grid = transforms.functional.to_tensor(face_grid)
-    image_face = normalize_image(image_face)
-    image_eye_left = normalize_image(image_eye_left)
-    image_eye_right = normalize_image(image_eye_right)
-    # face_grid = torch.FloatTensor(face_grid)
+    tensor_face = normalize_image(image_face)
+    tensor_eye_left = normalize_image(image_eye_left)
+    tensor_eye_right = normalize_image(image_eye_right)
+    tensor_face_grid = torch.FloatTensor(face_grid)
 
     # convert the 3 dimensional array into a 4 dimensional array, making it a batch size of 1
-    face_grid.unsqueeze_(0)
-    image_face.unsqueeze_(0)
-    image_eye_left.unsqueeze_(0)
-    image_eye_right.unsqueeze_(0)
+    tensor_face.unsqueeze_(0)
+    tensor_eye_left.unsqueeze_(0)
+    tensor_eye_right.unsqueeze_(0)
+    tensor_face_grid.unsqueeze_(0)
 
     # Convert the tensors into
-    image_face = torch.autograd.Variable(image_face, requires_grad=False)
-    image_eye_left = torch.autograd.Variable(image_eye_left, requires_grad=False)
-    image_eye_right = torch.autograd.Variable(image_eye_right, requires_grad=False)
-    face_grid = torch.autograd.Variable(face_grid, requires_grad=False)
+    tensor_face = torch.autograd.Variable(tensor_face, requires_grad=False)
+    tensor_eye_left = torch.autograd.Variable(tensor_eye_left, requires_grad=False)
+    tensor_eye_right = torch.autograd.Variable(tensor_eye_right, requires_grad=False)
+    tensor_face_grid = torch.autograd.Variable(tensor_face_grid, requires_grad=False)
 
-    return image_eye_left, image_eye_right, image_face, face_grid
+    return tensor_face, tensor_eye_left, tensor_eye_right, tensor_face_grid
 
 
 
@@ -428,22 +447,38 @@ def perspectiveCorrection(im, shape_np):
     # all landmarks
     # src_pts = shape_np[::3]
     # dst_pts = dst_pts[::3]
-    src_pts = shape_np
-    dst_pts = dst_pts
-    # src_pts = shape_np[36:48]
-    # dst_pts = dst_pts[36:48]
 
-    # M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+    # homography_indices = [6, 10, 19, 24]
+    # src_pts = np.float32([[shape_np[i][0],shape_np[i][1]] for i in homography_indices])
+    # # dst_pts = np.float32([[dst_pts[i][0],dst_pts[i][1]] for i in homography_indices])
+    # h,w = 640,480
+    # dst_pts = np.float32([[0,h],[h,w],[0,0],[w,0]])
+    # M = cv2.getPerspectiveTransform(src_pts, dst_pts)
+
+
+    # least distortion : stable 4-point face square
+    homography_indices = [6, 10, 19, 24]
+    # #most aligned :
+    # homography_indices = [6, 10, 19, 24, 27, 33, 51]
+    # homography_indices = [6,10,19,24,39,42,29,33,51]
+    # homography_indices = [6,10,19,24,27,28,29,30,33,8]
+    src_pts = np.float32([[shape_np[i][0],shape_np[i][1]] for i in homography_indices])
+    dst_pts = np.float32([[dst_pts[i][0],dst_pts[i][1]] for i in homography_indices])
     M, mask = cv2.findHomography(src_pts, dst_pts)
-    # matchesMask = mask.ravel().tolist()
+
     h,w,c = im.shape
-
+    # do perspective correction
     im2 = cv2.warpPerspective(im, M, (w, h))
+    # im2 = cv2.warpPerspective(im, M, (w, h), None, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
+    # print(M)
 
-    # pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
+    # # show perspective
+    # # pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
+    # pts = np.float32([[240, 180], [240, 340], [400, 340], [400, 180]]).reshape(-1, 1, 2)
     # dst = cv2.perspectiveTransform(pts, M)
     # im2 = cv2.polylines(im,[np.int32(dst)],True, (255,0,0), 3, cv2.LINE_AA)
-    return im2
+
+    return im2, homography_indices
 
 
 # Check if a point is inside a rectangle
@@ -465,6 +500,9 @@ def draw_delaunay(img, landmarks, delaunay_color=(255, 255, 255)):
     rect = (0, 0, size[1], size[0])
     subdiv = cv2.Subdiv2D(rect)
     for x,y in landmarks:
+        # keep the coordinates within the rectangle limits
+        x = max(min(size[1]-1, x), 0)
+        y = max(min(size[0]-1, y), 0)
         subdiv.insert((int(x), int(y)))
 
     # Draw delaunay triangles
@@ -479,6 +517,178 @@ def draw_delaunay(img, landmarks, delaunay_color=(255, 255, 255)):
             cv2.line(img, pt1, pt2, delaunay_color, 1, cv2.LINE_AA, 0)
             cv2.line(img, pt2, pt3, delaunay_color, 1, cv2.LINE_AA, 0)
             cv2.line(img, pt3, pt1, delaunay_color, 1, cv2.LINE_AA, 0)
+
+
+# Check if a point is inside a rectangle
+def rectContains(rect, point) :
+    if point[0] < rect[0] :
+        return False
+    elif point[1] < rect[1] :
+        return False
+    elif point[0] > rect[2] :
+        return False
+    elif point[1] > rect[3] :
+        return False
+    return True
+
+# # Calculate delanauy triangle
+# def calculateDelaunayTriangles(rect, points):
+#     # Create subdiv
+#     subdiv = cv2.Subdiv2D(rect);
+
+#     # Insert points into subdiv
+#     for p in points:
+#         subdiv.insert((p[0], p[1]));
+
+
+#     # List of triangles. Each triangle is a list of 3 points ( 6 numbers )
+#     triangleList = subdiv.getTriangleList();
+
+#     # Find the indices of triangles in the points array
+
+#     delaunayTri = []
+
+#     for t in triangleList:
+#         pt = []
+#         pt.append((t[0], t[1]))
+#         pt.append((t[2], t[3]))
+#         pt.append((t[4], t[5]))
+
+#         pt1 = (t[0], t[1])
+#         pt2 = (t[2], t[3])
+#         pt3 = (t[4], t[5])
+
+#         if rectContains(rect, pt1) and rectContains(rect, pt2) and rectContains(rect, pt3):
+#             ind = []
+#             for j in range(0, 3):
+#                 for k in range(0, len(points)):
+#                     if(abs(pt[j][0] - points[k][0]) < 1.0 and abs(pt[j][1] - points[k][1]) < 1.0):
+#                         ind.append(k)
+#             if len(ind) == 3:
+#                 delaunayTri.append((ind[0], ind[1], ind[2]))
+
+#     return delaunayTri
+
+# def constrainPoint(p, w, h) :
+#     p =  ( min( max( p[0], 0 ) , w - 1 ) , min( max( p[1], 0 ) , h - 1 ) )
+#     return p;
+
+
+# def delaunay_correction(img, landmarks, delaunay_color=(255, 255, 255)):
+#     avg_landmarks = np.float32([[226, 217],
+#                     [226, 248],
+#                     [230, 279],
+#                     [236, 308],
+#                     [246, 337],
+#                     [260, 363],
+#                     [280, 384],
+#                     [304, 400],
+#                     [334, 405],
+#                     [365, 401],
+#                     [390, 386],
+#                     [410, 366],
+#                     [424, 342],
+#                     [434, 314],
+#                     [439, 284],
+#                     [443, 253],
+#                     [445, 221],
+#                     [237, 195],
+#                     [249, 174],
+#                     [273, 168],
+#                     [296, 172],
+#                     [319, 182],
+#                     [348, 184],
+#                     [371, 176],
+#                     [395, 172],
+#                     [419, 179],
+#                     [431, 198],
+#                     [334, 206],
+#                     [334, 227],
+#                     [334, 247],
+#                     [334, 269],
+#                     [306, 285],
+#                     [319, 288],
+#                     [333, 291],
+#                     [347, 288],
+#                     [361, 285],
+#                     [259, 213],
+#                     [272, 205],
+#                     [288, 206],
+#                     [303, 215],
+#                     [287, 219],
+#                     [271, 219],
+#                     [365, 215],
+#                     [379, 205],
+#                     [396, 206],
+#                     [410, 214],
+#                     [397, 219],
+#                     [380, 219],
+#                     [289, 327],
+#                     [306, 319],
+#                     [322, 313],
+#                     [333, 317],
+#                     [345, 314],
+#                     [361, 321],
+#                     [377, 329],
+#                     [361, 341],
+#                     [346, 346],
+#                     [332, 347],
+#                     [320, 345],
+#                     [305, 341],
+#                     [297, 328],
+#                     [321, 326],
+#                     [333, 328],
+#                     [346, 326],
+#                     [370, 329],
+#                     [345, 329],
+#                     [332, 330],
+#                     [321, 329]])
+
+#     # Delaunay triangulation
+#     h,w,c = img.shape
+#     rect = (0, 0, w, h);
+#     dt = calculateDelaunayTriangles(rect, avg_landmarks);
+
+#     # Output image
+#     output = np.zeros((h,w,3), np.float32());
+
+#     # Warp input images to average image landmarks
+#     for i in range(0, len(imagesNorm)) :
+#         img = np.zeros((h,w,3), np.float32());
+#         # Transform triangles one by one
+#         for j in range(0, len(dt)) :
+#             tin = [];
+#             tout = [];
+
+#             for k in range(0, 3) :
+#                 pIn = pointsNorm[i][dt[j][k]];
+#                 pIn = constrainPoint(pIn, w, h);
+
+#                 pOut = pointsAvg[dt[j][k]];
+#                 pOut = constrainPoint(pOut, w, h);
+
+#                 tin.append(pIn);
+#                 tout.append(pOut);
+
+
+#             warpTriangle(imagesNorm[i], img, tin, tout);
+
+
+#         # Add image intensities for averaging
+#         output = output + img;
+
+#     return output
+
+
+
+def draw_outline(img, landmarks, color=(255, 255, 255)):
+    for key in face_utils.FACIAL_LANDMARKS_IDXS:
+        # print(face_utils.FACIAL_LANDMARKS_IDXS[key])
+        start, end = face_utils.FACIAL_LANDMARKS_IDXS[key]
+        for idx in range(start+1, end):
+            (x1,y1) = landmarks[idx-1]
+            (x2,y2) = landmarks[idx]
+            draw_line(img, (x1, y1), (x2, y2), color, 1)
 
 # drawing helper methods
 def draw_overlay(image, x_offset, y_offset, s_img):
@@ -517,10 +727,10 @@ def draw_reference_grid(image, monitor_height, monitor_width, fill=(16,16,16), w
     draw_text(image, 200, 10+20, "X", scale=0.5, fill=(0, 255, 0), thickness=2)
 
     # draw grid
-    for x in range(0, monitor_width, 100):
+    for x in range(0, monitor_width, int(monitor_width/25)):
         draw_line(image, (x, 0), (x, monitor_height), fill, width)
 
-    for y in range(0, monitor_height, 100):
+    for y in range(0, monitor_height, int(monitor_height/25)):
         draw_line(image, (0, y), (monitor_width, y), fill, width)
 
     return image
