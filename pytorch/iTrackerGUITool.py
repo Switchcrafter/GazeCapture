@@ -16,11 +16,8 @@ from ITrackerModel import ITrackerModel
 from cam2screen import cam2screen
 
 from face_utilities import find_face_dlib,\
-                           landmarksToRects,\
-                           rotationCorrectedCrop, \
-                           rotationCorrectedCropDualEye, \
-                           generate_face_eye_images,\
-                           generate_face_grid, \
+                           rc_landmarksToRects,\
+                           rc_generate_face_eye_images,\
                            prepare_image_inputs, \
                            hogImage
 
@@ -136,7 +133,11 @@ def live_demo():
 
          # do only for valid face objects
         if isValid:
-            face_image, left_eye_image, right_eye_image, face_grid, face_grid_image = rotationCorrectedCrop(webcam_image, shape_np)
+            face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
+            face_image, left_eye_image, right_eye_image, face_grid, face_grid_image = rc_generate_face_eye_images(face_rect,
+                                                                                                                left_eye_rect,
+                                                                                                                right_eye_rect,
+                                                                                                                webcam_image)
 
             # OpenCV BGR -> PIL RGB conversion
             image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_image,
