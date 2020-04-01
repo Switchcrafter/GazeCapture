@@ -1,19 +1,14 @@
 import os
-import argparse
-import taskManager
-import shutil
-
-
 import re
 import json
 import sys
+import argparse
+import taskManager
+import shutil
 import numpy as np
 import scipy.io as sio
 from PIL import Image as PILImage
 from face_utilities import faceEyeRectsToFaceInfoDict, newFaceInfoDict, find_face_dlib, landmarksToRects
-
-
-
 
 
 ################################################################################
@@ -257,6 +252,121 @@ def ROIExtractionTask(directory):
 
     return meta
 
+
+# Equivalent: generate_faces
+def RCROIDetectionTask(directory):
+    recording_path = os.path.join(args.input, directory)
+    output_path = os.path.join(args.output, directory)
+    # Read information for valid frames
+    filenames = json_read(os.path.join(recording_path, "frames.json"))
+
+    faceInfoDict = newFaceInfoDict()
+    for idx, filename in enumerate(filenames):
+        # load image
+        image_path = os.path.join(recording_path, "frames", filename)
+        image = PILImage.open(image_path)
+        image = np.array(image.convert('RGB'))
+
+        # ROI detection
+        shape_np, isValid = find_face_dlib(image)
+        face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
+        faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict,
+                                                            face_rect,
+                                                            left_eye_rect,
+                                                            right_eye_rect,
+                                                            isValid)
+    # ensure the output directory exists
+    preparePath(output_path)
+    # write the Face, LeftEye and RightEye
+    json_write(os.path.join(output_path, 'dlibFace.json'), faceInfoDict["Face"])
+    json_write(os.path.join(output_path, 'dlibLeftEye.json'), faceInfoDict["LeftEye"])
+    json_write(os.path.join(output_path, 'dlibRightEye.json'), faceInfoDict["RightEye"])
+    return
+
+
+# Equivalent: prepareDataset
+def RCROIExtractionTask(directory):
+
+    recDir = os.path.join(args.input, directory)
+    dlibDir = os.path.join(args.metapath, directory)
+    recDirOut = os.path.join(args.output, directory)
+
+    # Output structure
+    meta = {
+        'labelRecNum': [],
+        'frameIndex': [],
+        'labelDotXCam': [],
+        'labelDotYCam': [],
+        'labelFaceGrid': [],
+    }
+
+    # Read metadata JSONs from metapath
+    appleFace = json_read(os.path.join(dlibDir, 'dlibFace.json'))
+    appleLeftEye = json_read(os.path.join(dlibDir, 'dlibLeftEye.json'))
+    appleRightEye = json_read(os.path.join(dlibDir, 'dlibRightEye.json'))
+
+    # Read input JSONs from inputpath
+    dotInfo = json_read(os.path.join(recDir, 'dotInfo.json'))
+    faceGrid = json_read(os.path.join(recDir, 'faceGrid.json'))
+    frames = json_read(os.path.join(recDir, 'frames.json'))
+    # info = json_read(os.path.join(recDir, 'info.json'))
+    # screen = json_read(os.path.join(recDir, 'screen.json'))
+
+    # prepape output paths
+    facePath = preparePath(os.path.join(recDirOut, 'appleFace'))
+    leftEyePath = preparePath(os.path.join(recDirOut, 'appleLeftEye'))
+    rightEyePath = preparePath(os.path.join(recDirOut, 'appleRightEye'))
+
+    # Preprocess
+    allValid = np.logical_and(np.logical_and(appleFace['IsValid'], appleLeftEye['IsValid']),
+                                np.logical_and(appleRightEye['IsValid'], faceGrid['IsValid']))
+
+    frames = np.array([int(re.match('(\d{5})\.jpg$', x).group(1)) for x in frames])
+
+    bboxFromJson = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H']), axis=1).astype(int)
+    faceBbox = bboxFromJson(appleFace) + [-1, -1, 1, 1]  # for compatibility with matlab code
+    leftEyeBbox = bboxFromJson(appleLeftEye) + [0, -1, 0, 0]
+    rightEyeBbox = bboxFromJson(appleRightEye) + [0, -1, 0, 0]
+    leftEyeBbox[:, :2] += faceBbox[:, :2]  # relative to face
+    rightEyeBbox[:, :2] += faceBbox[:, :2]
+    faceGridBbox = bboxFromJson(faceGrid)
+
+    for j, frame in enumerate(frames):
+        # Can we use it?
+        if not allValid[j]:
+            continue
+
+        # Load image
+        imgFile = os.path.join(recDir, 'frames', '%05d.jpg' % frame)
+        if not os.path.isfile(imgFile):
+            logError('Warning: Could not read image file %s!' % imgFile)
+            continue
+        img = PILImage.open(imgFile)
+        if img is None:
+            logError('Warning: Could not read image file %s!' % imgFile)
+            continue
+        img = np.array(img.convert('RGB'))
+
+        # Crop images
+        imFace = cropImage(img, faceBbox[j, :])
+        imEyeL = cropImage(img, leftEyeBbox[j, :])
+        imEyeR = cropImage(img, rightEyeBbox[j, :])
+
+        # Save images
+        PILImage.fromarray(imFace).save(os.path.join(facePath, '%05d.jpg' % frame), quality=95)
+        PILImage.fromarray(imEyeL).save(os.path.join(leftEyePath, '%05d.jpg' % frame), quality=95)
+        PILImage.fromarray(imEyeR).save(os.path.join(rightEyePath, '%05d.jpg' % frame), quality=95)
+
+        # Collect metadata
+        meta['labelRecNum'] += [int(directory)]
+        meta['frameIndex'] += [frame]
+        meta['labelDotXCam'] += [dotInfo['XCam'][j]]
+        meta['labelDotYCam'] += [dotInfo['YCam'][j]]
+        meta['labelFaceGrid'] += [faceGridBbox[j, :]]
+
+    return meta
+
+
 def compareTask(meta):
     # Load reference metadata
     print('Will compare to the reference GitHub dataset metadata.mat...')
@@ -388,7 +498,7 @@ if __name__ == '__main__':
         meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
         meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
 
-        print(meta)
+        # print(meta)
         # compareTask(meta)
 
 
