@@ -9,7 +9,7 @@ import time
 def print_sysinfo():
     print('\nPython version  :', platform.python_version())
     print('compiler        :', platform.python_compiler())
-    print('\nsystem     :', platform.system())
+    print('system     :', platform.system())
     print('release    :', platform.release())
     print('machine    :', platform.machine())
     print('processor  :', platform.processor())
@@ -20,7 +20,7 @@ def print_sysinfo():
 
 def worker(taskFunction, dataSample, workerId, jobId):
     result = taskFunction(dataSample)
-    return jobId
+    return (jobId, result)
 
 def job(taskFunction, taskData, dataLoader, numWorkers = multiprocessing.cpu_count()):
     # create a worker pool
@@ -38,9 +38,9 @@ def job(taskFunction, taskData, dataLoader, numWorkers = multiprocessing.cpu_cou
     results = []
     progressBar = SimpleProgressBar(len(taskData), "Completed")
     for p in workerProcesses:
-        output = p.get()
-        results.append(output)
-        progressBar.update(output+1)
+        (jobId,result) = p.get()
+        results.append(result)
+        progressBar.update(jobId+1)
 
     # leave one blank line
     print()
