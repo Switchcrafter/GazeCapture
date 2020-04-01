@@ -159,71 +159,52 @@ def getEyeRectRelative(face_rect, eye_rect):
     return eye_rect_relative
 
 
-def rotationCorrectedCrop_old(webcam_image, shape_np, isValid):
-    if isValid:
-        face_rect = cv2.boundingRect(shape_np)
-
-        (leftEyeLandmarksStart, leftEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
-        left_eye_shape_np = shape_np[leftEyeLandmarksStart:leftEyeLandmarksEnd]
-
-        (rightEyeLandmarksStart, rightEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
-        right_eye_shape_np = shape_np[rightEyeLandmarksStart:rightEyeLandmarksEnd]
-
-        face_image, face_rot, face_grid = crop_rect(webcam_image.copy(), shape_np)
-        face_rot = imutils.resize(face_rot, width=IMAGE_WIDTH)
-        face_image = imutils.resize(face_image, width=IMAGE_WIDTH)
-        face_grid_image = imutils.resize(face_grid.copy(), width=IMAGE_WIDTH)
-        face_grid = cv2.resize(face_grid, (25, 25))  # dim (w,h)
-
-        left_eye_image, _, _ = crop_rect(webcam_image.copy(), left_eye_shape_np)
-        left_eye_image = imutils.resize(left_eye_image, height=IMAGE_HEIGHT, width=IMAGE_WIDTH)
-
-        right_eye_image, _, _ = crop_rect(webcam_image.copy(), right_eye_shape_np)
-        right_eye_image = imutils.resize(right_eye_image, height=IMAGE_HEIGHT, width=IMAGE_WIDTH)
-
-        return face_image, left_eye_image, right_eye_image, face_grid_image, face_grid, face_rot
-
-def rotationCorrectedCrop(webcam_image, shape_np):
+def rc_landmarksToRects(shape_np, isValid):
     (leftEyeLandmarksStart, leftEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
-    left_eye_shape_np = shape_np[leftEyeLandmarksStart:leftEyeLandmarksEnd]
-
     (rightEyeLandmarksStart, rightEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
+
+    left_eye_shape_np = shape_np[leftEyeLandmarksStart:leftEyeLandmarksEnd]
     right_eye_shape_np = shape_np[rightEyeLandmarksStart:rightEyeLandmarksEnd]
 
-    face_image, face_rect = crop_rect(webcam_image.copy(), shape_np)
-    face_image = imutils.resize(face_image, width=IMAGE_WIDTH)
+    face_rect = cv2.minAreaRect(shape_np)
+    left_eye_rect = cv2.minAreaRect(left_eye_shape_np)
+    right_eye_rect = cv2.minAreaRect(right_eye_shape_np)
 
-    face_grid, face_grid_image = generate_grid(face_rect, webcam_image.copy())
-    # face_grid_image = imutils.resize(face_grid_image, width=IMAGE_WIDTH)
-
-    left_eye_image, _ = crop_rect(webcam_image.copy(), left_eye_shape_np)
-    left_eye_image = imutils.resize(left_eye_image, height = IMAGE_HEIGHT, width=IMAGE_WIDTH)
-
-    right_eye_image, _ = crop_rect(webcam_image.copy(), right_eye_shape_np)
-    right_eye_image = imutils.resize(right_eye_image, height = IMAGE_HEIGHT, width=IMAGE_WIDTH)
-
-    return face_image, left_eye_image, right_eye_image, face_grid, face_grid_image
-
-def rotationCorrectedCropDualEye(webcam_image, shape_np, isValid):
-    if isValid:
-        face_rect = cv2.boundingRect(shape_np)
-
-        (leftEyeLandmarksStart, leftEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
-        (rightEyeLandmarksStart, rightEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
-        eye_shape_np = shape_np[rightEyeLandmarksStart:leftEyeLandmarksEnd]
-
-        face_image, _ = crop_rect(webcam_image.copy(), shape_np)
-        face_image = imutils.resize(face_image, height=IMAGE_HEIGHT, width=IMAGE_WIDTH)
-
-        both_eye_image, _ = crop_rect(webcam_image.copy(), eye_shape_np)
-        both_eye_image = imutils.resize(both_eye_image, height=IMAGE_HEIGHT, width=IMAGE_WIDTH)
-
-        return face_image, both_eye_image
+    return face_rect, left_eye_rect, right_eye_rect, isValid
 
 
-def crop_rect(img, shape_np):
-    rect = cv2.minAreaRect(shape_np)
+def rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect, right_eye_rect, isValid):
+    face_dict = faceInfoDict["Face"]
+    left_eye_dict = faceInfoDict["LeftEye"]
+    right_eye_dict = faceInfoDict["RightEye"]
 
+    face_dict['X'].append(face_rect[0][0])
+    face_dict['Y'].append(face_rect[0][1])
+    face_dict['W'].append(face_rect[1][0])
+    face_dict['H'].append(face_rect[1][1])
+    face_dict['Theta'].append(face_rect[2])
+    face_dict['IsValid'].append(isValid)
+
+    left_eye_dict['X'].append(left_eye_rect[0][0])
+    left_eye_dict['Y'].append(left_eye_rect[0][1])
+    left_eye_dict['W'].append(left_eye_rect[1][0])
+    left_eye_dict['H'].append(left_eye_rect[1][1])
+    left_eye_dict['Theta'].append(left_eye_rect[2])
+    left_eye_dict['IsValid'].append(isValid)
+
+    right_eye_dict['X'].append(right_eye_rect[0][0])
+    right_eye_dict['Y'].append(right_eye_rect[0][1])
+    right_eye_dict['W'].append(right_eye_rect[1][0])
+    right_eye_dict['H'].append(right_eye_rect[1][1])
+    right_eye_dict['Theta'].append(right_eye_rect[2])
+    right_eye_dict['IsValid'].append(isValid)
+
+    idx = len(face_dict['X']) - 1
+
+    return faceInfoDict, idx
+
+
+def crop_rect(img, rect):
     # get the parameter of the small rectangle
     center, size, angle = rect[0], rect[1], rect[2]
 
@@ -245,7 +226,22 @@ def crop_rect(img, shape_np):
     img_rot = cv2.warpAffine(img, M, (width, height))
     # now rotated rectangle becomes vertical and we crop it
     img_crop = cv2.getRectSubPix(img_rot, size, center)
-    return img_crop, rect
+    return img_crop
+
+def rc_generate_face_eye_images(face_rect, left_eye_rect, right_eye_rect, webcam_image):
+
+    face_image = crop_rect(webcam_image.copy(), face_rect)
+    face_image = imutils.resize(face_image, width=IMAGE_WIDTH)
+
+    left_eye_image = crop_rect(webcam_image.copy(), left_eye_rect)
+    left_eye_image = imutils.resize(left_eye_image, width=IMAGE_WIDTH)
+
+    right_eye_image = crop_rect(webcam_image.copy(), right_eye_rect)
+    right_eye_image = imutils.resize(right_eye_image, width=IMAGE_WIDTH)
+
+    face_grid, face_grid_image = generate_grid(face_rect, webcam_image.copy())
+
+    return face_image, left_eye_image, right_eye_image, face_grid, face_grid_image
 
 
 def generate_grid2(rect, webcam_image):
@@ -254,7 +250,7 @@ def generate_grid2(rect, webcam_image):
     box = np.int0(box)
     im = cv2.drawContours(im, [box], 0, (255, 255, 255), -1)  # 2 for line, -1 for filled
     return im
-    
+
 def generate_grid(face_rect, im):
     box = np.int0((cv2.boxPoints(face_rect)))
     face_grid_image = cv2.drawContours(im*0, [box], 0, (255,255,255), -1) #2 for line, -1 for filled
@@ -277,6 +273,7 @@ def newFaceInfoDict(color="blue"):
             'W': [],
             'X': [],
             'Y': [],
+            'Theta': [],
             'IsValid': []
         },
         "LeftEye": {
@@ -284,6 +281,7 @@ def newFaceInfoDict(color="blue"):
             'W': [],
             'X': [],
             'Y': [],
+            'Theta': [],
             'IsValid': []
         },
         "RightEye": {
@@ -291,6 +289,7 @@ def newFaceInfoDict(color="blue"):
             'W': [],
             'X': [],
             'Y': [],
+            'Theta': [],
             'IsValid': []
         },
         "Color": color,
