@@ -37,6 +37,72 @@ class Bar(object):
         size_tuple = shutil.get_terminal_size((default_width, default_height))  # pass fallback
         return size_tuple.columns
 
+class SimpleProgressBar(Bar):
+    '''A progress bar which stretches to fill the line.'''
+
+    def __init__(self, max_value=100, label='', marker='=', left='|', right='|', arrow='>', fill='-'):
+        '''Creates a customizable progress bar.
+        max_value - max possible value for the progressbar
+        label - title for the progressbar as prefix
+        marker - string or callable object to use as a marker
+        left - string or callable object to use as a left border
+        right - string or callable object to use as a right border
+        fill - character to use for the empty part of the progress bar
+        '''
+        self.label = '{:5}'.format(label)
+        self.left = left
+        self.marker = marker
+        self.arrow = arrow
+        self.right = right
+        self.fill = fill
+        self.max_value = max_value
+        self.start_time = self.sample_time = datetime.now()
+        self.sample_value = 0
+
+    def create_marker(self, value, width):
+        if self.max_value > 0:
+            length = int(value / self.max_value * width)
+            if length == width:
+                return (self.marker * length)
+            elif length == 0:
+                return ''
+            else:
+                marker = (self.marker * (length - 1)) + self.arrow
+        else:
+            marker = self.marker
+        return marker
+
+    def update(self, value):
+        if value == 0:
+            value = 1
+        '''Updates the progress bar and its subcomponents'''
+        time = datetime.now() - self.start_time
+
+        # Overall
+        speed = int(value / time.total_seconds())
+        # Instantaneous
+        vel = int( (value-self.sample_value) / (datetime.now() - self.sample_time).total_seconds())
+        self.sample_value = value
+        self.sample_time = datetime.now()
+
+        time_eta = '[ETA : ' + str((time / value) * self.max_value) + ']'
+        assert (value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value (' + str(
+            self.max_value) + ').'
+        width = self.getTerminalWidth() - (
+                    len(self.label) + len(self.left) + len(self.right) + len(time_eta))
+        marker = self.create_marker(value, width).ljust(width, self.fill)
+        marker = self.left + marker + self.right
+        # append infoString at the center
+        infoString = ' {val:d}/{max:d} {speed:d}@{vel:d}/s ({percent:d}%) '.format(val=value, max=self.max_value,
+                                                                             speed=speed, vel=vel,
+                                                                             percent=int(value / self.max_value * 100))
+        index = (len(marker) - len(infoString)) // 2
+        marker = marker[:index] + infoString + marker[index + len(infoString):]
+        if value < self.max_value:
+            print(self.label + marker + time_eta, end='\r')
+        else:
+            time_elapsed = '[Time: ' + str(time) + ']'
+            print(self.label + marker + time_elapsed, end='\n')
 
 class ProgressBar(Bar):
     '''A progress bar which stretches to fill the line.'''
@@ -88,7 +154,7 @@ class ProgressBar(Bar):
         vel = int( (value-self.sample_value) / (datetime.now() - self.sample_time).total_seconds())
         self.sample_value = value
         self.sample_time = datetime.now()
-            
+
         time_eta = '[ETA : ' + str((time / value) * self.max_value) + ']'
         assert (value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value (' + str(
             self.max_value) + ').'

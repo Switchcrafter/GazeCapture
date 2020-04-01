@@ -124,12 +124,14 @@ def live_demo():
         live_image = webcam_image.copy()
         if isValid:
             draw_landmarks(live_image, shape_np, anchor_indices)
+            # live_image = draw_landmarks2(live_image, shape_np, anchor_indices)
+            # delaunay_correction(live_image, shape_np, delaunay_color=(255, 255, 255))
             # draw_delaunay(live_image, shape_np, delaunay_color=(255, 255, 255))
             # draw_outline(live_image, shape_np, color=(255, 255, 255))
         live_image = Image.fromarray(live_image)
         live_image = transforms.functional.hflip(live_image)
         live_image = transforms.functional.resize(live_image, (monitor.height, monitor.width), interpolation=2)
-        live_image = transforms.functional.adjust_brightness(live_image, 0.1)
+        live_image = transforms.functional.adjust_brightness(live_image, 0.4)
         live_image = np.asarray(live_image)
         generate_baseline_display_data(display, screenOffsetX, screenOffsetY, monitor, live_image)
 
@@ -203,6 +205,37 @@ def draw_landmarks(im, shape_np, anchor_indices):
         if idx in anchor_indices:
             draw_text(im, x, y, str(idx), scale=0.3, fill=(255, 255, 255), thickness=1)
         cv2.circle(im, (x, y), 1, (255, 255, 255), -1)
+
+
+# # Driver code to test above function
+# a = -1.0
+# b = 1.0
+# c = 0.0
+# x1 = 1.0
+# y1 = 0.0
+
+# x, y = mirrorImage(a, b, c, x1, y1);
+# def mirrorImage( a, b, c, x1, y1):
+#     temp = -2 * (a * x1 + b * y1 + c) /(a * a + b * b)
+#     x = temp * a + x1
+#     y = temp * b + y1
+#     return (x, y)
+
+def draw_landmarks2(im, shape_np, anchor_indices):
+    im2 = cv2.flip(im, 1)
+    shape2_np = shape_np.copy()
+    # lp2 = shape_np
+    h,w,c = im.shape
+    for point in shape2_np:
+        # print('before', point)
+        point = [point[0], w-point[1]]
+        # point = [w-point[0], point[1]]
+        # print('after', point)
+
+    draw_landmarks(im2, shape2_np, anchor_indices)
+    draw_landmarks(im, shape_np, anchor_indices)
+    im = cv2.add(im, im2)
+    return im
 
 
 def generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image, monitor,
@@ -429,17 +462,23 @@ def perspectiveCorrection(im, shape_np):
     # #most aligned :
     # homography_indices = [6, 10, 19, 24, 27, 33, 51]
     # homography_indices = [6,10,19,24,39,42,29,33,51]
+    # homography_indices = [6,10,19,24,27,28,29,30,33,8]
     src_pts = np.float32([[shape_np[i][0],shape_np[i][1]] for i in homography_indices])
     dst_pts = np.float32([[dst_pts[i][0],dst_pts[i][1]] for i in homography_indices])
     M, mask = cv2.findHomography(src_pts, dst_pts)
 
-
     h,w,c = im.shape
+    # do perspective correction
     im2 = cv2.warpPerspective(im, M, (w, h))
+    # im2 = cv2.warpPerspective(im, M, (w, h), None, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
+    # print(M)
 
-    # pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
+    # # show perspective
+    # # pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
+    # pts = np.float32([[240, 180], [240, 340], [400, 340], [400, 180]]).reshape(-1, 1, 2)
     # dst = cv2.perspectiveTransform(pts, M)
     # im2 = cv2.polylines(im,[np.int32(dst)],True, (255,0,0), 3, cv2.LINE_AA)
+
     return im2, homography_indices
 
 
@@ -479,6 +518,169 @@ def draw_delaunay(img, landmarks, delaunay_color=(255, 255, 255)):
             cv2.line(img, pt1, pt2, delaunay_color, 1, cv2.LINE_AA, 0)
             cv2.line(img, pt2, pt3, delaunay_color, 1, cv2.LINE_AA, 0)
             cv2.line(img, pt3, pt1, delaunay_color, 1, cv2.LINE_AA, 0)
+
+
+# Check if a point is inside a rectangle
+def rectContains(rect, point) :
+    if point[0] < rect[0] :
+        return False
+    elif point[1] < rect[1] :
+        return False
+    elif point[0] > rect[2] :
+        return False
+    elif point[1] > rect[3] :
+        return False
+    return True
+
+# # Calculate delanauy triangle
+# def calculateDelaunayTriangles(rect, points):
+#     # Create subdiv
+#     subdiv = cv2.Subdiv2D(rect);
+
+#     # Insert points into subdiv
+#     for p in points:
+#         subdiv.insert((p[0], p[1]));
+
+
+#     # List of triangles. Each triangle is a list of 3 points ( 6 numbers )
+#     triangleList = subdiv.getTriangleList();
+
+#     # Find the indices of triangles in the points array
+
+#     delaunayTri = []
+
+#     for t in triangleList:
+#         pt = []
+#         pt.append((t[0], t[1]))
+#         pt.append((t[2], t[3]))
+#         pt.append((t[4], t[5]))
+
+#         pt1 = (t[0], t[1])
+#         pt2 = (t[2], t[3])
+#         pt3 = (t[4], t[5])
+
+#         if rectContains(rect, pt1) and rectContains(rect, pt2) and rectContains(rect, pt3):
+#             ind = []
+#             for j in range(0, 3):
+#                 for k in range(0, len(points)):
+#                     if(abs(pt[j][0] - points[k][0]) < 1.0 and abs(pt[j][1] - points[k][1]) < 1.0):
+#                         ind.append(k)
+#             if len(ind) == 3:
+#                 delaunayTri.append((ind[0], ind[1], ind[2]))
+
+#     return delaunayTri
+
+# def constrainPoint(p, w, h) :
+#     p =  ( min( max( p[0], 0 ) , w - 1 ) , min( max( p[1], 0 ) , h - 1 ) )
+#     return p;
+
+
+# def delaunay_correction(img, landmarks, delaunay_color=(255, 255, 255)):
+#     avg_landmarks = np.float32([[226, 217],
+#                     [226, 248],
+#                     [230, 279],
+#                     [236, 308],
+#                     [246, 337],
+#                     [260, 363],
+#                     [280, 384],
+#                     [304, 400],
+#                     [334, 405],
+#                     [365, 401],
+#                     [390, 386],
+#                     [410, 366],
+#                     [424, 342],
+#                     [434, 314],
+#                     [439, 284],
+#                     [443, 253],
+#                     [445, 221],
+#                     [237, 195],
+#                     [249, 174],
+#                     [273, 168],
+#                     [296, 172],
+#                     [319, 182],
+#                     [348, 184],
+#                     [371, 176],
+#                     [395, 172],
+#                     [419, 179],
+#                     [431, 198],
+#                     [334, 206],
+#                     [334, 227],
+#                     [334, 247],
+#                     [334, 269],
+#                     [306, 285],
+#                     [319, 288],
+#                     [333, 291],
+#                     [347, 288],
+#                     [361, 285],
+#                     [259, 213],
+#                     [272, 205],
+#                     [288, 206],
+#                     [303, 215],
+#                     [287, 219],
+#                     [271, 219],
+#                     [365, 215],
+#                     [379, 205],
+#                     [396, 206],
+#                     [410, 214],
+#                     [397, 219],
+#                     [380, 219],
+#                     [289, 327],
+#                     [306, 319],
+#                     [322, 313],
+#                     [333, 317],
+#                     [345, 314],
+#                     [361, 321],
+#                     [377, 329],
+#                     [361, 341],
+#                     [346, 346],
+#                     [332, 347],
+#                     [320, 345],
+#                     [305, 341],
+#                     [297, 328],
+#                     [321, 326],
+#                     [333, 328],
+#                     [346, 326],
+#                     [370, 329],
+#                     [345, 329],
+#                     [332, 330],
+#                     [321, 329]])
+
+#     # Delaunay triangulation
+#     h,w,c = img.shape
+#     rect = (0, 0, w, h);
+#     dt = calculateDelaunayTriangles(rect, avg_landmarks);
+
+#     # Output image
+#     output = np.zeros((h,w,3), np.float32());
+
+#     # Warp input images to average image landmarks
+#     for i in range(0, len(imagesNorm)) :
+#         img = np.zeros((h,w,3), np.float32());
+#         # Transform triangles one by one
+#         for j in range(0, len(dt)) :
+#             tin = [];
+#             tout = [];
+
+#             for k in range(0, 3) :
+#                 pIn = pointsNorm[i][dt[j][k]];
+#                 pIn = constrainPoint(pIn, w, h);
+
+#                 pOut = pointsAvg[dt[j][k]];
+#                 pOut = constrainPoint(pOut, w, h);
+
+#                 tin.append(pIn);
+#                 tout.append(pOut);
+
+
+#             warpTriangle(imagesNorm[i], img, tin, tout);
+
+
+#         # Add image intensities for averaging
+#         output = output + img;
+
+#     return output
+
+
 
 def draw_outline(img, landmarks, color=(255, 255, 255)):
     for key in face_utils.FACIAL_LANDMARKS_IDXS:
