@@ -1,8 +1,9 @@
+import sys
 from datetime import datetime  # for timing
 
-import sys
 import cv2
 import numpy as np
+import onnxruntime
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
@@ -23,10 +24,8 @@ from face_utilities import find_face_dlib,\
                            prepare_image_inputs, \
                            hogImage
 
-import onnxruntime
 
-
-class InferenceEngine():
+class InferenceEngine:
     def __init__(self, mode, color_space):
         self.mode = mode
         self.color_space = color_space

@@ -91,15 +91,15 @@ def main():
 
         shape_np, isValid = find_face_dlib(webcam_image)
 
+        display = generate_baseline_display_data(display,
+                                                 screenOffsetX,
+                                                 screenOffsetY,
+                                                 webcam_image)
+
         if isValid:
             face_rect, left_eye_rect_relative, right_eye_rect_relative, isValid = landmarksToRects(shape_np, isValid)
 
-            display = generate_baseline_display_data(display,
-                                                     screenOffsetX,
-                                                     screenOffsetY,
-                                                     webcam_image,
-                                                     face_rect)
-
+        if isValid:
             face_image, left_eye_image, right_eye_image = generate_face_eye_images(face_rect,
                                                                                    left_eye_rect_relative,
                                                                                    right_eye_rect_relative,
@@ -164,14 +164,8 @@ def main():
 def generate_baseline_display_data(display,
                                    screenOffsetX,
                                    screenOffsetY,
-                                   webcam_image,
-                                   face_rect):
+                                   webcam_image):
     display = draw_overlay(display, screenOffsetX, screenOffsetY, webcam_image)
-    # display = draw_text(display,
-    #                     20,
-    #                     20,
-    #                     f'Face ({x:4d}, {y:4d}, {w:4d}, {h:4d})',
-    #                     fill=(255, 255, 255))
     return display
 
 
@@ -375,15 +369,6 @@ def parse_arguments():
     parser.add_argument('--device', default='cpu', help='Select either cpu or cuda')
     args = parser.parse_args()
     return args
-
-
-def str2bool(v):
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
 if __name__ == "__main__":

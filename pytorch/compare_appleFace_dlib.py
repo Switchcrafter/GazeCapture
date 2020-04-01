@@ -3,9 +3,6 @@ import json
 import cv2
 import os
 
-import dlib
-import numpy as np
-from PIL import Image
 
 def main():
     dataset_path = "/data/gc-data"

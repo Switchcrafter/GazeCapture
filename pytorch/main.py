@@ -1,10 +1,10 @@
 import json
 import math
 import os
+import subprocess
 import sys  # for command line argument dumping
 import time
 from datetime import datetime  # for timing
-import subprocess
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -13,13 +13,12 @@ import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 
-from ITrackerModel import ITrackerModel
-from ITrackerData import load_all_data
-from Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations, resize, set_print_policy
-from Criterion import MultiCriterion, LogCoshLoss, TanhLoss, SigmoidLoss
+import argument_parser
 import checkpoint_manager
 import cyclical_learning_rate
-import argument_parser
+from ITrackerData import load_all_data
+from ITrackerModel import ITrackerModel
+from Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations, resize, set_print_policy
 
 try:
     from azureml.core.run import Run
@@ -68,7 +67,7 @@ def main():
     # make sure checkpoints directory exists
     if not os.path.exists(args.output_path):
         print('{0} does not exist, creating...'.format(args.output_path))
-        os.mkdir(args.output_path)
+        os.makedirs(args.output_path, exist_ok=True)
 
     RMSErrors, best_RMSError, best_RMSErrors, epoch, learning_rates, model = initialize_model(args)
 
