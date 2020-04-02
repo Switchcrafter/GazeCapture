@@ -35,14 +35,14 @@ from Utilities import centered_text
 
 def normalize_image_transform(image_size, split, jitter, color_space):
     normalize_image = []
-    
+
     # Only for training
     if split == 'train':
         normalize_image.append(transforms.Resize(240))
         if jitter:
             normalize_image.append(transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1))
         normalize_image.append(transforms.RandomCrop(image_size))
-    
+
     # For training and Eval
     normalize_image.append(transforms.Resize(image_size))
     normalize_image.append(transforms.ToTensor())
@@ -145,7 +145,7 @@ class ExternalSourcePipeline(Pipeline):
             imFaceD = self.norm(self.resize(self.decode(self.imFace)))
             imEyeLD = self.norm(self.resize(self.decode(self.imEyeL)))
             imEyeRD = self.norm(self.resize(self.decode(self.imEyeR)))
-            
+
         return (self.row, imFaceD, imEyeLD, imEyeRD, self.faceGrid, self.gaze, self.frame, self.index)
 
     @property
@@ -241,7 +241,7 @@ class ITrackerData(object):
         except OSError:
             raise RuntimeError('Could not read image: ' + path)
         return im
-    
+
     def get_hog_descriptor(self, im):
         # im = Image.fromarray(hogImage(im), im.mode)
         # hog is failing below (20,20) so this should fix

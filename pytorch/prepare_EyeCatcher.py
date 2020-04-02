@@ -161,9 +161,9 @@ for directory_idx, directory in enumerate(directories):
         print(f"Processing {capture_idx + 1}/{total_captures} - {capture}")
 
         capture_json_path = os.path.join(data_directory, directory, capture + ".json")
-        capture_png_path = os.path.join(data_directory, directory, capture + ".jpg")
+        capture_jpg_path = os.path.join(data_directory, directory, capture + ".jpg")
 
-        if os.path.isfile(capture_json_path) and os.path.isfile(capture_png_path):
+        if os.path.isfile(capture_json_path) and os.path.isfile(capture_jpg_path):
             capture_data = loadJsonData(capture_json_path)
 
             if info["DeviceName"] == None:
@@ -172,8 +172,7 @@ for directory_idx, directory in enumerate(directories):
                 error(
                     f"Device name changed during session, expected \'{info['DeviceName']}\' but got \'{capture_data['HostModel']}\'")
 
-            capture_image = PILImage.open(capture_png_path).convert(
-                'RGB')  # dlib wants images in RGB or 8-bit grayscale format
+            capture_image = PILImage.open(capture_jpg_path)
             capture_image_np = np.array(capture_image)  # dlib wants images in numpy array format
 
             shape_np, isValid = find_face_dlib(capture_image_np)
@@ -226,7 +225,7 @@ for directory_idx, directory in enumerate(directories):
             # Convert image from PNG to JPG
             frame_name = str(f"{capture_idx:05d}.jpg")
             frames.append(frame_name)
-            capture_img = PILImage.open(capture_png_path).convert('RGB')
+            capture_img = PILImage.open(capture_jpg_path)
             capture_img.save(os.path.join(output_frame_path, frame_name))
         else:
             print(f"Error processing capture {capture}")
