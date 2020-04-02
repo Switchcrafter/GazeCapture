@@ -161,20 +161,26 @@ for directory_idx, directory in enumerate(directories):
     if not os.path.exists(output_frame_path):
         os.mkdir(output_frame_path)
 
+    session_json_path = os.path.join(data_directory, directory, "session.json")
+    if not os.path.isfile(session_json_path):
+        os.error(f"session.json not found")
+
+    session_data = loadJsonData(session_json_path)
+
     for capture_idx, capture in enumerate(captures):
         print(f"Processing {capture_idx + 1}/{total_captures} - {capture}")
 
-        capture_json_path = os.path.join(data_directory, directory, capture + ".jsonx")
+        capture_json_path = os.path.join(data_directory, directory, capture + ".json")
         capture_jpg_path = os.path.join(data_directory, directory, capture + ".jpg")
 
         if os.path.isfile(capture_json_path) and os.path.isfile(capture_jpg_path):
             capture_data = loadJsonData(capture_json_path)
 
             if info["DeviceName"] is None:
-                info["DeviceName"] = capture_data["HostModel"]
-            elif info["DeviceName"] != capture_data["HostModel"]:
+                info["DeviceName"] = session_data["HostModel"]
+            elif info["DeviceName"] != session_data["HostModel"]:
                 os.error(
-                    f"Device name changed during session, expected \'{info['DeviceName']}\' but got \'{capture_data['HostModel']}\'")
+                    f"Device name changed during session, expected \'{info['DeviceName']}\' but got \'{session_data['HostModel']}\'")
 
             capture_image = PILImage.open(capture_jpg_path)
             capture_image_np = np.array(capture_image)  # dlib wants images in numpy array format
@@ -206,9 +212,9 @@ for directory_idx, directory in enumerate(directories):
             info["NumEyeDetections"] = info["NumEyeDetections"] + 1
 
             # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
-            screen["H"].append(capture_data['ScreenHeightInRawPixels'])
-            screen["W"].append(capture_data['ScreenWidthInRawPixels'])
-            screen["Orientation"].append(getScreenOrientation(capture_data))
+            screen["H"].append(session_data['ScreenHeightInRawPixels'])
+            screen["W"].append(session_data['ScreenWidthInRawPixels'])
+            screen["Orientation"].append(getScreenOrientation(session_data))
 
             # dotinfo.json - { "DotNum": [ 0, 0, ... ],
             #                  "XPts": [ 160, 160, ... ],
@@ -219,12 +225,12 @@ for directory_idx, directory in enumerate(directories):
             #
             # PositionIndex == DotNum
             # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
-            dotinfo["DotNum"].append(capture_data["PositionIndex"])
+            dotinfo["DotNum"].append(capture_idx)
             dotinfo["XPts"].append(capture_data["XRaw"])
             dotinfo["YPts"].append(capture_data["YRaw"])
             dotinfo["XCam"].append(0)  # TODO calculate XCam and YCam
             dotinfo["YCam"].append(0)
-            dotinfo["Time"].append(getCaptureTimeString(capture_data))
+            dotinfo["Time"].append(0)  # TODO Do we need this?  Look up in jsonx?
 
             # Convert image from PNG to JPG
             frame_name = str(f"{capture_idx:05d}.jpg")
