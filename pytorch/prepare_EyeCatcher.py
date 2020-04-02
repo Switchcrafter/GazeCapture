@@ -7,14 +7,18 @@ import numpy as np
 import dateutil.parser
 
 
+# Example path is Surface_Pro_4/someuser/00000
 def findCaptureSessionDirs(path):
     session_paths = []
     devices = os.listdir(path)
 
     for device in devices:
-        sessions = os.listdir(os.path.join(path, device))
-        for session in sessions:
-            session_paths.append(os.path.join(device, session))
+        users = os.listdir(os.path.join(path, device))
+        for user in users:
+            sessions = os.listdir(os.path.join(path, device, user))
+
+            for session in sessions:
+                session_paths.append(os.path.join(device, user, session))
 
     return session_paths
 
@@ -83,7 +87,7 @@ def getCaptureTimeString(capture_data):
     return str(timedelta.total_seconds())
 
 
-data_directory = "EyeCaptures"
+data_directory = "EyeCaptures/200331"
 output_directory = "EyeCaptures-dlib"
 
 directories = sorted(findCaptureSessionDirs(data_directory))
@@ -139,7 +143,7 @@ for directory_idx, directory in enumerate(directories):
         "TotalFrames": total_captures,
         "NumFaceDetections": 0,
         "NumEyeDetections": 0,
-        "Dataset": "train",  # For now put all data into training dataset
+        "Dataset": "train",  # TODO For now put all data into training dataset, need to split train/
         "DeviceName": None
     }
 
@@ -160,20 +164,19 @@ for directory_idx, directory in enumerate(directories):
     for capture_idx, capture in enumerate(captures):
         print(f"Processing {capture_idx + 1}/{total_captures} - {capture}")
 
-        capture_json_path = os.path.join(data_directory, directory, capture + ".json")
-        capture_png_path = os.path.join(data_directory, directory, capture + ".jpg")
+        capture_json_path = os.path.join(data_directory, directory, capture + ".jsonx")
+        capture_jpg_path = os.path.join(data_directory, directory, capture + ".jpg")
 
-        if os.path.isfile(capture_json_path) and os.path.isfile(capture_png_path):
+        if os.path.isfile(capture_json_path) and os.path.isfile(capture_jpg_path):
             capture_data = loadJsonData(capture_json_path)
 
-            if info["DeviceName"] == None:
+            if info["DeviceName"] is None:
                 info["DeviceName"] = capture_data["HostModel"]
             elif info["DeviceName"] != capture_data["HostModel"]:
-                error(
+                os.error(
                     f"Device name changed during session, expected \'{info['DeviceName']}\' but got \'{capture_data['HostModel']}\'")
 
-            capture_image = PILImage.open(capture_png_path).convert(
-                'RGB')  # dlib wants images in RGB or 8-bit grayscale format
+            capture_image = PILImage.open(capture_jpg_path)
             capture_image_np = np.array(capture_image)  # dlib wants images in numpy array format
 
             shape_np, isValid = find_face_dlib(capture_image_np)
@@ -217,16 +220,16 @@ for directory_idx, directory in enumerate(directories):
             # PositionIndex == DotNum
             # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
             dotinfo["DotNum"].append(capture_data["PositionIndex"])
-            dotinfo["XPts"].append(capture_data["RawX"])
-            dotinfo["YPts"].append(capture_data["RawY"])
-            dotinfo["XCam"].append(0)
+            dotinfo["XPts"].append(capture_data["XRaw"])
+            dotinfo["YPts"].append(capture_data["YRaw"])
+            dotinfo["XCam"].append(0)  # TODO calculate XCam and YCam
             dotinfo["YCam"].append(0)
             dotinfo["Time"].append(getCaptureTimeString(capture_data))
 
             # Convert image from PNG to JPG
             frame_name = str(f"{capture_idx:05d}.jpg")
             frames.append(frame_name)
-            capture_img = PILImage.open(capture_png_path).convert('RGB')
+            capture_img = PILImage.open(capture_jpg_path)  # TODO copy file rather than open/save
             capture_img.save(os.path.join(output_frame_path, frame_name))
         else:
             print(f"Error processing capture {capture}")
