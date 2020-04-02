@@ -26,7 +26,7 @@ def findCaptureSessionDirs(path):
 
 
 def findCapturesInSession(path):
-    files = [os.path.splitext(f)[0] for f in os.listdir(path) if f.endswith('.json')]
+    files = [os.path.splitext(f)[0] for f in os.listdir(path) if f.endswith('.json') and not f == "session.json"]
 
     return files
 
