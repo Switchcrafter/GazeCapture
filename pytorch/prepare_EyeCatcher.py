@@ -7,14 +7,18 @@ import numpy as np
 import dateutil.parser
 
 
+# Example path is Surface_Pro_4/someuser/00000
 def findCaptureSessionDirs(path):
     session_paths = []
     devices = os.listdir(path)
 
     for device in devices:
-        sessions = os.listdir(os.path.join(path, device))
-        for session in sessions:
-            session_paths.append(os.path.join(device, session))
+        users = os.listdir(os.path.join(path, device))
+        for user in users:
+            sessions = os.listdir(os.path.join(path, device, user))
+
+            for session in sessions:
+                session_paths.append(os.path.join(device, user, session))
 
     return session_paths
 
@@ -83,7 +87,7 @@ def getCaptureTimeString(capture_data):
     return str(timedelta.total_seconds())
 
 
-data_directory = "EyeCaptures"
+data_directory = "EyeCaptures/200331"
 output_directory = "EyeCaptures-dlib"
 
 directories = sorted(findCaptureSessionDirs(data_directory))
@@ -166,10 +170,10 @@ for directory_idx, directory in enumerate(directories):
         if os.path.isfile(capture_json_path) and os.path.isfile(capture_jpg_path):
             capture_data = loadJsonData(capture_json_path)
 
-            if info["DeviceName"] == None:
+            if info["DeviceName"] is None:
                 info["DeviceName"] = capture_data["HostModel"]
             elif info["DeviceName"] != capture_data["HostModel"]:
-                error(
+                os.error(
                     f"Device name changed during session, expected \'{info['DeviceName']}\' but got \'{capture_data['HostModel']}\'")
 
             capture_image = PILImage.open(capture_jpg_path)
