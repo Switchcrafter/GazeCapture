@@ -143,7 +143,7 @@ for directory_idx, directory in enumerate(directories):
         "TotalFrames": total_captures,
         "NumFaceDetections": 0,
         "NumEyeDetections": 0,
-        "Dataset": "train",  # For now put all data into training dataset
+        "Dataset": "train",  # TODO For now put all data into training dataset, need to split train/
         "DeviceName": None
     }
 
@@ -164,7 +164,7 @@ for directory_idx, directory in enumerate(directories):
     for capture_idx, capture in enumerate(captures):
         print(f"Processing {capture_idx + 1}/{total_captures} - {capture}")
 
-        capture_json_path = os.path.join(data_directory, directory, capture + ".json")
+        capture_json_path = os.path.join(data_directory, directory, capture + ".jsonx")
         capture_jpg_path = os.path.join(data_directory, directory, capture + ".jpg")
 
         if os.path.isfile(capture_json_path) and os.path.isfile(capture_jpg_path):
@@ -222,14 +222,14 @@ for directory_idx, directory in enumerate(directories):
             dotinfo["DotNum"].append(capture_data["PositionIndex"])
             dotinfo["XPts"].append(capture_data["XRaw"])
             dotinfo["YPts"].append(capture_data["YRaw"])
-            dotinfo["XCam"].append(0)
+            dotinfo["XCam"].append(0)  # TODO calculate XCam and YCam
             dotinfo["YCam"].append(0)
             dotinfo["Time"].append(getCaptureTimeString(capture_data))
 
             # Convert image from PNG to JPG
             frame_name = str(f"{capture_idx:05d}.jpg")
             frames.append(frame_name)
-            capture_img = PILImage.open(capture_jpg_path)
+            capture_img = PILImage.open(capture_jpg_path)  # TODO copy file rather than open/save
             capture_img.save(os.path.join(output_frame_path, frame_name))
         else:
             print(f"Error processing capture {capture}")
