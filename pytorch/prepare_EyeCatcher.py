@@ -228,8 +228,8 @@ for directory_idx, directory in enumerate(directories):
             dotinfo["DotNum"].append(capture_idx)
             dotinfo["XPts"].append(capture_data["XRaw"])
             dotinfo["YPts"].append(capture_data["YRaw"])
-            dotinfo["XCam"].append(0)  # TODO calculate XCam and YCam
-            dotinfo["YCam"].append(0)
+            dotinfo["XCam"].append(capture_data["XRaw"])  # TODO calculate XCam and YCam
+            dotinfo["YCam"].append(capture_data["YRaw"])
             dotinfo["Time"].append(0)  # TODO Do we need this?  Look up in jsonx?
 
             # Convert image from PNG to JPG
