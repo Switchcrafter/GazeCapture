@@ -2,6 +2,7 @@ import os
 import json
 import shutil
 
+from cam2screen import screen2cam
 from face_utilities import faceEyeRectsToFaceInfoDict, newFaceInfoDict, find_face_dlib, \
     landmarksToRects, generate_face_grid_rect
 from PIL import Image as PILImage  # Pillow
@@ -207,10 +208,12 @@ for directory_idx, directory in enumerate(directories):
                                                                    right_eye_rect, isValid)
             info["NumEyeDetections"] = info["NumEyeDetections"] + 1
 
+            screen_orientation = getScreenOrientation(capture_data)
+
             # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
             screen["H"].append(capture_data['ScreenHeightInRawPixels'])
             screen["W"].append(capture_data['ScreenWidthInRawPixels'])
-            screen["Orientation"].append(getScreenOrientation(capture_data))
+            screen["Orientation"].append(screen_orientation)
 
             # dotinfo.json - { "DotNum": [ 0, 0, ... ],
             #                  "XPts": [ 160, 160, ... ],
@@ -221,11 +224,20 @@ for directory_idx, directory in enumerate(directories):
             #
             # PositionIndex == DotNum
             # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
+            x_raw = capture_data["XRaw"]
+            y_raw = capture_data["YRaw"]
+            x_cam, y_cam = screen2cam(x_raw,  # xScreenInPoints
+                                      y_raw,  # yScreenInPoints
+                                      screen_orientation,  # orientation,
+                                      2736,  # widthScreenInPoints,  # TODO this is surface pr 4/5/6/7 specific
+                                      1824,  # heightScreenInPoints, # TODO this is surface pr 4/5/6/7 specific
+                                      deviceName=capture_data["HostModel"])
+
             dotinfo["DotNum"].append(capture_data["PositionIndex"])
-            dotinfo["XPts"].append(capture_data["XRaw"])
-            dotinfo["YPts"].append(capture_data["YRaw"])
-            dotinfo["XCam"].append(0)  # TODO calculate XCam and YCam
-            dotinfo["YCam"].append(0)
+            dotinfo["XPts"].append(x_raw)
+            dotinfo["YPts"].append(y_raw)
+            dotinfo["XCam"].append(x_cam)
+            dotinfo["YCam"].append(y_cam)
             dotinfo["Time"].append(getCaptureTimeString(capture_data))
 
             # Convert image from PNG to JPG
