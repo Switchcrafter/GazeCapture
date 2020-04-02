@@ -1,6 +1,6 @@
 # Capture Data Format for GazeCapture pytorch
 
-Version 200331
+Schema Version 200402
 
 ## Overview
 
@@ -52,17 +52,26 @@ Capture -> Prepare -> ML
 #### This is how MIT GazeCapture stores the data:
 
 {dataHome}\{sessionId}\frames\{frameId}.jpg
+{dataHome}\{sessionId}\frames.json              JSON array of jpg file names
 {dataHome}\{sessionId}\dotInfo.json             JSON array of X/Y target point for each frame
+    Arrays: DotNum, XPts, YPts, XCam, YCam, Time
 {dataHome}\{sessionId}\info.json                Facial feature recognition metadata &amp; device type
+    TotalFrames, NumFaceDetections, NumEyeDetections, Dataset (train/validate/test), DeviceName
 {dataHome}\{sessionId}\screen.json              Screen W/H/Orientation for frames
+    Arrays: H, W, Orientation
 
 #### This is how we will store the data from EyeCapture
 
-{dataHome}\200331\{deviceSku}\{userName}\
+{dataHome}\{schemaVersion}\{deviceSku}\{userName}\
 
-{frameId}.jpg     Camera Images in JPG Lossless
-{frameId}.json    XRaw, YRaw -- one file per frame captured next to the jpg camera data.
-                  X/Y coordinates are in device dependent pixel coordinates and take out any display zoom recalcuations.
+{frameId}.jpg       Camera Images in JPG Lossless
+frames.json         JSON array of jpg file names
+dotInfo.json        JSON arrays: DotNum, XPts, YPts, XCam, YCam, Time
+                    XPts/YPts are in device dependent pixel coordinates, unaffected by display zoom.
+info.json
+                    TotalFrames, NumFaceDetections, NumEyeDetections, Dataset (train/validate/test), DeviceName
+screen.json         JSON arrays: H, W, Orientation
+                    Since we only support capturing in the default landscape orientation, these values are just duplicates
 
 ### Prepare Dataset step
 
@@ -70,11 +79,13 @@ This step using facial feature recognition to identify the face and eye bounding
 
 Since we are only going to support capture and playback on 'identical' devices for now in a singular orientation, we can optionally skip the dotCam calculation step.
 
-dotCam.json
-faceGrid.json
-leftEyeGrid.json
-rightEyeGrid.json
+info.json       Updates NumFaceDetections and NumEyeDetections based on dlib results
 
-face.jpg
-leftEye.jpg
-rightEye.jpg
+faceGrid.json
+dlibFace.json
+dlibLeftEyeGrid.json
+dlibRightEyeGrid.json
+
+appleFace/{frameId}.jpg
+appleLeftEye/{frameId}.jpg
+appleRightEye/{frameId}.jpg
