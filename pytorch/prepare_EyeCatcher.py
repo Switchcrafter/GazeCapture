@@ -217,8 +217,8 @@ for directory_idx, directory in enumerate(directories):
             # PositionIndex == DotNum
             # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
             dotinfo["DotNum"].append(capture_data["PositionIndex"])
-            dotinfo["XPts"].append(capture_data["RawX"])
-            dotinfo["YPts"].append(capture_data["RawY"])
+            dotinfo["XPts"].append(capture_data["XRaw"])
+            dotinfo["YPts"].append(capture_data["YRaw"])
             dotinfo["XCam"].append(0)
             dotinfo["YCam"].append(0)
             dotinfo["Time"].append(getCaptureTimeString(capture_data))
