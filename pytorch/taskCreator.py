@@ -2,6 +2,7 @@ import os
 import re
 import json
 import sys
+import csv
 import math
 import shutil
 import argparse
@@ -476,7 +477,19 @@ def plotErrorHistogramTask(results_path):
     plt.title('Histogram of Error')
     plt.show()
 
+def parseResultsTask(results_path):
+    jsondata = json_read(results_path)
+    csvwriter = csv.writer(open("best_results.csv", "w", newline=''))
+    csvwriter.writerow(
+        ['frameId', 'frame0', 'frame1', 'gazePointX', 'gazePointY', 'gazePreditionX', 'gazePredictionY', 'distance'])
 
+    for datapoint in jsondata:
+        distance = math.sqrt(((datapoint["gazePoint"][0] - datapoint["gazePrediction"][0]) ** 2) + (
+                    (datapoint["gazePoint"][1] - datapoint["gazePrediction"][1]) ** 2))
+        csvwriter.writerow(
+            [f'{datapoint["frame"][0]}_{datapoint["frame"][1]}', datapoint["frame"][0], datapoint["frame"][1],
+            datapoint["gazePoint"][0], datapoint["gazePoint"][1], datapoint["gazePrediction"][0],
+            datapoint["gazePrediction"][1], distance])
 
 
 
@@ -517,7 +530,7 @@ if __name__ == '__main__':
         taskFunction = ROIExtractionTask
         taskData = getDirList(args.input, '([0-9]){5}')
         dataLoader = ListLoader
-    ######### Visualization Tasks #########
+    ######### Data Visualization Tasks #########
     elif args.task == "plotErrorTask":
         from RMS_errors import All_RMS_Errors
         taskData = All_RMS_Errors
@@ -535,6 +548,11 @@ if __name__ == '__main__':
         taskData = "best_results.json"
         dataLoader = None
         taskFunction = plotErrorHistogramTask
+    ######### Data Parsing Tasks #########
+    elif args.task == "parseResultsTask":
+        taskData = "best_results.json"
+        dataLoader = None
+        taskFunction = parseResultsTask
 
     # run the job
     output = taskManager.job(taskFunction, taskData, dataLoader)
