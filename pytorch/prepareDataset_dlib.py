@@ -31,19 +31,25 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 
 '''
 
-parser = argparse.ArgumentParser(description='iTracker-pytorch-PrepareDataset.')
-parser.add_argument('--dataset_path', help="Path to extracted files. It should have folders called '%%05d' in it.",
-                    default=None)
-parser.add_argument('--dlib_path', default=None,
-                    help="Path to dlib processed json files.")
-parser.add_argument('--output_path', default=None,
-                    help="Where to write the output. Can be the same as dataset_path if you wish (=default).")
-parser.add_argument('--ignore_reference', default=False, action='store_true',
-                    help="Where to write the output. Can be the same as dataset_path if you wish (=default).")
-args = parser.parse_args()
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='iTracker-pytorch-PrepareDataset.')
+    parser.add_argument('--dataset_path', help="Path to extracted files. It should have folders called '%%05d' in it.",
+                        default=None)
+    parser.add_argument('--dlib_path', default=None,
+                        help="Path to dlib processed json files.")
+    parser.add_argument('--output_path', default=None,
+                        help="Where to write the output. Can be the same as dataset_path if you wish (=default).")
+    parser.add_argument('--ignore_reference', default=False, action='store_true',
+                        help="Where to write the output. Can be the same as dataset_path if you wish (=default).")
+    args = parser.parse_args()
+
+    return args
 
 
 def main():
+    args = parse_arguments()
+
     if args.output_path is None:
         args.output_path = args.dataset_path
 
