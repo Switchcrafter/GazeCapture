@@ -165,12 +165,19 @@ def main():
             "IsValid": []
         }
 
+        if directory_idx % 10 < 8:
+            dataset_split = "train"
+        elif directory_idx % 10 < 9:
+            dataset_split = "val"
+        else:
+            dataset_split = "test"
+
         # info.json - {"TotalFrames":99,"NumFaceDetections":97,"NumEyeDetections":56,"Dataset":"train","DeviceName":"iPhone 6"}
         info = {
             "TotalFrames": total_captures,
             "NumFaceDetections": 0,
             "NumEyeDetections": 0,
-            "Dataset": "train",  # TODO For now put all data into training dataset, need to split train/
+            "Dataset": dataset_split,
             "DeviceName": None
         }
 
