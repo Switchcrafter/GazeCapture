@@ -2,14 +2,18 @@ import os
 import re
 import json
 import sys
+import math
+import shutil
 import argparse
 import taskManager
-import shutil
+import pandas as pd
 import numpy as np
 import scipy.io as sio
 from PIL import Image as PILImage
+import matplotlib.pyplot as plt
+import matplotlib.cm as cmx
+import matplotlib.colors as colors
 from face_utilities import *
-
 
 ################################################################################
 ## Utility functions
@@ -143,7 +147,6 @@ def copyTask(filepath):
 
 def resizeTask(filePath):
     pass
-
 
 # Equivalent: generate_faces
 def ROIDetectionTask(directory):
@@ -349,9 +352,137 @@ def compareTask(meta):
     if totalMatch:
         print('The new metadata.mat is an exact match to the reference from GitHub (including ordering)')
 
+def plotErrorTask(All_RMS_Errors):
+    # Make a data frame
+    rms_object = {'x': range(1, 31)}
+    for key in All_RMS_Errors.keys():
+        rms_object[key] = np.array((All_RMS_Errors[key])['RMS_Errors'])
+
+    df_rms = pd.DataFrame(rms_object)
+
+    # style
+    plt.style.use('seaborn-darkgrid')
+
+    # create a color palette
+    palette = plt.get_cmap('Set1')
+
+    # multiple line plot
+    num = 0
+    for column in df_rms.drop('x', axis=1):
+        num += 1
+        plt.plot(df_rms['x'], df_rms[column], marker='', color=palette(num), linewidth=1, alpha=0.9, label=column)
+
+    # Add legend
+    plt.legend(loc=2, ncol=2)
+
+    # Add titles
+    plt.title("RMS Errors by Epoch", loc='left', fontsize=12, fontweight=0, color='orange')
+    plt.xlabel("Epoch")
+    plt.ylabel("RMS Error")
+    plt.show()
+
+    best_rms_object = {'x': range(1, 31)}
+    for key in All_RMS_Errors.keys():
+        best_rms_object[key] = np.array((All_RMS_Errors[key])['Best_RMS_Errors'])
+
+    # Make a data frame
+    df_best_rms = pd.DataFrame(best_rms_object)
+
+    # style
+    plt.style.use('seaborn-darkgrid')
+
+    # create a color palette
+    palette = plt.get_cmap('Set1')
+
+    # multiple line plot
+    num = 0
+    for column in df_best_rms.drop('x', axis=1):
+        num += 1
+        plt.plot(df_best_rms['x'], df_best_rms[column], marker='', color=palette(num), linewidth=1, alpha=0.9, label=column)
+
+    # Add legend
+    plt.legend(loc=2, ncol=2)
+
+    # Add titles
+    plt.title("Best RMS Errors by Epoch", loc='left', fontsize=12, fontweight=0, color='orange')
+    plt.xlabel("Epoch")
+    plt.ylabel("RMS Error")
+    plt.show()
+
+def plotErrorHeatmapTask(results_path):
+    jsondata = json_read(results_path)
+    x, y, c = [], [], []
+
+    for datapoint in jsondata:
+        x.append(datapoint["gazePoint"][0])
+        y.append(datapoint["gazePoint"][1])
+        c.append(math.sqrt(((datapoint["gazePoint"][0]-datapoint["gazePrediction"][0])**2)+((datapoint["gazePoint"][1]-datapoint["gazePrediction"][1])**2)))
+
+    cm = plt.get_cmap('jet')
+    cNorm = colors.Normalize(vmin=min(c), vmax=max(c))
+    scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
+
+    plt.scatter(x, y, c=scalarMap.to_rgba(c))
+    #plt.colorbar(scalarMap)
+    #cb.set_label('Error (cm)')
+    plt.xlabel('X (cm)')
+    plt.ylabel('Y (cm)')
+    plt.title('Heatmap of Error')
+    plt.show()
+
+def plotGazePointHeatmapTask(results_path):
+    jsondata = json_read(results_path)
+    x, y, c = [], [], []
+    gazepoints = {}
+
+    for datapoint in jsondata:
+        # create unique gazepoint key
+        key = ('%.5f' % datapoint["gazePoint"][0]) + ('%.5f' % datapoint["gazePoint"][1])
+
+        # find key
+        if key in gazepoints:
+            index = gazepoints[key]
+        else:
+            index = x.__len__()
+            x.append(datapoint["gazePoint"][0])
+            y.append(datapoint["gazePoint"][1])
+            c.append(0)
+            gazepoints[key] = index
+
+        c[index] += 1
+
+    cm = plt.get_cmap('jet')
+    cNorm = colors.Normalize(vmin=min(c), vmax=max(c))
+    scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
+
+    plt.scatter(x, y, c=scalarMap.to_rgba(c))
+    #plt.colorbar(scalarMap)
+    #cb.set_label('Count')
+    plt.xlabel('X (cm)')
+    plt.ylabel('Y (cm)')
+    plt.show()
+
+def plotErrorHistogramTask(results_path):
+    jsondata = json_read(results_path)
+    x = []
+    for datapoint in jsondata:
+        x.append(math.sqrt(((datapoint["gazePoint"][0]-datapoint["gazePrediction"][0])**2)+((datapoint["gazePoint"][1]-datapoint["gazePrediction"][1])**2)))
+
+    num_bins = 50
+    # the histogram of the data
+    n, bins, patches = plt.hist(x, num_bins, facecolor='blue', alpha=0.5, density=1)
+    plt.xlabel('Error (cm)')
+    plt.ylabel('Probability')
+    plt.title('Histogram of Error')
+    plt.show()
 
 
+
+
+
+# all tasks are handled here
 if __name__ == '__main__':
+    # Argument parser
     parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
     parser.add_argument('--input', help="input directory path", default="./gc-data/")
     parser.add_argument('--output', help="output directory path", default="./gc-data-meta-rc")
@@ -376,6 +507,7 @@ if __name__ == '__main__':
         extensionList = [".jpg", ".jpeg", ".JPG", ".JPEG"]
         taskData = getFileList(args.input, extensionList)
         dataLoader = ListLoader
+    ######### Data Preparation Tasks #########
     elif args.task == "ROIDetectionTask":
         taskFunction = ROIDetectionTask
         sessionRegex = '([0-9]){5}'
@@ -385,6 +517,24 @@ if __name__ == '__main__':
         taskFunction = ROIExtractionTask
         taskData = getDirList(args.input, '([0-9]){5}')
         dataLoader = ListLoader
+    ######### Visualization Tasks #########
+    elif args.task == "plotErrorTask":
+        from RMS_errors import All_RMS_Errors
+        taskData = All_RMS_Errors
+        dataLoader = None
+        taskFunction = plotErrorTask
+    elif args.task == "plotErrorHeatmapTask":
+        taskData = "best_results.json"
+        dataLoader = None
+        taskFunction = plotErrorHeatmapTask
+    elif args.task == "plotGazePointHeatmapTask":
+        taskData = "best_results.json"
+        dataLoader = None
+        taskFunction = plotGazePointHeatmapTask
+    elif args.task == "plotErrorHistogramTask":
+        taskData = "best_results.json"
+        dataLoader = None
+        taskFunction = plotErrorHistogramTask
 
     # run the job
     output = taskManager.job(taskFunction, taskData, dataLoader)
@@ -412,7 +562,6 @@ if __name__ == '__main__':
         meta['labelDotXCam'] = np.stack(meta['labelDotXCam'], axis=0)
         meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
         meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
-
         # print(meta)
         # compareTask(meta)
 

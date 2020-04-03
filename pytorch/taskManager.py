@@ -23,27 +23,31 @@ def worker(taskFunction, dataSample, workerId, jobId):
     return (jobId, result)
 
 def job(taskFunction, taskData, dataLoader, numWorkers = multiprocessing.cpu_count()):
-    # create a worker pool
-    workerPool = multiprocessing.Pool(processes=numWorkers)
+    # single process tasks
+    if dataLoader == None:
+        taskFunction(taskData)
+    else: # Multiprocess tasks
+        # create a worker pool
+        workerPool = multiprocessing.Pool(processes=numWorkers)
 
-    # assign tasks to workers
-    workerProcesses = []
-    progressBar = SimpleProgressBar(len(taskData), "Scheduled")
-    for jobId in range(len(taskData)):
-        dataSample, workerId = dataLoader(taskData, numWorkers, jobId)
-        workerProcesses.append(workerPool.apply_async(worker, args=(taskFunction, dataSample, workerId, jobId)))
-        progressBar.update(jobId+1)
+        # assign tasks to workers
+        workerProcesses = []
+        progressBar = SimpleProgressBar(len(taskData), "Scheduled")
+        for jobId in range(len(taskData)):
+            dataSample, workerId = dataLoader(taskData, numWorkers, jobId)
+            workerProcesses.append(workerPool.apply_async(worker, args=(taskFunction, dataSample, workerId, jobId)))
+            progressBar.update(jobId+1)
 
-    # collect results
-    results = []
-    progressBar = SimpleProgressBar(len(taskData), "Completed")
-    for p in workerProcesses:
-        (jobId,result) = p.get()
-        results.append(result)
-        progressBar.update(jobId+1)
+        # collect results
+        results = []
+        progressBar = SimpleProgressBar(len(taskData), "Completed")
+        for p in workerProcesses:
+            (jobId,result) = p.get()
+            results.append(result)
+            progressBar.update(jobId+1)
 
-    # leave one blank line
-    print()
-    return results
+        # leave one blank line
+        print()
+        return results
 
 
