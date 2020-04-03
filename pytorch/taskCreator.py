@@ -138,10 +138,11 @@ def cubeTask(x):
 
 def copyTask(filepath):
     from_dir, from_filename, from_ext = getDirNameExt(filepath)
-    relative_path = getRelativePath(filepath, args.input)
-    to_file = os.path.join(args.output, relative_path)
+    relative_path = getRelativePath(from_dir, args.input)
+    to_dir = os.path.join(args.output, relative_path)
+    to_file = os.path.join(to_dir, from_filename+from_ext)
     # print(filepath + "-->" + to_file)
-    preparePath(to_file)
+    preparePath(to_dir)
     shutil.copy(filepath, to_file)
     return to_file
 
