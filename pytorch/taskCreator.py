@@ -496,10 +496,33 @@ if __name__ == '__main__':
     parser.add_argument('--input', help="input directory path", default="./gc-data/")
     parser.add_argument('--output', help="output directory path", default="./gc-data-meta-rc")
     parser.add_argument('--metapath', help="metadata path", default="./gc-data-meta/")
-    parser.add_argument('--task', help="task name: copyTask, ROIDetectionTask, ROIExtractionTask", default="ROIDetectionTask")
+    parser.add_argument('--task', help="task name: copyTask, ROIDetectionTask, ROIExtractionTask", default="")
     parser.add_argument('--rc', action='store_true', help="apply rotation correction", default=False)
     parser.add_argument('--source_compare', action='store_true', help="compare against source", default=False)
     args = parser.parse_args()
+
+    if args.task == "":
+        print("================= Task Menu =================")
+        print("demoTask", 0)
+        print("plotErrorTask", 1)
+        print("plotErrorHeatmapTask", 2)
+        print("plotGazePointHeatmapTask", 3)
+        print("plotErrorHistogramTask", 4)
+        print("parseResultsTask", 5)
+
+        task = input('Input:')
+        if task == '0':
+            args.task = "demoTask"
+        elif task == '1':
+            args.task = "plotErrorTask"
+        elif task == '2':
+            args.task = "plotErrorHeatmapTask"
+        elif task == '3':
+            args.task = "plotGazePointHeatmapTask"
+        elif task == '4':
+            args.task = "plotErrorHistogramTask"
+        elif task == '5':
+            args.task = "parseResultsTask"
 
     # pre-processing for the task
     if args.task == "noneTask":
