@@ -81,22 +81,22 @@ def json_write(filename, data):
 
 def cropImage(img, bbox):
     bbox = np.array(bbox, int)
+    if len(bbox) == 5:
+        return crop_rect(img, bbox)
+    else:
+        aSrc = np.maximum(bbox[:2], 0)
+        bSrc = np.minimum(bbox[:2] + bbox[2:], (img.shape[1], img.shape[0]))
 
-    aSrc = np.maximum(bbox[:2], 0)
-    bSrc = np.minimum(bbox[:2] + bbox[2:], (img.shape[1], img.shape[0]))
+        aDst = aSrc - bbox[:2]
+        bDst = aDst + (bSrc - aSrc)
 
-    aDst = aSrc - bbox[:2]
-    bDst = aDst + (bSrc - aSrc)
+        res = np.zeros((bbox[3], bbox[2], img.shape[2]), img.dtype)
+        res[aDst[1]:bDst[1], aDst[0]:bDst[0], :] = img[aSrc[1]:bSrc[1], aSrc[0]:bSrc[0], :]
 
-    res = np.zeros((bbox[3], bbox[2], img.shape[2]), img.dtype)
-    res[aDst[1]:bDst[1], aDst[0]:bDst[0], :] = img[aSrc[1]:bSrc[1], aSrc[0]:bSrc[0], :]
-
-    return res
+        return res
 
 def RC_cropImage(img, bbox):
-    # print(bbox)
     bbox = np.array(bbox, int)
-    # rect = ((bbox[0],bbox[1]), (bbox[2],bbox[3]), bbox[4])
     return crop_rect(img, bbox)
 
 ################################################################################
@@ -262,14 +262,9 @@ def ROIExtractionTask(directory):
         img = np.array(img.convert('RGB'))
 
         # Crop images
-        if args.rc:
-            imFace = RC_cropImage(img, faceBbox[j, :])
-            imEyeL = RC_cropImage(img, leftEyeBbox[j, :])
-            imEyeR = RC_cropImage(img, rightEyeBbox[j, :])
-        else:
-            imFace = cropImage(img, faceBbox[j, :])
-            imEyeL = cropImage(img, leftEyeBbox[j, :])
-            imEyeR = cropImage(img, rightEyeBbox[j, :])
+        imFace = cropImage(img, faceBbox[j, :])
+        imEyeL = cropImage(img, leftEyeBbox[j, :])
+        imEyeR = cropImage(img, rightEyeBbox[j, :])
 
         # Save images
         PILImage.fromarray(imFace).save(os.path.join(facePath, '%05d.jpg' % frame), quality=95)
@@ -554,6 +549,12 @@ if __name__ == '__main__':
         taskData = "best_results.json"
         dataLoader = None
         taskFunction = parseResultsTask
+    ######### Demo Tasks #########
+    elif args.task == "demoTask":
+        from iTrackerGUITool import live_demo
+        taskData = 0
+        dataLoader = None
+        taskFunction = live_demo
 
     # run the job
     output = taskManager.job(taskFunction, taskData, dataLoader)
