@@ -158,55 +158,58 @@ def getEyeRectRelative(face_rect, eye_rect):
 
     return eye_rect_relative
 
-
 def rc_landmarksToRects(shape_np, isValid):
-    (leftEyeLandmarksStart, leftEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
-    (rightEyeLandmarksStart, rightEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
+    face_rect = (0, 0, 0, 0, 0)
+    left_eye_rect = (0, 0, 0, 0, 0)
+    right_eye_rect = (0, 0, 0, 0, 0)
 
-    left_eye_shape_np = shape_np[leftEyeLandmarksStart:leftEyeLandmarksEnd]
-    right_eye_shape_np = shape_np[rightEyeLandmarksStart:rightEyeLandmarksEnd]
+    if isValid:
+        (leftEyeLandmarksStart, leftEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
+        (rightEyeLandmarksStart, rightEyeLandmarksEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
 
-    face_rect = cv2.minAreaRect(shape_np)
-    left_eye_rect = cv2.minAreaRect(left_eye_shape_np)
-    right_eye_rect = cv2.minAreaRect(right_eye_shape_np)
+        left_eye_shape_np = shape_np[leftEyeLandmarksStart:leftEyeLandmarksEnd]
+        right_eye_shape_np = shape_np[rightEyeLandmarksStart:rightEyeLandmarksEnd]
+
+        getRect = lambda data: (int(data[0][0]), int(data[0][1]), int(data[1][0]), int(data[1][1]), int(data[2]))
+        face_rect = getRect(cv2.minAreaRect(shape_np))
+        left_eye_rect = getRect(cv2.minAreaRect(left_eye_shape_np))
+        right_eye_rect = getRect(cv2.minAreaRect(right_eye_shape_np))
 
     return face_rect, left_eye_rect, right_eye_rect, isValid
-
 
 def rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect, right_eye_rect, isValid):
     face_dict = faceInfoDict["Face"]
     left_eye_dict = faceInfoDict["LeftEye"]
     right_eye_dict = faceInfoDict["RightEye"]
 
-    face_dict['X'].append(face_rect[0][0])
-    face_dict['Y'].append(face_rect[0][1])
-    face_dict['W'].append(face_rect[1][0])
-    face_dict['H'].append(face_rect[1][1])
-    face_dict['Theta'].append(face_rect[2])
+    face_dict['X'].append(face_rect[0])
+    face_dict['Y'].append(face_rect[1])
+    face_dict['W'].append(face_rect[2])
+    face_dict['H'].append(face_rect[3])
+    face_dict['Theta'].append(face_rect[4])
     face_dict['IsValid'].append(isValid)
 
-    left_eye_dict['X'].append(left_eye_rect[0][0])
-    left_eye_dict['Y'].append(left_eye_rect[0][1])
-    left_eye_dict['W'].append(left_eye_rect[1][0])
-    left_eye_dict['H'].append(left_eye_rect[1][1])
-    left_eye_dict['Theta'].append(left_eye_rect[2])
+    left_eye_dict['X'].append(left_eye_rect[0])
+    left_eye_dict['Y'].append(left_eye_rect[1])
+    left_eye_dict['W'].append(left_eye_rect[2])
+    left_eye_dict['H'].append(left_eye_rect[3])
+    left_eye_dict['Theta'].append(left_eye_rect[4])
     left_eye_dict['IsValid'].append(isValid)
 
-    right_eye_dict['X'].append(right_eye_rect[0][0])
-    right_eye_dict['Y'].append(right_eye_rect[0][1])
-    right_eye_dict['W'].append(right_eye_rect[1][0])
-    right_eye_dict['H'].append(right_eye_rect[1][1])
-    right_eye_dict['Theta'].append(right_eye_rect[2])
+    right_eye_dict['X'].append(right_eye_rect[0])
+    right_eye_dict['Y'].append(right_eye_rect[1])
+    right_eye_dict['W'].append(right_eye_rect[2])
+    right_eye_dict['H'].append(right_eye_rect[3])
+    right_eye_dict['Theta'].append(right_eye_rect[4])
     right_eye_dict['IsValid'].append(isValid)
 
     idx = len(face_dict['X']) - 1
 
     return faceInfoDict, idx
 
-
 def crop_rect(img, rect):
     # get the parameter of the small rectangle
-    center, size, angle = rect[0], rect[1], rect[2]
+    center, size, angle = (rect[0], rect[1]), (rect[2], rect[3]), rect[4]
 
     # The function minAreaRect seems to give angles ranging from -90 to 0 degrees,
     # not including zero, so an interval of [-90, 0).

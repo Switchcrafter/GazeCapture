@@ -8,7 +8,7 @@ import shutil
 import numpy as np
 import scipy.io as sio
 from PIL import Image as PILImage
-from face_utilities import faceEyeRectsToFaceInfoDict, newFaceInfoDict, find_face_dlib, landmarksToRects
+from face_utilities import *
 
 
 ################################################################################
@@ -88,6 +88,12 @@ def cropImage(img, bbox):
 
     return res
 
+def RC_cropImage(img, bbox):
+    # print(bbox)
+    bbox = np.array(bbox, int)
+    # rect = ((bbox[0],bbox[1]), (bbox[2],bbox[3]), bbox[4])
+    return crop_rect(img, bbox)
+
 ################################################################################
 ## DataIndexers
 ################################################################################
@@ -155,12 +161,20 @@ def ROIDetectionTask(directory):
 
         # ROI detection
         shape_np, isValid = find_face_dlib(image)
-        face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
-        faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict,
-                                                            face_rect,
-                                                            left_eye_rect,
-                                                            right_eye_rect,
-                                                            isValid)
+        if args.rc:
+            face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
+            faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict,
+                                                                face_rect,
+                                                                left_eye_rect,
+                                                                right_eye_rect,
+                                                                isValid)
+        else:
+            face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
+            faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict,
+                                                                face_rect,
+                                                                left_eye_rect,
+                                                                right_eye_rect,
+                                                                isValid)
     # ensure the output directory exists
     preparePath(output_path)
     # write the Face, LeftEye and RightEye
@@ -209,13 +223,22 @@ def ROIExtractionTask(directory):
 
     frames = np.array([int(re.match('(\d{5})\.jpg$', x).group(1)) for x in frames])
 
-    bboxFromJson = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H']), axis=1).astype(int)
-    faceBbox = bboxFromJson(appleFace) + [-1, -1, 1, 1]  # for compatibility with matlab code
-    leftEyeBbox = bboxFromJson(appleLeftEye) + [0, -1, 0, 0]
-    rightEyeBbox = bboxFromJson(appleRightEye) + [0, -1, 0, 0]
-    leftEyeBbox[:, :2] += faceBbox[:, :2]  # relative to face
-    rightEyeBbox[:, :2] += faceBbox[:, :2]
-    faceGridBbox = bboxFromJson(faceGrid)
+    if args.rc:
+        bboxFromJson = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H'], data['Theta']), axis=1).astype(int)
+        # handle original face_grid data separately
+        bboxFromJsonFaceGrid = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H']), axis=1).astype(int)
+        faceBbox = bboxFromJson(appleFace) + [-1, -1, 1, 1, 0]  # for compatibility with matlab code
+        leftEyeBbox = bboxFromJson(appleLeftEye) + [0, -1, 0, 0, 0]
+        rightEyeBbox = bboxFromJson(appleRightEye) + [0, -1, 0, 0, 0]
+        faceGridBbox = bboxFromJsonFaceGrid(faceGrid)
+    else:
+        bboxFromJson = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H']), axis=1).astype(int)
+        faceBbox = bboxFromJson(appleFace) + [-1, -1, 1, 1]  # for compatibility with matlab code
+        leftEyeBbox = bboxFromJson(appleLeftEye) + [0, -1, 0, 0]
+        rightEyeBbox = bboxFromJson(appleRightEye) + [0, -1, 0, 0]
+        leftEyeBbox[:, :2] += faceBbox[:, :2]  # relative to face
+        rightEyeBbox[:, :2] += faceBbox[:, :2]
+        faceGridBbox = bboxFromJson(faceGrid)
 
     for j, frame in enumerate(frames):
         # Can we use it?
@@ -234,123 +257,14 @@ def ROIExtractionTask(directory):
         img = np.array(img.convert('RGB'))
 
         # Crop images
-        imFace = cropImage(img, faceBbox[j, :])
-        imEyeL = cropImage(img, leftEyeBbox[j, :])
-        imEyeR = cropImage(img, rightEyeBbox[j, :])
-
-        # Save images
-        PILImage.fromarray(imFace).save(os.path.join(facePath, '%05d.jpg' % frame), quality=95)
-        PILImage.fromarray(imEyeL).save(os.path.join(leftEyePath, '%05d.jpg' % frame), quality=95)
-        PILImage.fromarray(imEyeR).save(os.path.join(rightEyePath, '%05d.jpg' % frame), quality=95)
-
-        # Collect metadata
-        meta['labelRecNum'] += [int(directory)]
-        meta['frameIndex'] += [frame]
-        meta['labelDotXCam'] += [dotInfo['XCam'][j]]
-        meta['labelDotYCam'] += [dotInfo['YCam'][j]]
-        meta['labelFaceGrid'] += [faceGridBbox[j, :]]
-
-    return meta
-
-
-# Equivalent: generate_faces
-def RCROIDetectionTask(directory):
-    recording_path = os.path.join(args.input, directory)
-    output_path = os.path.join(args.output, directory)
-    # Read information for valid frames
-    filenames = json_read(os.path.join(recording_path, "frames.json"))
-
-    faceInfoDict = newFaceInfoDict()
-    for idx, filename in enumerate(filenames):
-        # load image
-        image_path = os.path.join(recording_path, "frames", filename)
-        image = PILImage.open(image_path)
-        image = np.array(image.convert('RGB'))
-
-        # ROI detection
-        shape_np, isValid = find_face_dlib(image)
-        face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
-        faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict,
-                                                            face_rect,
-                                                            left_eye_rect,
-                                                            right_eye_rect,
-                                                            isValid)
-    # ensure the output directory exists
-    preparePath(output_path)
-    # write the Face, LeftEye and RightEye
-    json_write(os.path.join(output_path, 'dlibFace.json'), faceInfoDict["Face"])
-    json_write(os.path.join(output_path, 'dlibLeftEye.json'), faceInfoDict["LeftEye"])
-    json_write(os.path.join(output_path, 'dlibRightEye.json'), faceInfoDict["RightEye"])
-    return
-
-
-# Equivalent: prepareDataset
-def RCROIExtractionTask(directory):
-
-    recDir = os.path.join(args.input, directory)
-    dlibDir = os.path.join(args.metapath, directory)
-    recDirOut = os.path.join(args.output, directory)
-
-    # Output structure
-    meta = {
-        'labelRecNum': [],
-        'frameIndex': [],
-        'labelDotXCam': [],
-        'labelDotYCam': [],
-        'labelFaceGrid': [],
-    }
-
-    # Read metadata JSONs from metapath
-    appleFace = json_read(os.path.join(dlibDir, 'dlibFace.json'))
-    appleLeftEye = json_read(os.path.join(dlibDir, 'dlibLeftEye.json'))
-    appleRightEye = json_read(os.path.join(dlibDir, 'dlibRightEye.json'))
-
-    # Read input JSONs from inputpath
-    dotInfo = json_read(os.path.join(recDir, 'dotInfo.json'))
-    faceGrid = json_read(os.path.join(recDir, 'faceGrid.json'))
-    frames = json_read(os.path.join(recDir, 'frames.json'))
-    # info = json_read(os.path.join(recDir, 'info.json'))
-    # screen = json_read(os.path.join(recDir, 'screen.json'))
-
-    # prepape output paths
-    facePath = preparePath(os.path.join(recDirOut, 'appleFace'))
-    leftEyePath = preparePath(os.path.join(recDirOut, 'appleLeftEye'))
-    rightEyePath = preparePath(os.path.join(recDirOut, 'appleRightEye'))
-
-    # Preprocess
-    allValid = np.logical_and(np.logical_and(appleFace['IsValid'], appleLeftEye['IsValid']),
-                                np.logical_and(appleRightEye['IsValid'], faceGrid['IsValid']))
-
-    frames = np.array([int(re.match('(\d{5})\.jpg$', x).group(1)) for x in frames])
-
-    bboxFromJson = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H']), axis=1).astype(int)
-    faceBbox = bboxFromJson(appleFace) + [-1, -1, 1, 1]  # for compatibility with matlab code
-    leftEyeBbox = bboxFromJson(appleLeftEye) + [0, -1, 0, 0]
-    rightEyeBbox = bboxFromJson(appleRightEye) + [0, -1, 0, 0]
-    leftEyeBbox[:, :2] += faceBbox[:, :2]  # relative to face
-    rightEyeBbox[:, :2] += faceBbox[:, :2]
-    faceGridBbox = bboxFromJson(faceGrid)
-
-    for j, frame in enumerate(frames):
-        # Can we use it?
-        if not allValid[j]:
-            continue
-
-        # Load image
-        imgFile = os.path.join(recDir, 'frames', '%05d.jpg' % frame)
-        if not os.path.isfile(imgFile):
-            logError('Warning: Could not read image file %s!' % imgFile)
-            continue
-        img = PILImage.open(imgFile)
-        if img is None:
-            logError('Warning: Could not read image file %s!' % imgFile)
-            continue
-        img = np.array(img.convert('RGB'))
-
-        # Crop images
-        imFace = cropImage(img, faceBbox[j, :])
-        imEyeL = cropImage(img, leftEyeBbox[j, :])
-        imEyeR = cropImage(img, rightEyeBbox[j, :])
+        if args.rc:
+            imFace = RC_cropImage(img, faceBbox[j, :])
+            imEyeL = RC_cropImage(img, leftEyeBbox[j, :])
+            imEyeR = RC_cropImage(img, rightEyeBbox[j, :])
+        else:
+            imFace = cropImage(img, faceBbox[j, :])
+            imEyeL = cropImage(img, leftEyeBbox[j, :])
+            imEyeR = cropImage(img, rightEyeBbox[j, :])
 
         # Save images
         PILImage.fromarray(imFace).save(os.path.join(facePath, '%05d.jpg' % frame), quality=95)
@@ -440,9 +354,10 @@ def compareTask(meta):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
     parser.add_argument('--input', help="input directory path", default="./gc-data/")
-    parser.add_argument('--output', help="output directory path", default="./gc-data-output/")
+    parser.add_argument('--output', help="output directory path", default="./gc-data-meta-rc")
     parser.add_argument('--metapath', help="metadata path", default="./gc-data-meta/")
-    parser.add_argument('--task', help="task name: copyTask, ROIDetectionTask, ROIExtractionTask", default="ROIExtractionTask")
+    parser.add_argument('--task', help="task name: copyTask, ROIDetectionTask, ROIExtractionTask", default="ROIDetectionTask")
+    parser.add_argument('--rc', action='store_true', help="apply rotation correction", default=False)
     parser.add_argument('--source_compare', action='store_true', help="compare against source", default=False)
     args = parser.parse_args()
 
