@@ -1,0 +1,218 @@
+{
+  "Surface_3": {
+    "xCameraToScreenDisplacementInCm": 12.8,
+    "yCameraToScreenDisplacementInCm": 0.6,
+    "widthScreenInCm": 25.45,
+    "heightScreenInCm": 17.05,
+    "ppi": 216,
+    "VideoCaptureName": "Microsoft Camera Front"
+  },
+  "Surface_3_US1": {
+    "xCameraToScreenDisplacementInCm": 12.8,
+    "yCameraToScreenDisplacementInCm": 0.6,
+    "widthScreenInCm": 25.45,
+    "heightScreenInCm": 17.05,
+    "ppi": 216,
+    "VideoCaptureName": "Microsoft Camera Front"
+  },
+  "Surface_3_US2": {
+    "xCameraToScreenDisplacementInCm": 12.8,
+    "yCameraToScreenDisplacementInCm": 0.6,
+    "widthScreenInCm": 25.45,
+    "heightScreenInCm": 17.05,
+    "ppi": 216,
+    "VideoCaptureName": "Microsoft Camera Front"
+  },
+  "Surface_3_NAG": {
+    "xCameraToScreenDisplacementInCm": 12.8,
+    "yCameraToScreenDisplacementInCm": 0.6,
+    "widthScreenInCm": 25.45,
+    "heightScreenInCm": 17.05,
+    "ppi": 216,
+    "VideoCaptureName": "Microsoft Camera Front"
+  },
+  "Surface_3_ROW": {
+    "xCameraToScreenDisplacementInCm": 12.8,
+    "yCameraToScreenDisplacementInCm": 0.6,
+    "widthScreenInCm": 25.45,
+    "heightScreenInCm": 17.05,
+    "ppi": 216,
+    "VideoCaptureName": "Microsoft Camera Front"
+  }
+  "Surface_Pro_1796": {
+    "xCameraToScreenDisplacementInCm": 13.0,
+    "yCameraToScreenDisplacementInCm": 0.6,
+    "widthScreenInCm": 26.0,
+    "heightScreenInCm": 17.35,
+    "ppi": 267,
+    "VideoCaptureName": "Microsoft Camera Front"
+  },
+  "Surface_Pro_1807": {
+    "xCameraToScreenDisplacementInCm": 13.0,
+    "yCameraToScreenDisplacementInCm": 0.6,
+    "widthScreenInCm": 26.0,
+    "heightScreenInCm": 17.35,
+    "ppi": 267,
+    "VideoCaptureName": "Microsoft Camera Front"
+  }
+  "Surface_Book_1832": {
+
+  },
+  "Surface_Book_1793": {
+
+  },
+  "Surface_Go_1825_Consumer": {},
+  "Surface_Go_1825_Commercial": {},
+  "Surface_Go_1824_Consumer": {},
+  "Surface_Go_1824_Commercial": {},
+  "Surface_Pro_6_1796_Consumer": {
+    "xCameraToScreenDisplacementInCm": 13.0,
+    "yCameraToScreenDisplacementInCm": 0.6,
+    "widthScreenInCm": 26.0,
+    "heightScreenInCm": 17.35,
+    "ppi": 267,
+    "VideoCaptureName": "Microsoft Camera Front"
+  },
+  "Surface_Pro_6_1796_Commercial": {
+    "xCameraToScreenDisplacementInCm": 13.0,
+    "yCameraToScreenDisplacementInCm": 0.6,
+    "widthScreenInCm": 26.0,
+    "heightScreenInCm": 17.35,
+    "ppi": 267,
+    "VideoCaptureName": "Microsoft Camera Front"
+  },
+  "Surface_Laptop_2_1769_Consumer": {},
+  "Surface_Laptop_2_1769_Commercial": {},
+  "Surface_Pro_7_1866": {
+    "xCameraToScreenDisplacementInCm": 13.0,
+    "yCameraToScreenDisplacementInCm": 0.6,
+    "widthScreenInCm": 26.0,
+    "heightScreenInCm": 17.35,
+    "ppi": 267,
+    "VideoCaptureName": "Microsoft Camera Front"
+  },
+  "Surface_Pro_X_1876": {
+
+  },
+  "Surface_Laptop_3_1867:1868": {
+
+  },
+  "Surface_Laptop_3_1872": {
+
+  },
+  "Surface_Laptop_3_1873": {
+
+  },
+  "Alienware 51m": {
+    "xCameraToScreenDisplacementInCm": 18.7325,
+    "yCameraToScreenDisplacementInCm": 0.6,
+    "widthScreenInCm": 38.189,
+    "heightScreenInCm": 21.481,
+    "ppi": 127
+  },
+  "iPhone 6s Plus": {
+      "xCameraToScreenDisplacementInCm": 2.354,
+      "yCameraToScreenDisplacementInCm": 0.866,
+      "widthScreenInCm": 6.836,
+      "heightScreenInCm": 12.154,
+      "ppi": 401
+  },
+  "iPhone 6s": {
+      "xCameraToScreenDisplacementInCm": 1.861,
+      "yCameraToScreenDisplacementInCm": 0.804,
+      "widthScreenInCm": 5.849,
+      "heightScreenInCm": 10.405,
+      "ppi": 326
+  },
+  "iPhone 6 Plus": {
+      "xCameraToScreenDisplacementInCm": 2.354,
+      "yCameraToScreenDisplacementInCm": 0.865,
+      "widthScreenInCm": 6.836,
+      "heightScreenInCm": 12.154,
+      "ppi": 401
+  },
+  "iPhone 6": {
+      "xCameraToScreenDisplacementInCm": 1.861,
+      "yCameraToScreenDisplacementInCm": 0.803,
+      "widthScreenInCm": 5.85,
+      "heightScreenInCm": 10.405,
+      "ppi": 326
+  },
+  "iPhone 5S": {
+      "xCameraToScreenDisplacementInCm": 2.585,
+      "yCameraToScreenDisplacementInCm": 1.065,
+      "widthScreenInCm": 5.17,
+      "heightScreenInCm": 9.039,
+      "ppi": 326
+  },
+  "iPhone 5C": {
+      "xCameraToScreenDisplacementInCm": 2.585,
+      "yCameraToScreenDisplacementInCm": 1.064,
+      "widthScreenInCm": 5.17,
+      "heightScreenInCm": 9.039,
+      "ppi": 326
+  },
+  "iPhone 5": {
+      "xCameraToScreenDisplacementInCm": 2.585,
+      "yCameraToScreenDisplacementInCm": 1.065,
+      "widthScreenInCm": 5.17,
+      "heightScreenInCm": 9.039,
+      "ppi": 326
+  },
+  "iPhone 4S": {
+      "xCameraToScreenDisplacementInCm": 1.496,
+      "yCameraToScreenDisplacementInCm": 0.978,
+      "widthScreenInCm": 4.992,
+      "heightScreenInCm": 7.488,
+      "ppi": 326
+  },
+  "iPad Mini": {
+      "xCameraToScreenDisplacementInCm": 6.07,
+      "yCameraToScreenDisplacementInCm": 0.87,
+      "widthScreenInCm": 12.13,
+      "heightScreenInCm": 16.12,
+      "ppi": 163
+  },
+  "iPad Air 2": {
+      "xCameraToScreenDisplacementInCm": 7.686,
+      "yCameraToScreenDisplacementInCm": 0.737,
+      "widthScreenInCm": 15.371,
+      "heightScreenInCm": 20.311,
+      "ppi": 339
+  },
+  "iPad Air": {
+      "xCameraToScreenDisplacementInCm": 7.44,
+      "yCameraToScreenDisplacementInCm": 0.99,
+      "widthScreenInCm": 14.9,
+      "heightScreenInCm": 19.81,
+      "ppi": 339
+  },
+  "iPad 4": {
+      "xCameraToScreenDisplacementInCm": 7.45,
+      "yCameraToScreenDisplacementInCm": 1.05,
+      "widthScreenInCm": 14.9,
+      "heightScreenInCm": 19.81,
+      "ppi": 264
+  },
+  "iPad 3": {
+      "xCameraToScreenDisplacementInCm": 7.45,
+      "yCameraToScreenDisplacementInCm": 1.05,
+      "widthScreenInCm": 14.9,
+      "heightScreenInCm": 19.81,
+      "ppi": 270
+  },
+  "iPad 2": {
+      "xCameraToScreenDisplacementInCm": 7.45,
+      "yCameraToScreenDisplacementInCm": 1.05,
+      "widthScreenInCm": 14.9,
+      "heightScreenInCm": 19.81,
+      "ppi": 132
+  },
+  "iPad Pro": {
+      "xCameraToScreenDisplacementInCm": 9.831,
+      "yCameraToScreenDisplacementInCm": 1.069,
+      "widthScreenInCm": 19.661,
+      "heightScreenInCm": 26.215,
+      "ppi": 264
+  }
+}

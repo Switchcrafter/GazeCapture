@@ -71,6 +71,9 @@ def main():
         'labelDotXCam': [],
         'labelDotYCam': [],
         'labelFaceGrid': [],
+        'labelTrain': [],
+        'labelVal': [],
+        'labelTest': []
     }
 
     for i, recording in enumerate(recordings):
@@ -111,9 +114,9 @@ def main():
         frames = readJson(os.path.join(recDir, 'frames.json'))
         if frames is None:
             continue
-        # info = readJson(os.path.join(recDir, 'info.json'))
-        # if info is None:
-        #     continue
+        info = readJson(os.path.join(recDir, 'info.json'))
+        if info is None:
+            continue
         # screen = readJson(os.path.join(recDir, 'screen.json'))
         # if screen is None:
         #     continue
@@ -171,6 +174,11 @@ def main():
             meta['labelDotYCam'] += [dotInfo['YCam'][j]]
             meta['labelFaceGrid'] += [faceGridBbox[j, :]]
 
+            split = info["Dataset"]
+            meta['labelTrain'] += [split == "train"]
+            meta['labelVal'] += [split == "val"]
+            meta['labelTest'] += [split == "test"]
+
     # Integrate
     meta['labelRecNum'] = np.stack(meta['labelRecNum'], axis=0).astype(np.int16)
     meta['frameIndex'] = np.stack(meta['frameIndex'], axis=0).astype(np.int32)
@@ -212,12 +220,11 @@ def main():
                 logError('Did not find rec_frame %s from the reference dataset in the new dataset!' % k, critical=False)
                 # break
 
-    # Copy split from reference
-    meta['labelTrain'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
-    meta['labelVal'] = np.ones((len(meta['labelRecNum'], )), np.bool)  # default choice
-    meta['labelTest'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
+        # Copy split from reference
+        meta['labelTrain'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
+        meta['labelVal'] = np.ones((len(meta['labelRecNum'], )), np.bool)  # default choice
+        meta['labelTest'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
 
-    if not args.ignore_reference:
         validMappingMask = mToR >= 0
         meta['labelTrain'][validMappingMask] = reference['labelTrain'][mToR[validMappingMask]]
         meta['labelVal'][validMappingMask] = reference['labelVal'][mToR[validMappingMask]]
