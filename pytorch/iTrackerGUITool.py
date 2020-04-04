@@ -82,7 +82,7 @@ TARGETS = [(-10., -3.),
 
 # various command-based actions
 
-def live_demo():
+def live_demo(input=0):
     color_space = 'YCbCr'
     mode = 'rc'
 
@@ -184,11 +184,6 @@ def live_demo():
 
     cv2.destroyAllWindows()
     cap.release()
-
-# main script here
-def main():
-    live_demo()
-
 
 def generate_baseline_display_data(display, screenOffsetX, screenOffsetY, monitor, webcam_image):
     display = draw_overlay(display, screenOffsetX, screenOffsetY, webcam_image)
@@ -763,7 +758,7 @@ def draw_text(image, x, y, string, scale=0.5, fill=(0, 0, 0), thickness=1):
     return image
 
 if __name__ == "__main__":
-    main()
+    live_demo()
     print('')
     print('DONE')
     print('')

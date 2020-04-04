@@ -81,22 +81,22 @@ def json_write(filename, data):
 
 def cropImage(img, bbox):
     bbox = np.array(bbox, int)
+    if len(bbox) == 5:
+        return crop_rect(img, bbox)
+    else:
+        aSrc = np.maximum(bbox[:2], 0)
+        bSrc = np.minimum(bbox[:2] + bbox[2:], (img.shape[1], img.shape[0]))
 
-    aSrc = np.maximum(bbox[:2], 0)
-    bSrc = np.minimum(bbox[:2] + bbox[2:], (img.shape[1], img.shape[0]))
+        aDst = aSrc - bbox[:2]
+        bDst = aDst + (bSrc - aSrc)
 
-    aDst = aSrc - bbox[:2]
-    bDst = aDst + (bSrc - aSrc)
+        res = np.zeros((bbox[3], bbox[2], img.shape[2]), img.dtype)
+        res[aDst[1]:bDst[1], aDst[0]:bDst[0], :] = img[aSrc[1]:bSrc[1], aSrc[0]:bSrc[0], :]
 
-    res = np.zeros((bbox[3], bbox[2], img.shape[2]), img.dtype)
-    res[aDst[1]:bDst[1], aDst[0]:bDst[0], :] = img[aSrc[1]:bSrc[1], aSrc[0]:bSrc[0], :]
-
-    return res
+        return res
 
 def RC_cropImage(img, bbox):
-    # print(bbox)
     bbox = np.array(bbox, int)
-    # rect = ((bbox[0],bbox[1]), (bbox[2],bbox[3]), bbox[4])
     return crop_rect(img, bbox)
 
 ################################################################################
@@ -262,14 +262,9 @@ def ROIExtractionTask(directory):
         img = np.array(img.convert('RGB'))
 
         # Crop images
-        if args.rc:
-            imFace = RC_cropImage(img, faceBbox[j, :])
-            imEyeL = RC_cropImage(img, leftEyeBbox[j, :])
-            imEyeR = RC_cropImage(img, rightEyeBbox[j, :])
-        else:
-            imFace = cropImage(img, faceBbox[j, :])
-            imEyeL = cropImage(img, leftEyeBbox[j, :])
-            imEyeR = cropImage(img, rightEyeBbox[j, :])
+        imFace = cropImage(img, faceBbox[j, :])
+        imEyeL = cropImage(img, leftEyeBbox[j, :])
+        imEyeR = cropImage(img, rightEyeBbox[j, :])
 
         # Save images
         PILImage.fromarray(imFace).save(os.path.join(facePath, '%05d.jpg' % frame), quality=95)
@@ -501,10 +496,33 @@ if __name__ == '__main__':
     parser.add_argument('--input', help="input directory path", default="./gc-data/")
     parser.add_argument('--output', help="output directory path", default="./gc-data-meta-rc")
     parser.add_argument('--metapath', help="metadata path", default="./gc-data-meta/")
-    parser.add_argument('--task', help="task name: copyTask, ROIDetectionTask, ROIExtractionTask", default="ROIDetectionTask")
+    parser.add_argument('--task', help="task name: copyTask, ROIDetectionTask, ROIExtractionTask", default="")
     parser.add_argument('--rc', action='store_true', help="apply rotation correction", default=False)
     parser.add_argument('--source_compare', action='store_true', help="compare against source", default=False)
     args = parser.parse_args()
+
+    if args.task == "":
+        print("================= Task Menu =================")
+        print("demoTask", 0)
+        print("plotErrorTask", 1)
+        print("plotErrorHeatmapTask", 2)
+        print("plotGazePointHeatmapTask", 3)
+        print("plotErrorHistogramTask", 4)
+        print("parseResultsTask", 5)
+
+        task = input('Input:')
+        if task == '0':
+            args.task = "demoTask"
+        elif task == '1':
+            args.task = "plotErrorTask"
+        elif task == '2':
+            args.task = "plotErrorHeatmapTask"
+        elif task == '3':
+            args.task = "plotGazePointHeatmapTask"
+        elif task == '4':
+            args.task = "plotErrorHistogramTask"
+        elif task == '5':
+            args.task = "parseResultsTask"
 
     # pre-processing for the task
     if args.task == "noneTask":
@@ -554,6 +572,12 @@ if __name__ == '__main__':
         taskData = "best_results.json"
         dataLoader = None
         taskFunction = parseResultsTask
+    ######### Demo Tasks #########
+    elif args.task == "demoTask":
+        from iTrackerGUITool import live_demo
+        taskData = 0
+        dataLoader = None
+        taskFunction = live_demo
 
     # run the job
     output = taskManager.job(taskFunction, taskData, dataLoader)

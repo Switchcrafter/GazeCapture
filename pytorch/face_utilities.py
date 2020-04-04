@@ -247,15 +247,19 @@ def rc_generate_face_eye_images(face_rect, left_eye_rect, right_eye_rect, webcam
     return face_image, left_eye_image, right_eye_image, face_grid, face_grid_image
 
 
-def generate_grid2(rect, webcam_image):
-    im = webcam_image.copy() * 0
-    box = cv2.boxPoints(rect)
-    box = np.int0(box)
-    im = cv2.drawContours(im, [box], 0, (255, 255, 255), -1)  # 2 for line, -1 for filled
-    return im
+
+def getBox(face_rect):
+    return ((face_rect[0], face_rect[1]), (face_rect[2], face_rect[3]), face_rect[4])
+
+# def generate_grid2(rect, webcam_image):
+#     im = webcam_image.copy() * 0
+#     box = cv2.boxPoints(getBox(rect))
+#     box = np.int0(box)
+#     im = cv2.drawContours(im, [box], 0, (255, 255, 255), -1)  # 2 for line, -1 for filled
+#     return im
 
 def generate_grid(face_rect, im):
-    box = np.int0((cv2.boxPoints(face_rect)))
+    box = np.int0((cv2.boxPoints(getBox(face_rect))))
     face_grid_image = cv2.drawContours(im*0, [box], 0, (255,255,255), -1) #2 for line, -1 for filled
     face_grid, _,_ = cv2.split(face_grid_image)
     face_grid = cv2.resize(face_grid, (GRID_SIZE, GRID_SIZE), cv2.INTER_AREA)
