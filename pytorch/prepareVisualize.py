@@ -37,9 +37,6 @@ def main():
         print("Invalid arguments: must pass the data directory as"
               " first argument and results file as the second argument.")
         sys.exit(-1)
-    if not os.path.exists(os.path.join(dataPath, "README.md")):
-        print(f"{dataPath} does not look like a valid data directory, missing README.md.")
-        sys.exit(-1)
     if not os.path.exists(resultsPath):
         print(f"Does not look like a valid results file: {resultsPath}")
         sys.exit(-1)
