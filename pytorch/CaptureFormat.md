@@ -1,6 +1,6 @@
 # Capture Data Format for GazeCapture pytorch
 
-Schema Version 200402
+Schema Version 200407
 
 ## Overview
 
@@ -21,7 +21,9 @@ Each capture session creates a new subdirectory for data capture named as an inc
 Frame data is captured into a subdirectory of the session directory named 'frames'.  two files from an app on the target device; a png compressed image and a json metadata file.  The frame json file contains:
 
  image.jpg (close to lossless compression as possible)
- dotInfo.json: { XRaw: ..., YRaw: ... }
+ dotInfo.json: { XRaw: ..., YRaw: ..., Confidence: ... }
+ 
+ (dotInfo.json Confidence will be positive is measured, negative otherwise)
 
 This data is then post-processed to add metadata files:
 
