@@ -251,26 +251,34 @@ def rc_generate_face_eye_images(face_rect, left_eye_rect, right_eye_rect, webcam
 def getBox(face_rect):
     return ((face_rect[0], face_rect[1]), (face_rect[2], face_rect[3]), face_rect[4])
 
+def generate_grid2(rect, webcam_image):
+    im = np.zeros(webcam_image.shape, np.uint8)
+    im[:] = (255,255,255)
+
+    box = np.int0(cv2.boxPoints(getBox(rect)))
+    im = cv2.drawContours(im, [box], 0, (0, 0, 0), -1)  # 2 for line, -1 for filled
+    return im
+
 # def generate_grid2(rect, webcam_image):
-#     im = webcam_image.copy() * 0
-#     box = cv2.boxPoints(getBox(rect))
-#     box = np.int0(box)
-#     im = cv2.drawContours(im, [box], 0, (255, 255, 255), -1)  # 2 for line, -1 for filled
+#     im = webcam_image
+
+#     box = np.int0(cv2.boxPoints(getBox(rect)))
+#     im = cv2.drawContours(im, [box], 0, (255, 0, 0), 2)  # 2 for line, -1 for filled
+#     # im = cv2.resize(im, (GRID_SIZE, GRID_SIZE), cv2.INTER_AREA)
 #     return im
 
 def generate_grid(face_rect, im):
     box = np.int0((cv2.boxPoints(getBox(face_rect))))
-    face_grid_image = cv2.drawContours(im*0, [box], 0, (255,255,255), -1) #2 for line, -1 for filled
+    im = im*0 + 255
+    face_grid_image = cv2.drawContours(im, [box], 0, (0,0,0), -1) #2 for line, -1 for filled
     face_grid, _,_ = cv2.split(face_grid_image)
     face_grid = cv2.resize(face_grid, (GRID_SIZE, GRID_SIZE), cv2.INTER_AREA)
     face_grid_flat = face_grid.flatten()  # flatten from 2d (25, 25) to 1d (625)
 
-    face_grid_inverted = (255 - face_grid)
-    face_grid_stacked = np.stack((face_grid_inverted,)*3, axis=-1)
+    face_grid_stacked = np.stack((face_grid,)*3, axis=-1)
     face_grid_image = Image.fromarray(face_grid_stacked).convert("RGB")
 
     return face_grid_flat, face_grid_image
-
 
 
 def newFaceInfoDict(color="blue"):
