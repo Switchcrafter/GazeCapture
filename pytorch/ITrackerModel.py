@@ -4,6 +4,7 @@ import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 from torchvision import models
+import os
 
 '''
 Pytorch model for the iTracker.
@@ -29,7 +30,11 @@ class ItrackerImageModel(nn.Module):
     # ZeroPad = (k-1)/2
     def __init__(self, color_space):
         super(ItrackerImageModel, self).__init__()
-        self.model = models.resnet18(pretrained=True)
+        if os.path.isfile('./resnet18-5c106cde.pth'):
+            self.model = torch.load('./resnet18-5c106cde.pth')
+        else:
+            self.model = models.resnet18(pretrained=True, progress=True)
+            torch.save(self.model, './resnet18-5c106cde.pth')
         # ToDo For L-channel (greyscale) only model
         if color_space == 'L':
             self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
@@ -77,6 +82,33 @@ class FaceImageModel(nn.Module):
         # 64
         return x
 
+class FaceGridRCModel(nn.Module):
+    def __init__(self, color_space):
+        super(FaceGridRCModel, self).__init__()
+        self.conv = ItrackerImageModel(color_space)
+        self.fc = nn.Sequential(
+            # FC-F1
+            # 25088
+            nn.Dropout(0.1),
+            nn.Linear(25088, 256),
+            # 256
+            nn.ReLU(inplace=True),
+
+            # FC-F2
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            # 128
+            nn.ReLU(inplace=True),
+            # 128
+        )
+
+    def forward(self, x):
+        # 3C x 224H x 224W
+        x = self.conv(x)
+        # 25088
+        x = self.fc(x)
+        # 128
+        return x
 
 class FaceGridModel(nn.Module):
     # Model for the face grid pathway

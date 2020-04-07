@@ -9,7 +9,7 @@ def parse_commandline_arguments():
     parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
     parser.add_argument('--data_path',
                         help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.",
-                        default='/data/gc-data-prepped-dlib/')
+                        default='/data/gc-data-prepped-rc/')
     parser.add_argument('--output_path',
                         help="Path to checkpoint",
                         default="")
