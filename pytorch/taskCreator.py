@@ -51,7 +51,6 @@ def preparePath(path, clear=False):
 
     return path
 
-
 def logError(msg, critical=False):
     print(msg)
     if critical:
@@ -77,7 +76,6 @@ def json_read(filename):
 def json_write(filename, data):
     with open(filename, "w") as write_file:
         json.dump(data, write_file)
-
 
 def cropImage(img, bbox):
     bbox = np.array(bbox, int)
@@ -146,7 +144,6 @@ def copyTask(filepath):
     shutil.copy(filepath, to_file)
     return to_file
 
-
 def resizeTask(filePath):
     pass
 
@@ -187,7 +184,6 @@ def ROIDetectionTask(directory):
     json_write(os.path.join(output_path, 'dlibLeftEye.json'), faceInfoDict["LeftEye"])
     json_write(os.path.join(output_path, 'dlibRightEye.json'), faceInfoDict["RightEye"])
     return
-
 
 # Equivalent: prepareDataset
 def ROIExtractionTask(directory):
@@ -266,10 +262,24 @@ def ROIExtractionTask(directory):
         imEyeL = cropImage(img, leftEyeBbox[j, :])
         imEyeR = cropImage(img, rightEyeBbox[j, :])
 
+        if args.rc:
+            faceGridPath = preparePath(os.path.join(recDirOut, 'faceGrid'))
+            imFaceGrid = generate_grid2(faceBbox[j, :], img)
+            
+            imFace = cv2.resize(imFace, (256, 256), cv2.INTER_AREA)
+            imEyeL = cv2.resize(imEyeL, (256, 256), cv2.INTER_AREA)
+            imEyeR = cv2.resize(imEyeR, (256, 256), cv2.INTER_AREA)
+            imFaceGrid = cv2.resize(imFaceGrid, (256, 256), cv2.INTER_AREA)
+            
+            PILImage.fromarray(imFaceGrid).save(os.path.join(faceGridPath, '%05d.jpg' % frame), quality=95)
+
         # Save images
         PILImage.fromarray(imFace).save(os.path.join(facePath, '%05d.jpg' % frame), quality=95)
         PILImage.fromarray(imEyeL).save(os.path.join(leftEyePath, '%05d.jpg' % frame), quality=95)
         PILImage.fromarray(imEyeR).save(os.path.join(rightEyePath, '%05d.jpg' % frame), quality=95)
+
+        
+
 
         # Collect metadata
         meta['labelRecNum'] += [int(directory)]
@@ -279,7 +289,6 @@ def ROIExtractionTask(directory):
         meta['labelFaceGrid'] += [faceGridBbox[j, :]]
 
     return meta
-
 
 def compareTask(meta):
     # Load reference metadata
