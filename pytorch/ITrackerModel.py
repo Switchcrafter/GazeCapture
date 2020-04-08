@@ -144,7 +144,8 @@ class ITrackerModel(nn.Module):
         # 1C/3Cx224Hx224W --> 64
         self.faceModel = FaceImageModel(color_space)
         # 1Cx25Hx25W --> 128
-        self.gridModel = FaceGridModel()
+        self.gridModel = FaceGridRCModel(color_space)
+
 
         # Joining both eyes
         self.eyesFC = nn.Sequential(
