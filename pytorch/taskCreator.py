@@ -265,12 +265,12 @@ def ROIExtractionTask(directory):
         if args.rc:
             faceGridPath = preparePath(os.path.join(recDirOut, 'faceGrid'))
             imFaceGrid = generate_grid2(faceBbox[j, :], img)
-            
+
             imFace = cv2.resize(imFace, (256, 256), cv2.INTER_AREA)
             imEyeL = cv2.resize(imEyeL, (256, 256), cv2.INTER_AREA)
             imEyeR = cv2.resize(imEyeR, (256, 256), cv2.INTER_AREA)
             imFaceGrid = cv2.resize(imFaceGrid, (256, 256), cv2.INTER_AREA)
-            
+
             PILImage.fromarray(imFaceGrid).save(os.path.join(faceGridPath, '%05d.jpg' % frame), quality=95)
 
         # Save images
@@ -278,7 +278,7 @@ def ROIExtractionTask(directory):
         PILImage.fromarray(imEyeL).save(os.path.join(leftEyePath, '%05d.jpg' % frame), quality=95)
         PILImage.fromarray(imEyeR).save(os.path.join(rightEyePath, '%05d.jpg' % frame), quality=95)
 
-        
+
 
 
         # Collect metadata
@@ -615,7 +615,7 @@ if __name__ == '__main__':
         meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
         meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
         # print(meta)
-        # compareTask(meta)
+        compareTask(meta)
 
 
 
