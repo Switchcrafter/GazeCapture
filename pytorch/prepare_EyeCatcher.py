@@ -19,7 +19,7 @@ def findCaptureSessionDirs(path):
     for device in devices:
         users = os.listdir(os.path.join(path, device))
         for user in users:
-            sessions = os.listdir(os.path.join(path, device, user))
+            sessions = sorted(os.listdir(os.path.join(path, device, user)), key=str)
 
             for session in sessions:
                 session_paths.append(os.path.join(device, user, session))
@@ -34,8 +34,6 @@ def findCapturesInSession(path):
 
 
 def loadJsonData(filename):
-    data = None
-
     with open(filename) as f:
         data = json.load(f)
 
@@ -126,7 +124,7 @@ def main():
     for directory_idx, directory in enumerate(directories):
         print(f"Processing {directory_idx + 1}/{total_directories} - {directory}")
 
-        captures = findCapturesInSession(os.path.join(data_directory, directory))
+        captures = sorted(findCapturesInSession(os.path.join(data_directory, directory)), key=str)
         total_captures = len(captures)
 
         # dotinfo.json - { "DotNum": [ 0, 0, ... ],
@@ -155,7 +153,6 @@ def main():
 
         # frames.json - ["00000.jpg","00001.jpg"]
         frames = []
-
 
         facegrid = {
             "X": [],
@@ -297,5 +294,6 @@ def main():
             json.dump(faceInfoDict["RightEye"], write_file)
 
     print("DONE")
+
 
 main()
