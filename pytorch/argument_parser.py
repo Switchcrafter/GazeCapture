@@ -9,7 +9,7 @@ def parse_commandline_arguments():
     parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
     parser.add_argument('--data_path',
                         help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.",
-                        default='/data/gc-data-prepped-rc/')
+                        default='/data/gc-data-prepped-rc')
     parser.add_argument('--output_path',
                         help="Path to checkpoint",
                         default="")
@@ -47,7 +47,7 @@ def parse_commandline_arguments():
     # Create a checkpoint directory per device (or device group) for multiple executions
     if args.output_path == "":
         args.output_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'checkpoints', 'gpu' + args.device_group)
-    
+
     args.device = None
     args.using_cuda = False
     if torch.cuda.device_count() > 1 and args.mode == "none":

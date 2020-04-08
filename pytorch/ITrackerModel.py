@@ -30,11 +30,8 @@ class ItrackerImageModel(nn.Module):
     # ZeroPad = (k-1)/2
     def __init__(self, color_space):
         super(ItrackerImageModel, self).__init__()
-        if os.path.isfile('./resnet18-5c106cde.pth'):
-            self.model = torch.load('./resnet18-5c106cde.pth')
-        else:
-            self.model = models.resnet18(pretrained=True, progress=True)
-            torch.save(self.model, './resnet18-5c106cde.pth')
+        # self.model = models.resnet18(pretrained=True)
+        self.model = torch.load('./resnet18-5c106cde.pth')
         # ToDo For L-channel (greyscale) only model
         if color_space == 'L':
             self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
