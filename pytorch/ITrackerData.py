@@ -275,7 +275,7 @@ class ITrackerData(object):
         imEyeRPath = os.path.join(self.dataPath,
                                   '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                    self.metadata['frameIndex'][rowIndex]))
-        faceGridPath = os.path.join(self.dataPath,
+        imfaceGridPath = os.path.join(self.dataPath,
                                   '%05d/faceGrid/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                    self.metadata['frameIndex'][rowIndex]))
         gaze = np.array([self.metadata['labelDotXCam'][rowIndex], self.metadata['labelDotYCam'][rowIndex]], np.float32)
@@ -289,7 +289,7 @@ class ITrackerData(object):
             imFace = self.loadImage(imFacePath)
             imEyeL = self.loadImage(imEyeLPath)
             imEyeR = self.loadImage(imEyeRPath)
-            imfaceGrid = self.loadImage(faceGridPath)
+            imfaceGrid = self.loadImage(imfaceGridPath)
 
             # for hog experiments
             # imFace = self.get_hog_descriptor(imFace)

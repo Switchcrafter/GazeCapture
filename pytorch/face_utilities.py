@@ -248,6 +248,22 @@ def rc_generate_face_eye_images(face_rect, left_eye_rect, right_eye_rect, webcam
 
 
 
+def grid_generate_face_eye_images(face_rect, left_eye_rect, right_eye_rect, webcam_image):
+
+    face_image = crop_rect(webcam_image.copy(), face_rect)
+    face_image = imutils.resize(face_image, width=IMAGE_WIDTH)
+
+    left_eye_image = crop_rect(webcam_image.copy(), left_eye_rect)
+    left_eye_image = imutils.resize(left_eye_image, width=IMAGE_WIDTH)
+
+    right_eye_image = crop_rect(webcam_image.copy(), right_eye_rect)
+    right_eye_image = imutils.resize(right_eye_image, width=IMAGE_WIDTH)
+
+    face_grid_image = generate_grid2(face_rect, webcam_image.copy())
+    face_grid_image = imutils.resize(face_grid_image, width=IMAGE_WIDTH)
+
+    return face_image, left_eye_image, right_eye_image, face_grid_image
+
 def getBox(face_rect):
     return ((face_rect[0], face_rect[1]), (face_rect[2], face_rect[3]), face_rect[4])
 
@@ -399,12 +415,11 @@ def prepare_image_inputs(face_image, left_eye_image, right_eye_image):
     return imEyeL, imEyeR, imFace
 
 
-def prepare_image_inputs2(face_grid_image, face_image, left_eye_image, right_eye_image):
-    imFaceGrid = Image.fromarray(cv2.cvtColor(face_grid_image, cv2.COLOR_BGR2GRAY), 'L')
-    # print("imFaceGrid", imFaceGrid.size, imFaceGrid.mode)
+def grid_prepare_image_inputs(face_image, left_eye_image, right_eye_image, face_grid_image):
     imFace = Image.fromarray(cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB), 'RGB')
     imEyeL = Image.fromarray(cv2.cvtColor(left_eye_image, cv2.COLOR_BGR2RGB), 'RGB')
     imEyeR = Image.fromarray(cv2.cvtColor(right_eye_image, cv2.COLOR_BGR2RGB), 'RGB')
+    imFaceGrid = Image.fromarray(cv2.cvtColor(face_grid_image, cv2.COLOR_BGR2RGB), 'RGB')
 
     return imEyeL, imEyeR, imFace, imFaceGrid
 

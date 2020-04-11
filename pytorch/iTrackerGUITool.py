@@ -19,6 +19,8 @@ from face_utilities import find_face_dlib,\
                            rc_landmarksToRects,\
                            rc_generate_face_eye_images,\
                            prepare_image_inputs, \
+                           grid_generate_face_eye_images,\
+                           grid_prepare_image_inputs,\
                            hogImage
 
 
@@ -34,11 +36,11 @@ class InferenceEngine:
         elif self.mode == "onnx":
             self.modelSession = onnxruntime.InferenceSession('itracker.onnx')
 
-    def run_inference(self, normalize_image, image_face, image_eye_left, image_eye_right, face_grid):
+    def run_inference(self, normalize_image, image_face, image_eye_left, image_eye_right, image_face_grid):
         # compute output
         if self.mode == "torch":
             with torch.no_grad():
-                output = self.modelSession(image_face, image_eye_left, image_eye_right, face_grid)
+                output = self.modelSession(image_face, image_eye_left, image_eye_right, image_face_grid)
                 gaze_prediction_np = output.numpy()[0]
         elif self.mode == "onnx":
             # compute output
@@ -46,7 +48,7 @@ class InferenceEngine:
                                 {"face": image_face.numpy(),
                                 "eyesLeft": image_eye_left.numpy(),
                                 "eyesRight": image_eye_right.numpy(),
-                                "faceGrid": face_grid.numpy()})
+                                "faceGrid": image_face_grid.numpy()})
             gaze_prediction_np = (output[0])[0]
 
         return gaze_prediction_np
@@ -133,30 +135,57 @@ def live_demo(input=0):
 
          # do only for valid face objects
         if isValid:
-            face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
-            face_image, left_eye_image, right_eye_image, face_grid, face_grid_image = rc_generate_face_eye_images(face_rect,
-                                                                                                                left_eye_rect,
-                                                                                                                right_eye_rect,
-                                                                                                                webcam_image)
+            if True:
+                face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
+                face_image, left_eye_image, right_eye_image, face_grid_image = grid_generate_face_eye_images(face_rect,
+                                                                                                            left_eye_rect,
+                                                                                                            right_eye_rect,
+                                                                                                            webcam_image)
+                # print(face_image.shape, face_grid_image.shape)
+                # OpenCV BGR -> PIL RGB conversion
+                image_eye_left, image_eye_right, image_face, image_face_grid = grid_prepare_image_inputs(face_image,
+                                                                                                left_eye_image,
+                                                                                                right_eye_image,
+                                                                                                face_grid_image)
+                # print(face_grid_image.size, face_grid_image.size)
+                # PIL RGB -> PIL YCBCr. Then Convert images into tensors
+                imEyeL, imEyeR, imFace, imFaceGrid = grid_prepare_image_tensors(color_space,
+                                                                        image_face,
+                                                                        image_eye_left,
+                                                                        image_eye_right,
+                                                                        image_face_grid,
+                                                                        normalize_image)
+                start_time = datetime.now()
+                gaze_prediction_np = inferenceEngine.run_inference(normalize_image,
+                                                                    imFace,
+                                                                    imEyeL,
+                                                                    imEyeR,
+                                                                    imFaceGrid)
+            else:
+                face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
+                face_image, left_eye_image, right_eye_image, face_grid, face_grid_image = rc_generate_face_eye_images(face_rect,
+                                                                                                                    left_eye_rect,
+                                                                                                                    right_eye_rect,
+                                                                                                                    webcam_image)
 
-            # OpenCV BGR -> PIL RGB conversion
-            image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_image,
-                                                                            left_eye_image,
-                                                                            right_eye_image)
+                # OpenCV BGR -> PIL RGB conversion
+                image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_image,
+                                                                                left_eye_image,
+                                                                                right_eye_image)
 
-            # PIL RGB -> PIL YCBCr. Then Convert images into tensors
-            imEyeL, imEyeR, imFace, imFaceGrid = prepare_image_tensors(color_space,
-                                                                    image_face,
-                                                                    image_eye_left,
-                                                                    image_eye_right,
-                                                                    face_grid,
-                                                                    normalize_image)
-            start_time = datetime.now()
-            gaze_prediction_np = inferenceEngine.run_inference(normalize_image,
-                                                                imFace,
-                                                                imEyeL,
-                                                                imEyeR,
-                                                                imFaceGrid)
+                # PIL RGB -> PIL YCBCr. Then Convert images into tensors
+                imEyeL, imEyeR, imFace, imFaceGrid = prepare_image_tensors(color_space,
+                                                                        image_face,
+                                                                        image_eye_left,
+                                                                        image_eye_right,
+                                                                        face_grid,
+                                                                        normalize_image)
+                start_time = datetime.now()
+                gaze_prediction_np = inferenceEngine.run_inference(normalize_image,
+                                                                    imFace,
+                                                                    imEyeL,
+                                                                    imEyeR,
+                                                                    imFaceGrid)
             time_elapsed = datetime.now() - start_time
 
             display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image,
@@ -255,11 +284,19 @@ def generate_display_data(display, face_grid_image, face_image, gaze_prediction_
                                             deviceName=DEVICE_NAME
                                         )
 
+    # input_images = np.concatenate((face_image,
+    #                                right_eye_image,
+    #                                left_eye_image,
+    #                                face_grid_image.resize((224, 224))),
+    #                               axis=0)
+
+
     input_images = np.concatenate((face_image,
                                    right_eye_image,
                                    left_eye_image,
-                                   face_grid_image.resize((224, 224))),
+                                   face_grid_image),
                                   axis=0)
+
 
     hog_images = np.concatenate((hogImage(face_image),
                                 hogImage(right_eye_image),
@@ -363,7 +400,32 @@ def prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_rig
 
     return tensor_face, tensor_eye_left, tensor_eye_right, tensor_face_grid
 
+def grid_prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_right, image_face_grid, normalize_image):
+    # Convert to the desired color space
+    image_face = image_face.convert(color_space)
+    image_eye_left = image_eye_left.convert(color_space)
+    image_eye_right = image_eye_right.convert(color_space)
+    image_face_grid = image_face_grid.convert(color_space)
 
+    # normalize the image, results in tensors
+    tensor_face = normalize_image(image_face)
+    tensor_eye_left = normalize_image(image_eye_left)
+    tensor_eye_right = normalize_image(image_eye_right)
+    tensor_face_grid = normalize_image(image_face_grid)
+
+    # convert the 3 dimensional array into a 4 dimensional array, making it a batch size of 1
+    tensor_face.unsqueeze_(0)
+    tensor_eye_left.unsqueeze_(0)
+    tensor_eye_right.unsqueeze_(0)
+    tensor_face_grid.unsqueeze_(0)
+
+    # Convert the tensors into
+    tensor_face = torch.autograd.Variable(tensor_face, requires_grad=False)
+    tensor_eye_left = torch.autograd.Variable(tensor_eye_left, requires_grad=False)
+    tensor_eye_right = torch.autograd.Variable(tensor_eye_right, requires_grad=False)
+    tensor_face_grid = torch.autograd.Variable(tensor_face_grid, requires_grad=False)
+
+    return tensor_face, tensor_eye_left, tensor_eye_right, tensor_face_grid
 
 def perspectiveCorrection(im, shape_np):
     # print(shape_np)
