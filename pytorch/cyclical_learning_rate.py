@@ -19,7 +19,7 @@ def decay_function(decay_type, epochs_per_step):
 
 def shape_function(shape_type, step_size):
     if shape_type == 'flat':
-        shape = lambda it: 1.
+        shape = lambda it: 1e-3
     elif shape_type == 'triangular':
         # for a given iteration, determines which cycle it belongs to
         # note that a cycle is 2x steps in the triangular waveform

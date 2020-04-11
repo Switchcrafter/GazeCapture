@@ -30,11 +30,18 @@ class ItrackerImageModel(nn.Module):
     # ZeroPad = (k-1)/2
     def __init__(self, color_space):
         super(ItrackerImageModel, self).__init__()
-        self.model = models.resnet18(pretrained=True)
-        # ToDo For L-channel (greyscale) only model
-        if color_space == 'L':
-            self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.conv = nn.Sequential(*list(self.model.children())[:-2])
+        # self.model = models.resnet18(pretrained=True)
+        # # ToDo For L-channel (greyscale) only model
+        # if color_space == 'L':
+        #     self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        # self.conv = nn.Sequential(*list(self.model.children())[:-2])
+
+        self.model = models.mobilenet_v2(pretrained=True)
+        self.conv = self.model.features
+        self.conv[18][0] = nn.Conv2d(320, 512, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0), bias=False)
+        self.conv[18][1] = nn.BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+
+        # print(self.conv)
 
         # TODO Try fine tuning using RGB color space rather than YCbCr
         #      Fine tuning might be more successful in the same color space
