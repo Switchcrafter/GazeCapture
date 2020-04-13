@@ -211,7 +211,7 @@ def ROIExtractionTask(directory):
     faceGrid = json_read(os.path.join(recDir, 'faceGrid.json'))
     frames = json_read(os.path.join(recDir, 'frames.json'))
     # info = json_read(os.path.join(recDir, 'info.json'))
-    # screen = json_read(os.path.join(recDir, 'screen.json'))
+    screen = json_read(os.path.join(recDir, 'screen.json'))
 
     # prepape output paths
     facePath = preparePath(os.path.join(recDirOut, 'appleFace'))
@@ -246,6 +246,11 @@ def ROIExtractionTask(directory):
         if not allValid[j]:
             continue
 
+        if args.portraitOnly:
+            # Is upright data?
+            if screen['Orientation'][j] != 1:
+                continue
+
         # Load image
         imgFile = os.path.join(recDir, 'frames', '%05d.jpg' % frame)
         if not os.path.isfile(imgFile):
@@ -262,24 +267,22 @@ def ROIExtractionTask(directory):
         imEyeL = cropImage(img, leftEyeBbox[j, :])
         imEyeR = cropImage(img, rightEyeBbox[j, :])
 
+        # Data Mirroring
         if args.rc:
             faceGridPath = preparePath(os.path.join(recDirOut, 'faceGrid'))
             imFaceGrid = generate_grid2(faceBbox[j, :], img)
-            
+
             imFace = cv2.resize(imFace, (256, 256), cv2.INTER_AREA)
             imEyeL = cv2.resize(imEyeL, (256, 256), cv2.INTER_AREA)
             imEyeR = cv2.resize(imEyeR, (256, 256), cv2.INTER_AREA)
             imFaceGrid = cv2.resize(imFaceGrid, (256, 256), cv2.INTER_AREA)
-            
-            PILImage.fromarray(imFaceGrid).save(os.path.join(faceGridPath, '%05d.jpg' % frame), quality=95)
 
         # Save images
         PILImage.fromarray(imFace).save(os.path.join(facePath, '%05d.jpg' % frame), quality=95)
         PILImage.fromarray(imEyeL).save(os.path.join(leftEyePath, '%05d.jpg' % frame), quality=95)
         PILImage.fromarray(imEyeR).save(os.path.join(rightEyePath, '%05d.jpg' % frame), quality=95)
-
-        
-
+        if args.rc:
+            PILImage.fromarray(imFaceGrid).save(os.path.join(faceGridPath, '%05d.jpg' % frame), quality=95)
 
         # Collect metadata
         meta['labelRecNum'] += [int(directory)]
@@ -287,6 +290,27 @@ def ROIExtractionTask(directory):
         meta['labelDotXCam'] += [dotInfo['XCam'][j]]
         meta['labelDotYCam'] += [dotInfo['YCam'][j]]
         meta['labelFaceGrid'] += [faceGridBbox[j, :]]
+
+        if args.mirror:
+            imFace_mirror = cv2.flip(imFace, 1)
+            imEyeL_mirror = cv2.flip(imEyeL, 1)
+            imEyeR_mirror = cv2.flip(imEyeR, 1)
+            PILImage.fromarray(imFace_mirror).save(os.path.join(facePath, '%05d_mirror.jpg' % frame), quality=95)
+            PILImage.fromarray(imEyeL_mirror).save(os.path.join(leftEyePath, '%05d_mirror.jpg' % frame), quality=95)
+            PILImage.fromarray(imEyeR_mirror).save(os.path.join(rightEyePath, '%05d_mirror.jpg' % frame), quality=95)
+            if args.rc:
+                imFaceGrid_mirror = cv2.flip(imFaceGrid, 1)
+                PILImage.fromarray(imFaceGrid_mirror).save(os.path.join(faceGridPath, '%05d_mirror.jpg' % frame), quality=95)
+
+            XFactor, YFactor = -1.0, 1.0 if screen['Orientation'][j] <= 2 else 1.0, -1.0
+            # mirror faceGridBbox
+            f = [24-faceGridBbox[j, 0]-faceGridBbox[j, 2], faceGridBbox[j, 1], faceGridBbox[j, 2], faceGridBbox[j, 3]]
+            # Mirror metadata - Assuming Camera is on the top center
+            meta['labelRecNum'] += [int(directory)]
+            meta['frameIndex'] += [frame]
+            meta['labelDotXCam'] += [XFactor * dotInfo['XCam'][j]]
+            meta['labelDotYCam'] += [YFactor * dotInfo['YCam'][j]]
+            meta['labelFaceGrid'] += [f]
 
     return meta
 
@@ -507,6 +531,8 @@ if __name__ == '__main__':
     parser.add_argument('--metapath', help="metadata path", default="./gc-data-meta/")
     parser.add_argument('--task', help="task name: copyTask, ROIDetectionTask, ROIExtractionTask", default="")
     parser.add_argument('--rc', action='store_true', help="apply rotation correction", default=False)
+    parser.add_argument('--mirror', action='store_true', help="apply data mirroring", default=False)
+    parser.add_argument('--portraitOnly', action='store_true', help="use portrait data only", default=False)
     parser.add_argument('--source_compare', action='store_true', help="compare against source", default=False)
     args = parser.parse_args()
 
@@ -615,7 +641,7 @@ if __name__ == '__main__':
         meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
         meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
         # print(meta)
-        # compareTask(meta)
+        compareTask(meta)
 
 
 
