@@ -310,7 +310,7 @@ class ITrackerData(object):
         else:
             # image loading, transformation and normalization happen in ExternalDataPipeline
             # we just pass imagePaths
-            return row, imFacePath, imEyeLPath, imEyeRPath, faceGridPath, gaze, frame, index
+            return row, imFacePath, imEyeLPath, imEyeRPath, imfaceGridPath, gaze, frame, index
 
     def makeGrid(self, params):
         gridLen = self.gridSize[0] * self.gridSize[1]
