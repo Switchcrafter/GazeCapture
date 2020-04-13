@@ -302,7 +302,7 @@ def ROIExtractionTask(directory):
                 imFaceGrid_mirror = cv2.flip(imFaceGrid, 1)
                 PILImage.fromarray(imFaceGrid_mirror).save(os.path.join(faceGridPath, '%05d_mirror.jpg' % frame), quality=95)
 
-            XFactor, YFactor = -1.0, 1.0 if screen['Orientation'][j] <= 2 else 1.0, -1.0
+            (XFactor, YFactor) = (-1.0, 1.0) if screen['Orientation'][j] <= 2 else (1.0, -1.0)
             # mirror faceGridBbox
             f = [24-faceGridBbox[j, 0]-faceGridBbox[j, 2], faceGridBbox[j, 1], faceGridBbox[j, 2], faceGridBbox[j, 3]]
             # Mirror metadata - Assuming Camera is on the top center
