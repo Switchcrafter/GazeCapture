@@ -231,14 +231,18 @@ def centered_text(infoString, marker='-', length=40):
 
 class Visualizations(object):
     """Plots to Visdom"""
-    def __init__(self, env_name='main'):
-        try:
-            self.viz = visdom.Visdom()
-            # wait until visdom connection is up
-            while self.viz.check_connection() is not True:
-                pass
-        except:
-            print("Can't initialize visdom")
+    def __init__(self, env_name='main', active=False):
+        self.active = active
+        if self.active:
+            try:
+                self.viz = visdom.Visdom()
+                # wait until visdom connection is up
+                while self.viz.check_connection() is not True:
+                    pass
+            except:
+                print("Can't initialize visdom")
+        else:
+            self.viz = None
         # env_name = str(datetime.now().strftime("%d-%m %Hh%M"))
         self.env = env_name
         self.split_plots = {}
@@ -267,49 +271,53 @@ class Visualizations(object):
 
     def resetAll(self):
         # Close all windows in the given environment
-        self.viz.close(None, self.env)
+        if self.active:
+            self.viz.close(None, self.env)
 
     def reset(self):
-        for var_name in self.split_plots:
-            self.closed_windows.append(self.split_plots[var_name])
-        self.split_plots = {}
-        for window in self.closed_windows:
-            # make sure that the window is closed before moving on
-            while self.viz.win_exists(window, self.env):
-                self.viz.close(window, self.env)
-            # remove the closed window
-            self.closed_windows.remove(window)
+        if self.active:
+            for var_name in self.split_plots:
+                self.closed_windows.append(self.split_plots[var_name])
+            self.split_plots = {}
+            for window in self.closed_windows:
+                # make sure that the window is closed before moving on
+                while self.viz.win_exists(window, self.env):
+                    self.viz.close(window, self.env)
+                # remove the closed window
+                self.closed_windows.remove(window)
 
     def plot(self, var_name, split_name, title_name, x, y):
-        if var_name not in self.split_plots:
-            self.split_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
-                legend=[split_name],
-                title=title_name,
-                linecolor=self.getColor(split_name),
-                xlabel='Samples',
-                ylabel=var_name
-            ))
-        else:
-            self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.split_plots[var_name], name=split_name,
-            update = 'append', opts=dict(linecolor=self.getColor(split_name)))
+        if self.active:
+            if var_name not in self.split_plots:
+                self.split_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
+                    legend=[split_name],
+                    title=title_name,
+                    linecolor=self.getColor(split_name),
+                    xlabel='Samples',
+                    ylabel=var_name
+                ))
+            else:
+                self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.split_plots[var_name], name=split_name,
+                update = 'append', opts=dict(linecolor=self.getColor(split_name)))
 
     def plotAll(self, var_name, split_name, title_name, x, y, style='solid'):
-        ytype = 'log' if split_name == "lr" else 'linear'
-        if var_name not in self.epoch_plots:
-            self.epoch_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
-                legend=[split_name],
-                title=title_name,
-                linecolor=self.getColor(split_name),
-                dash=self.getStyle(style),
-                xlabel='Epoch',
-                ytickmin=0,
-                ytickmax=None,
-                ytype=ytype,
-                ylabel=var_name
-            ))
-        else:
-            self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.epoch_plots[var_name], name=split_name,
-            update = 'append', opts=dict(linecolor=self.getColor(split_name), dash=self.getStyle(style)))
+        if self.active:
+            ytype = 'log' if split_name == "lr" else 'linear'
+            if var_name not in self.epoch_plots:
+                self.epoch_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
+                    legend=[split_name],
+                    title=title_name,
+                    linecolor=self.getColor(split_name),
+                    dash=self.getStyle(style),
+                    xlabel='Epoch',
+                    ytickmin=0,
+                    ytickmax=None,
+                    ytype=ytype,
+                    ylabel=var_name
+                ))
+            else:
+                self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.epoch_plots[var_name], name=split_name,
+                update = 'append', opts=dict(linecolor=self.getColor(split_name), dash=self.getStyle(style)))
 
 
 def resize(arr, new_size, filling=None):
