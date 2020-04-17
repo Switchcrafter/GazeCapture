@@ -237,7 +237,7 @@ def main():
 
 def initialize_visualization(args):
     # Initialize the visualization environment open => http://localhost:8097
-    args.vis = Visualizations(args.name)
+    args.vis = Visualizations(args.name, args.visdom)
     args.vis.resetAll()
 
 
