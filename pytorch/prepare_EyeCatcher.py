@@ -198,10 +198,10 @@ def main():
 
         screen_orientation = getScreenOrientation(screen_data)
 
-        progress_bar = SimpleProgressBar(max_value=total_captures, label="")
+        capture_progress_bar = SimpleProgressBar(max_value=total_captures, label=f"{directory_idx:05d}")
 
         for capture_idx, capture in enumerate(captures):
-            progress_bar.update(capture_idx)
+            capture_progress_bar.update(capture_idx + 1)
 
             capture_json_path = os.path.join(data_directory, directory, "frames", capture + ".json")
             capture_jpg_path = os.path.join(data_directory, directory, "frames", capture + ".jpg")
@@ -292,6 +292,8 @@ def main():
             json.dump(faceInfoDict["LeftEye"], write_file)
         with open(os.path.join(output_path, 'dlibRightEye.json'), "w") as write_file:
             json.dump(faceInfoDict["RightEye"], write_file)
+
+        print("")
 
     print("DONE")
 
