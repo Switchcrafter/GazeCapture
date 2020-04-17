@@ -9,6 +9,7 @@ from face_utilities import faceEyeRectsToFaceInfoDict, newFaceInfoDict, find_fac
 from PIL import Image as PILImage  # Pillow
 import numpy as np
 import dateutil.parser
+from Utilities import SimpleProgressBar
 
 
 # Example path is Surface_Pro_4/someuser/00000
@@ -197,8 +198,10 @@ def main():
 
         screen_orientation = getScreenOrientation(screen_data)
 
+        progress_bar = SimpleProgressBar(max_value=total_captures, label="")
+
         for capture_idx, capture in enumerate(captures):
-            print(f"Processing {capture_idx + 1}/{total_captures} - {capture}")
+            progress_bar.update(capture_idx)
 
             capture_json_path = os.path.join(data_directory, directory, "frames", capture + ".json")
             capture_jpg_path = os.path.join(data_directory, directory, "frames", capture + ".jpg")
