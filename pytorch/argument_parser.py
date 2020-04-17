@@ -42,6 +42,7 @@ def parse_commandline_arguments():
     parser.add_argument('--shape_type', default='triangular', help='triangular, flat')
     parser.add_argument('--data_loader', default="cpu", help="cpu, dali_cpu, dali_gpu, dali_gpu_all")
     parser.add_argument('--visdom', action='store_true', default=False, help="Enables Visdom Server")
+    parser.add_argument('--optimizer', default="sgd", help="sgd, adam")
     args = parser.parse_args()
 
     args.device_group = "".join([str(device) for device in args.local_rank])
