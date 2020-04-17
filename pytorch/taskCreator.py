@@ -267,7 +267,7 @@ def ROIExtractionTask(directory):
         imEyeL = cropImage(img, leftEyeBbox[j, :])
         imEyeR = cropImage(img, rightEyeBbox[j, :])
 
-        # Data Mirroring
+        # Rotation Correction FaceGrid
         if args.rc:
             faceGridPath = preparePath(os.path.join(recDirOut, 'faceGrid'))
             imFaceGrid = generate_grid2(faceBbox[j, :], img)
@@ -291,6 +291,7 @@ def ROIExtractionTask(directory):
         meta['labelDotYCam'] += [dotInfo['YCam'][j]]
         meta['labelFaceGrid'] += [faceGridBbox[j, :]]
 
+        # Data Mirroring
         if args.mirror:
             imFace_mirror = cv2.flip(imFace, 1)
             imEyeL_mirror = cv2.flip(imEyeL, 1)
