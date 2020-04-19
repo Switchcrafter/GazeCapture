@@ -115,7 +115,8 @@ def main():
                                 "xpts": dotInfo["XPts"][frameIndex],
                                 "ypts": dotInfo["YPts"][frameIndex],
                                 "xcam": dotInfo["XCam"][frameIndex],
-                                "ycam": dotInfo["YCam"][frameIndex]
+                                "ycam": dotInfo["YCam"][frameIndex],
+                                "confidence": dotInfo["Confidence"][frameIndex]
                             }
                         }
 
@@ -164,7 +165,26 @@ def main():
                         gazePredictionImagePixelXFromCamera = gazePredictionScreenPixelXFromCamera * xScaleScreenToImage
                         gazePredictionImagePixelYFromCamera = gazePredictionScreenPixelYFromCamera * yScaleScreenToImage
 
+                        gazeCameraConfidence = frameInput["gazePoint"]["confidence"]
+
                         draw = ImageDraw.Draw(frameImage)
+
+                        # Draw a filled yellow circle below the crosshair to highlight the gaze confidence
+                        # Note: the yellow circle may fully obscure the white background circle, that's OK
+                        if gazeCameraConfidence < 10000:
+                            draw_filled_circle(draw,
+                                gazeTargetImagePixelX,
+                                gazeTargetImagePixelY,
+                                fill=(255,255,0),
+                                radius=gazeCameraConfidence)
+                        else:
+                            # Draw a filled white circle below the crosshair to help deal with contrast issues
+                            draw_filled_circle(draw,
+                                       gazeTargetImagePixelX,
+                                       gazeTargetImagePixelY,
+                                       fill=(255,255,255))
+
+
 
                         draw_crosshair(draw,
                                        gazeTargetImagePixelX,
@@ -179,16 +199,19 @@ def main():
                                        fill=(160, 0, 0),
                                        width=3)
 
-                        draw_circle(draw,
-                                    gazePredictionImagePixelXFromCamera,
-                                    gazePredictionImagePixelYFromCamera,
-                                    fill=(0, 128, 0),
-                                    width=3)
-                        draw_circle(draw,
-                                    gazePredictionImagePixelXFromCamera,
-                                    gazePredictionImagePixelYFromCamera,
-                                    fill=(0, 128, 0),
-                                    width=2)
+                        # This is the predicted location
+                        draw_filled_circle(draw,
+                            gazePredictionImagePixelXFromCamera,
+                            gazePredictionImagePixelYFromCamera,
+                            fill=(128,255,128),
+                            radius=20)
+                        draw_crosshair(draw,
+                            gazePredictionImagePixelXFromCamera,
+                            gazePredictionImagePixelYFromCamera,
+                            fill=(0, 160, 0),
+                            radius=20,
+                            width=3)
+
 
                         filename = f"{outputPath}/{sampleId}/{frameId}_overlay.jpg"
 
@@ -221,5 +244,9 @@ def draw_circle(draw, center_x, center_y, radius=25, fill=(0, 0, 0), width=5):
              fill=fill,
              width=width)
 
+def draw_filled_circle(draw, center_x, center_y, radius=25, fill=(0, 0, 0)):
+    draw.ellipse((center_x - radius, center_y - radius) + (center_x + radius, center_y + radius),
+             outline=fill,
+             fill=fill)
 
 main()
