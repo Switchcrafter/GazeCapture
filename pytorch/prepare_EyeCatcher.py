@@ -110,11 +110,11 @@ def main():
     output_directory = args.output_path
 
     if data_directory is None:
-        os.error("Error: must specify --data_dir")
+        os.error("Error: must specify --data_path, like /data/EyeCapture/200407")
         return
 
     if output_directory is None:
-        os.error("Error: must specify --output_dir")
+        os.error("Error: must specify --output_path")
         return
 
     directories = sorted(findCaptureSessionDirs(data_directory))
@@ -147,6 +147,7 @@ def main():
             "YPts": [],
             "XCam": [],
             "YCam": [],
+            "Confidence": [],
             "Time": []
         }
 
@@ -248,6 +249,7 @@ def main():
                 #                  "YPts": [ 284, 284, ... ],
                 #                  "XCam": [ 1.064, 1.064, ... ],
                 #                  "YCam": [ -6.0055, -6.0055, ... ],
+                #                  "Confidence": [ 59.3, 94.2, ... ],
                 #                  "Time": [ 0.205642, 0.288975, ... ] }
                 #
                 # PositionIndex == DotNum
@@ -260,12 +262,14 @@ def main():
                                           screen_data["W"],  # widthScreenInPoints
                                           screen_data["H"],  # heightScreenInPoints
                                           deviceName=info_data["DeviceName"])
+                confidence = capture_data["Confidence"]
 
                 dotinfo["DotNum"].append(0)  # TODO replace with dot number as needed
                 dotinfo["XPts"].append(x_raw)
                 dotinfo["YPts"].append(y_raw)
                 dotinfo["XCam"].append(x_cam)
                 dotinfo["YCam"].append(y_cam)
+                dotinfo["Confidence"].append(confidence)
                 dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
 
                 # Convert image from PNG to JPG
