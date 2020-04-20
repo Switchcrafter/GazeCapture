@@ -300,7 +300,7 @@ def initialize_hyper_parameters(args, datasets, model):
         optimizer = torch.optim.SGD(model.parameters(), START_LR,
                                     momentum=MOMENTUM,
                                     weight_decay=WEIGHT_DECAY)
-                                    
+
     batch_count = math.ceil(datasets['train'].size / args.batch_size)
     step_size = EPOCHS_PER_STEP * batch_count
     clr = cyclical_learning_rate.cyclical_lr(batch_count,

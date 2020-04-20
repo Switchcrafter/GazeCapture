@@ -99,6 +99,9 @@ def RC_cropImage(img, bbox):
     bbox = np.array(bbox, int)
     return crop_rect(img, bbox)
 
+def marker(num):
+    markerList = ['','.','^','s','+','D','o','p','P','X','$f$']
+    return markerList[num]
 
 # Example path is Surface_Pro_4/someuser/00000
 def findCaptureSessionDirs(path):
@@ -181,13 +184,13 @@ def ListLoader(listData, numWorkers, i):
 ################################################################################
 
 # Tasks
-def noneTask(fileName):
+def noneTask(fileName, jobId):
     return fileName
 
-def cubeTask(x):
+def cubeTask(x, jobId):
     return x**3
 
-def copyTask(filepath):
+def copyTask(filepath, jobId):
     from_dir, from_filename, from_ext = getDirNameExt(filepath)
     relative_path = getRelativePath(from_dir, args.input)
     to_dir = os.path.join(args.output, relative_path)
@@ -197,11 +200,11 @@ def copyTask(filepath):
     shutil.copy(filepath, to_file)
     return to_file
 
-def resizeTask(filePath):
+def resizeTask(filePath, jobId):
     pass
 
 # Equivalent: generate_faces
-def ROIDetectionTask(directory):
+def ROIDetectionTask(directory, jobId):
     recording_path = os.path.join(args.input, directory)
     output_path = os.path.join(args.output, directory)
     # Read information for valid frames
@@ -239,7 +242,7 @@ def ROIDetectionTask(directory):
     return
 
 # Equivalent: prepareDataset
-def ROIExtractionTask(directory):
+def ROIExtractionTask(directory, jobId):
 
     recDir = os.path.join(args.input, directory)
     dlibDir = os.path.join(args.metapath, directory)
@@ -436,7 +439,7 @@ def compareTask(meta):
     if totalMatch:
         print('The new metadata.mat is an exact match to the reference from GitHub (including ordering)')
 
-def plotErrorTask(All_RMS_Errors):
+def plotErrorTask(All_RMS_Errors, jobId):
     # Make a data frame
     rms_object = {'x': range(1, 31)}
     for key in All_RMS_Errors.keys():
@@ -450,20 +453,18 @@ def plotErrorTask(All_RMS_Errors):
     # create a color palette
     palette = plt.get_cmap('Set1')
 
+    fig, (ax1, ax2) = plt.subplots(1, 2, sharex=True, sharey=True)
+
     # multiple line plot
     num = 0
     for column in df_rms.drop('x', axis=1):
         num += 1
-        plt.plot(df_rms['x'], df_rms[column], marker='', color=palette(num), linewidth=1, alpha=0.9, label=column)
-
-    # Add legend
-    plt.legend(loc=2, ncol=2)
+        ax1.plot(df_rms['x'], df_rms[column], marker=marker(num), color=palette(num), linewidth=2, alpha=0.9, label=column)
 
     # Add titles
-    plt.title("RMS Errors by Epoch", loc='left', fontsize=12, fontweight=0, color='orange')
-    plt.xlabel("Epoch")
-    plt.ylabel("RMS Error")
-    plt.show()
+    ax1.set_title("RMS Errors by Epoch", loc='left', fontsize=12, fontweight=0, color='red')
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("RMS Error")
 
     best_rms_object = {'x': range(1, 31)}
     for key in All_RMS_Errors.keys():
@@ -472,28 +473,23 @@ def plotErrorTask(All_RMS_Errors):
     # Make a data frame
     df_best_rms = pd.DataFrame(best_rms_object)
 
-    # style
-    plt.style.use('seaborn-darkgrid')
-
-    # create a color palette
-    palette = plt.get_cmap('Set1')
-
     # multiple line plot
     num = 0
     for column in df_best_rms.drop('x', axis=1):
         num += 1
-        plt.plot(df_best_rms['x'], df_best_rms[column], marker='', color=palette(num), linewidth=1, alpha=0.9, label=column)
-
-    # Add legend
-    plt.legend(loc=2, ncol=2)
+        ax2.plot(df_best_rms['x'], df_best_rms[column], marker=marker(num), color=palette(num), linewidth=2, alpha=0.9, label=column)
 
     # Add titles
-    plt.title("Best RMS Errors by Epoch", loc='left', fontsize=12, fontweight=0, color='orange')
-    plt.xlabel("Epoch")
-    plt.ylabel("RMS Error")
+    ax2.set_title("Best RMS Errors by Epoch", loc='left', fontsize=12, fontweight=0, color='red')
+    ax2.set_xlabel("Epoch")
+    ax2.set_ylabel("RMS Error")
+
+    # Add legend
+    # plt.legend(loc=2, ncol=2)
+    plt.legend(bbox_to_anchor=(0.6, 1), loc='upper left', borderaxespad=0.)
     plt.show()
 
-def plotErrorHeatmapTask(results_path):
+def plotErrorHeatmapTask(results_path, jobId):
     jsondata = json_read(results_path)
     x, y, c = [], [], []
 
@@ -514,7 +510,7 @@ def plotErrorHeatmapTask(results_path):
     plt.title('Heatmap of Error')
     plt.show()
 
-def plotGazePointHeatmapTask(results_path):
+def plotGazePointHeatmapTask(results_path, jobId):
     jsondata = json_read(results_path)
     x, y, c = [], [], []
     gazepoints = {}
@@ -546,7 +542,7 @@ def plotGazePointHeatmapTask(results_path):
     plt.ylabel('Y (cm)')
     plt.show()
 
-def plotErrorHistogramTask(results_path):
+def plotErrorHistogramTask(results_path, jobId):
     jsondata = json_read(results_path)
     x = []
     for datapoint in jsondata:
@@ -560,7 +556,7 @@ def plotErrorHistogramTask(results_path):
     plt.title('Histogram of Error')
     plt.show()
 
-def parseResultsTask(results_path):
+def parseResultsTask(results_path, jobId):
     jsondata = json_read(results_path)
     csvwriter = csv.writer(open("best_results.csv", "w", newline=''))
     csvwriter.writerow(
@@ -575,192 +571,174 @@ def parseResultsTask(results_path):
             datapoint["gazePrediction"][1], distance])
 
 
-def prepareEyeCatcherTask(directory):
-    data_directory = args.input
-    output_directory = args.output
+def prepareEyeCatcherTask(directory, directory_idx):
 
-    if data_directory is None:
-        os.error("Error: must specify --data_dir")
-        return
+    captures = sorted(findCapturesInSession(os.path.join(args.input, directory)), key=str)
+    total_captures = len(captures)
 
-    if output_directory is None:
-        os.error("Error: must specify --output_dir")
-        return
+    # Read directory level json
+    deviceMetrics_data = json_read(os.path.join(args.input, directory, "deviceMetrics.json"))
+    info_data = json_read(os.path.join(args.input, directory, "info.json"))
+    screen_data = json_read(os.path.join(args.input, directory, "screen.json"))
 
-    directories = sorted(findCaptureSessionDirs(data_directory))
-    total_directories = len(directories)
-    print(f"Found {total_directories} directories")
+    # dotinfo.json - { "DotNum": [ 0, 0, ... ],
+    #                  "XPts": [ 160, 160, ... ],
+    #                  "YPts": [ 284, 284, ... ],
+    #                  "XCam": [ 1.064, 1.064, ... ],
+    #                  "YCam": [ -6.0055, -6.0055, ... ],
+    #                  "Time": [ 0.205642, 0.288975, ... ] }
+    #
+    # PositionIndex == DotNum
+    # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
+    dotinfo = {
+        "DotNum": [],
+        "XPts": [],
+        "YPts": [],
+        "XCam": [],
+        "YCam": [],
+        "Time": []
+    }
 
-    for directory_idx, directory in enumerate(directories):
-        print(f"Processing {directory_idx + 1}/{total_directories} - {directory}")
+    output_path = os.path.join(args.output, f"{directory_idx:05d}")
+    output_frame_path = os.path.join(output_path, "frames")
 
-        captures = sorted(findCapturesInSession(os.path.join(data_directory, directory)), key=str)
-        total_captures = len(captures)
+    faceInfoDict = newFaceInfoDict()
 
-        deviceMetrics_data = json_read(os.path.join(data_directory, directory, "deviceMetrics.json"))
-        info_data = json_read(os.path.join(data_directory, directory, "info.json"))
-        screen_data = json_read(os.path.join(data_directory, directory, "screen.json"))
+    # frames.json - ["00000.jpg","00001.jpg"]
+    frames = []
 
-        # dotinfo.json - { "DotNum": [ 0, 0, ... ],
-        #                  "XPts": [ 160, 160, ... ],
-        #                  "YPts": [ 284, 284, ... ],
-        #                  "XCam": [ 1.064, 1.064, ... ],
-        #                  "YCam": [ -6.0055, -6.0055, ... ],
-        #                  "Time": [ 0.205642, 0.288975, ... ] }
-        #
-        # PositionIndex == DotNum
-        # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
-        dotinfo = {
-            "DotNum": [],
-            "XPts": [],
-            "YPts": [],
-            "XCam": [],
-            "YCam": [],
-            "Time": []
-        }
+    facegrid = {
+        "X": [],
+        "Y": [],
+        "W": [],
+        "H": [],
+        "IsValid": []
+    }
 
-        output_path = os.path.join(output_directory, f"{directory_idx:05d}")
-        output_frame_path = os.path.join(output_path, "frames")
+    if directory_idx % 10 < 8:
+        dataset_split = "train"
+    elif directory_idx % 10 < 9:
+        dataset_split = "val"
+    else:
+        dataset_split = "test"
 
-        faceInfoDict = newFaceInfoDict()
+    # info.json - {"TotalFrames":99,"NumFaceDetections":97,"NumEyeDetections":56,"Dataset":"train","DeviceName":"iPhone 6"}
+    info = {
+        "TotalFrames": total_captures,
+        "NumFaceDetections": 0,
+        "NumEyeDetections": 0,
+        "Dataset": dataset_split,
+        "DeviceName": info_data["DeviceName"]
+    }
 
-        # frames.json - ["00000.jpg","00001.jpg"]
-        frames = []
+    # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
+    screen = {
+        "H": [],
+        "W": [],
+        "Orientation": []
+    }
 
-        facegrid = {
-            "X": [],
-            "Y": [],
-            "W": [],
-            "H": [],
-            "IsValid": []
-        }
+    if not os.path.exists(args.output):
+        os.mkdir(args.output)
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
+    if not os.path.exists(output_frame_path):
+        os.mkdir(output_frame_path)
 
-        if directory_idx % 10 < 8:
-            dataset_split = "train"
-        elif directory_idx % 10 < 9:
-            dataset_split = "val"
-        else:
-            dataset_split = "test"
+    screen_orientation = getScreenOrientation(screen_data)
 
-        # info.json - {"TotalFrames":99,"NumFaceDetections":97,"NumEyeDetections":56,"Dataset":"train","DeviceName":"iPhone 6"}
-        info = {
-            "TotalFrames": total_captures,
-            "NumFaceDetections": 0,
-            "NumEyeDetections": 0,
-            "Dataset": dataset_split,
-            "DeviceName": info_data["DeviceName"]
-        }
+    for capture_idx, capture in enumerate(captures):
+        # print(f"Processing {capture_idx + 1}/{total_captures} - {capture}")
 
-        # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
-        screen = {
-            "H": [],
-            "W": [],
-            "Orientation": []
-        }
+        capture_json_path = os.path.join(args.input, directory, "frames", capture + ".json")
+        capture_jpg_path = os.path.join(args.input, directory, "frames", capture + ".jpg")
 
-        if not os.path.exists(output_directory):
-            os.mkdir(output_directory)
-        if not os.path.exists(output_path):
-            os.mkdir(output_path)
-        if not os.path.exists(output_frame_path):
-            os.mkdir(output_frame_path)
+        if os.path.isfile(capture_json_path) and os.path.isfile(capture_jpg_path):
+            capture_data = json_read(capture_json_path)
 
-        screen_orientation = getScreenOrientation(screen_data)
+            capture_image = PILImage.open(capture_jpg_path)
+            capture_image_np = np.array(capture_image)  # dlib wants images in numpy array format
 
-        for capture_idx, capture in enumerate(captures):
-            print(f"Processing {capture_idx + 1}/{total_captures} - {capture}")
+            shape_np, isValid = find_face_dlib(capture_image_np)
 
-            capture_json_path = os.path.join(data_directory, directory, "frames", capture + ".json")
-            capture_jpg_path = os.path.join(data_directory, directory, "frames", capture + ".jpg")
+            info["NumFaceDetections"] = info["NumFaceDetections"] + 1
 
-            if os.path.isfile(capture_json_path) and os.path.isfile(capture_jpg_path):
-                capture_data = json_read(capture_json_path)
+            face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
 
-                capture_image = PILImage.open(capture_jpg_path)
-                capture_image_np = np.array(capture_image)  # dlib wants images in numpy array format
-
-                shape_np, isValid = find_face_dlib(capture_image_np)
-
-                info["NumFaceDetections"] = info["NumFaceDetections"] + 1
-
-                face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
-
-                # facegrid.json - { "X": [ 6, 6, ... ], "Y": [ 10, 10, ... ], "W": [ 13, 13, ... ], "H": [ 13, 13, ... ], "IsValid": [ 1, 1, ... ] }
-                if isValid:
-                    faceGridX, faceGridY, faceGridW, faceGridH = generate_face_grid_rect(face_rect, capture_image.width,
-                                                                                         capture_image.height)
-                else:
-                    faceGridX = 0
-                    faceGridY = 0
-                    faceGridW = 0
-                    faceGridH = 0
-
-                facegrid["X"].append(faceGridX)
-                facegrid["Y"].append(faceGridY)
-                facegrid["W"].append(faceGridW)
-                facegrid["H"].append(faceGridH)
-                facegrid["IsValid"].append(isValid)
-
-                faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
-                                                                       right_eye_rect, isValid)
-                info["NumEyeDetections"] = info["NumEyeDetections"] + 1
-
-                # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
-                screen["H"].append(screen_data['H'])
-                screen["W"].append(screen_data['W'])
-                screen["Orientation"].append(screen_orientation)
-
-                # dotinfo.json - { "DotNum": [ 0, 0, ... ],
-                #                  "XPts": [ 160, 160, ... ],
-                #                  "YPts": [ 284, 284, ... ],
-                #                  "XCam": [ 1.064, 1.064, ... ],
-                #                  "YCam": [ -6.0055, -6.0055, ... ],
-                #                  "Time": [ 0.205642, 0.288975, ... ] }
-                #
-                # PositionIndex == DotNum
-                # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
-                x_raw = capture_data["XRaw"]
-                y_raw = capture_data["YRaw"]
-                x_cam, y_cam = screen2cam(x_raw,  # xScreenInPoints
-                                          y_raw,  # yScreenInPoints
-                                          screen_orientation,  # orientation,
-                                          screen_data["W"],  # widthScreenInPoints
-                                          screen_data["H"],  # heightScreenInPoints
-                                          deviceName=info_data["DeviceName"])
-
-                dotinfo["DotNum"].append(0)  # TODO replace with dot number as needed
-                dotinfo["XPts"].append(x_raw)
-                dotinfo["YPts"].append(y_raw)
-                dotinfo["XCam"].append(x_cam)
-                dotinfo["YCam"].append(y_cam)
-                dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
-
-                # Convert image from PNG to JPG
-                frame_name = str(f"{capture_idx:05d}.jpg")
-                frames.append(frame_name)
-
-                shutil.copyfile(capture_jpg_path, os.path.join(output_frame_path, frame_name))
+            # facegrid.json - { "X": [ 6, 6, ... ], "Y": [ 10, 10, ... ], "W": [ 13, 13, ... ], "H": [ 13, 13, ... ], "IsValid": [ 1, 1, ... ] }
+            if isValid:
+                faceGridX, faceGridY, faceGridW, faceGridH = generate_face_grid_rect(face_rect, capture_image.width,
+                                                                                        capture_image.height)
             else:
-                print(f"Error processing capture {capture}")
+                faceGridX = 0
+                faceGridY = 0
+                faceGridW = 0
+                faceGridH = 0
 
-        with open(os.path.join(output_path, 'frames.json'), "w") as write_file:
-            json.dump(frames, write_file)
-        with open(os.path.join(output_path, 'screen.json'), "w") as write_file:
-            json.dump(screen, write_file)
-        with open(os.path.join(output_path, 'info.json'), "w") as write_file:
-            json.dump(info, write_file)
-        with open(os.path.join(output_path, 'dotInfo.json'), "w") as write_file:
-            json.dump(dotinfo, write_file)
-        with open(os.path.join(output_path, 'faceGrid.json'), "w") as write_file:
-            json.dump(facegrid, write_file)
-        with open(os.path.join(output_path, 'dlibFace.json'), "w") as write_file:
-            json.dump(faceInfoDict["Face"], write_file)
-        with open(os.path.join(output_path, 'dlibLeftEye.json'), "w") as write_file:
-            json.dump(faceInfoDict["LeftEye"], write_file)
-        with open(os.path.join(output_path, 'dlibRightEye.json'), "w") as write_file:
-            json.dump(faceInfoDict["RightEye"], write_file)
+            facegrid["X"].append(faceGridX)
+            facegrid["Y"].append(faceGridY)
+            facegrid["W"].append(faceGridW)
+            facegrid["H"].append(faceGridH)
+            facegrid["IsValid"].append(isValid)
 
+            faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
+                                                                    right_eye_rect, isValid)
+            info["NumEyeDetections"] = info["NumEyeDetections"] + 1
 
+            # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
+            screen["H"].append(screen_data['H'])
+            screen["W"].append(screen_data['W'])
+            screen["Orientation"].append(screen_orientation)
+
+            # dotinfo.json - { "DotNum": [ 0, 0, ... ],
+            #                  "XPts": [ 160, 160, ... ],
+            #                  "YPts": [ 284, 284, ... ],
+            #                  "XCam": [ 1.064, 1.064, ... ],
+            #                  "YCam": [ -6.0055, -6.0055, ... ],
+            #                  "Time": [ 0.205642, 0.288975, ... ] }
+            #
+            # PositionIndex == DotNum
+            # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
+            x_raw = capture_data["XRaw"]
+            y_raw = capture_data["YRaw"]
+            x_cam, y_cam = screen2cam(x_raw,  # xScreenInPoints
+                                        y_raw,  # yScreenInPoints
+                                        screen_orientation,  # orientation,
+                                        screen_data["W"],  # widthScreenInPoints
+                                        screen_data["H"],  # heightScreenInPoints
+                                        deviceName=info_data["DeviceName"])
+
+            dotinfo["DotNum"].append(0)  # TODO replace with dot number as needed
+            dotinfo["XPts"].append(x_raw)
+            dotinfo["YPts"].append(y_raw)
+            dotinfo["XCam"].append(x_cam)
+            dotinfo["YCam"].append(y_cam)
+            dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
+
+            # Convert image from PNG to JPG
+            frame_name = str(f"{capture_idx:05d}.jpg")
+            frames.append(frame_name)
+
+            shutil.copyfile(capture_jpg_path, os.path.join(output_frame_path, frame_name))
+        else:
+            print(f"Error processing capture {capture}")
+
+    with open(os.path.join(output_path, 'frames.json'), "w") as write_file:
+        json.dump(frames, write_file)
+    with open(os.path.join(output_path, 'screen.json'), "w") as write_file:
+        json.dump(screen, write_file)
+    with open(os.path.join(output_path, 'info.json'), "w") as write_file:
+        json.dump(info, write_file)
+    with open(os.path.join(output_path, 'dotInfo.json'), "w") as write_file:
+        json.dump(dotinfo, write_file)
+    with open(os.path.join(output_path, 'faceGrid.json'), "w") as write_file:
+        json.dump(facegrid, write_file)
+    with open(os.path.join(output_path, 'dlibFace.json'), "w") as write_file:
+        json.dump(faceInfoDict["Face"], write_file)
+    with open(os.path.join(output_path, 'dlibLeftEye.json'), "w") as write_file:
+        json.dump(faceInfoDict["LeftEye"], write_file)
+    with open(os.path.join(output_path, 'dlibRightEye.json'), "w") as write_file:
+        json.dump(faceInfoDict["RightEye"], write_file)
 
 
 # all tasks are handled here

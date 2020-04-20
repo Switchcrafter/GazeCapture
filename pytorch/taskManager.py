@@ -19,7 +19,7 @@ def print_sysinfo():
 
 
 def worker(taskFunction, dataSample, workerId, jobId):
-    result = taskFunction(dataSample)
+    result = taskFunction(dataSample, jobId)
     return (jobId, result)
 
 def job(taskFunction, taskData, dataLoader, numWorkers = multiprocessing.cpu_count()):
