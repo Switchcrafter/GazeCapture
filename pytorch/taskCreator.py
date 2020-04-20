@@ -146,7 +146,6 @@ def getScreenOrientation(capture_data):
 
     return orientation
 
-
 def getCaptureTimeString(capture_data):
     sessiontime = dateutil.parser.parse(capture_data["SessionTimestamp"])
     currenttime = dateutil.parser.parse(capture_data["Timestamp"])
@@ -171,6 +170,16 @@ def getDirList(path, regexString):
     folders = [dirName for dirName in os.listdir(path) if nameFormat.match(dirName)]
     return folders
 
+def getCaptureSessionDirList(path):
+    session_paths = []
+    devices = os.listdir(path)
+    for device in devices:
+        users = os.listdir(os.path.join(path, device))
+        for user in users:
+            sessions = sorted(os.listdir(os.path.join(path, device, user)), key=str)
+            for session in sessions:
+                session_paths.append(os.path.join(device, user, session))
+    return session_paths
 ################################################################################
 ## Dataloaders
 ################################################################################
@@ -203,6 +212,165 @@ def copyTask(filepath, jobId):
 def resizeTask(filePath, jobId):
     pass
 
+def prepareEyeCatcherTask(directory, directory_idx):
+    captures = sorted(findCapturesInSession(os.path.join(args.input, directory)), key=str)
+    total_captures = len(captures)
+
+    # Read directory level json
+    deviceMetrics_data = json_read(os.path.join(args.input, directory, "deviceMetrics.json"))
+    info_data = json_read(os.path.join(args.input, directory, "info.json"))
+    screen_data = json_read(os.path.join(args.input, directory, "screen.json"))
+
+    # dotinfo.json - { "DotNum": [ 0, 0, ... ],
+    #                  "XPts": [ 160, 160, ... ],
+    #                  "YPts": [ 284, 284, ... ],
+    #                  "XCam": [ 1.064, 1.064, ... ],
+    #                  "YCam": [ -6.0055, -6.0055, ... ],
+    #                  "Time": [ 0.205642, 0.288975, ... ] }
+    #
+    # PositionIndex == DotNum
+    # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
+    dotinfo = {
+        "DotNum": [],
+        "XPts": [],
+        "YPts": [],
+        "XCam": [],
+        "YCam": [],
+        "Time": []
+    }
+
+    output_path = os.path.join(args.output, f"{directory_idx:05d}")
+    output_frame_path = os.path.join(output_path, "frames")
+
+    faceInfoDict = newFaceInfoDict()
+
+    # frames.json - ["00000.jpg","00001.jpg"]
+    frames = []
+
+    facegrid = {
+        "X": [],
+        "Y": [],
+        "W": [],
+        "H": [],
+        "IsValid": []
+    }
+
+    if directory_idx % 10 < 8:
+        dataset_split = "train"
+    elif directory_idx % 10 < 9:
+        dataset_split = "val"
+    else:
+        dataset_split = "test"
+
+    # info.json - {"TotalFrames":99,"NumFaceDetections":97,"NumEyeDetections":56,"Dataset":"train","DeviceName":"iPhone 6"}
+    info = {
+        "TotalFrames": total_captures,
+        "NumFaceDetections": 0,
+        "NumEyeDetections": 0,
+        "Dataset": dataset_split,
+        "DeviceName": info_data["DeviceName"]
+    }
+
+    # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
+    screen = {
+        "H": [],
+        "W": [],
+        "Orientation": []
+    }
+
+    # ensure the output directories exist
+    preparePath(args.output)
+    preparePath(output_path)
+    preparePath(output_frame_path)
+
+    screen_orientation = getScreenOrientation(screen_data)
+    for capture_idx, capture in enumerate(captures):
+        # print(f"Processing {capture_idx + 1}/{total_captures} - {capture}")
+
+        capture_json_path = os.path.join(args.input, directory, "frames", capture + ".json")
+        capture_jpg_path = os.path.join(args.input, directory, "frames", capture + ".jpg")
+        if os.path.isfile(capture_json_path) and os.path.isfile(capture_jpg_path):
+            capture_data = json_read(capture_json_path)
+            capture_image = PILImage.open(capture_jpg_path)
+            capture_image_np = np.array(capture_image)  # dlib wants images in numpy array format
+
+            shape_np, isValid = find_face_dlib(capture_image_np)
+            info["NumFaceDetections"] = info["NumFaceDetections"] + 1
+            if args.rc:
+                face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
+                faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
+                                                                        right_eye_rect, isValid)
+            else:
+                face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
+                faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
+                                                                        right_eye_rect, isValid)
+
+            # facegrid.json - { "X": [ 6, 6, ... ], "Y": [ 10, 10, ... ], "W": [ 13, 13, ... ], "H": [ 13, 13, ... ], "IsValid": [ 1, 1, ... ] }
+            if isValid:
+                faceGridX, faceGridY, faceGridW, faceGridH = generate_face_grid_rect(face_rect, capture_image.width,
+                                                                                        capture_image.height)
+            else:
+                faceGridX = 0
+                faceGridY = 0
+                faceGridW = 0
+                faceGridH = 0
+
+            facegrid["X"].append(faceGridX)
+            facegrid["Y"].append(faceGridY)
+            facegrid["W"].append(faceGridW)
+            facegrid["H"].append(faceGridH)
+            facegrid["IsValid"].append(isValid)
+
+            
+            info["NumEyeDetections"] = info["NumEyeDetections"] + 1
+            # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
+            screen["H"].append(screen_data['H'])
+            screen["W"].append(screen_data['W'])
+            screen["Orientation"].append(screen_orientation)
+
+            # dotinfo.json - { "DotNum": [ 0, 0, ... ],
+            #                  "XPts": [ 160, 160, ... ],
+            #                  "YPts": [ 284, 284, ... ],
+            #                  "XCam": [ 1.064, 1.064, ... ],
+            #                  "YCam": [ -6.0055, -6.0055, ... ],
+            #                  "Time": [ 0.205642, 0.288975, ... ] }
+            #
+            # PositionIndex == DotNum
+            # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
+            x_raw = capture_data["XRaw"]
+            y_raw = capture_data["YRaw"]
+            x_cam, y_cam = screen2cam(x_raw,  # xScreenInPoints
+                                        y_raw,  # yScreenInPoints
+                                        screen_orientation,  # orientation,
+                                        screen_data["W"],  # widthScreenInPoints
+                                        screen_data["H"],  # heightScreenInPoints
+                                        deviceName=info_data["DeviceName"])
+
+            dotinfo["DotNum"].append(0)  # TODO replace with dot number as needed
+            dotinfo["XPts"].append(x_raw)
+            dotinfo["YPts"].append(y_raw)
+            dotinfo["XCam"].append(x_cam)
+            dotinfo["YCam"].append(y_cam)
+            dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
+
+            # Convert image from PNG to JPG
+            frame_name = str(f"{capture_idx:05d}.jpg")
+            frames.append(frame_name)
+
+            shutil.copyfile(capture_jpg_path, os.path.join(output_frame_path, frame_name))
+        else:
+            print(f"Error processing capture {capture}")
+
+    # write json files
+    json_write(os.path.join(output_path, 'frames.json'), frames)
+    json_write(os.path.join(output_path, 'screen.json'), screen)
+    json_write(os.path.join(output_path, 'dotInfo.json'), dotinfo)
+    json_write(os.path.join(output_path, 'faceGrid.json'), facegrid)
+    # write the Face, LeftEye and RightEye
+    json_write(os.path.join(output_path, 'dlibFace.json'), faceInfoDict["Face"])
+    json_write(os.path.join(output_path, 'dlibLeftEye.json'), faceInfoDict["LeftEye"])
+    json_write(os.path.join(output_path, 'dlibRightEye.json'), faceInfoDict["RightEye"])
+    
 # Equivalent: generate_faces
 def ROIDetectionTask(directory, jobId):
     recording_path = os.path.join(args.input, directory)
@@ -255,6 +423,9 @@ def ROIExtractionTask(directory, jobId):
         'labelDotXCam': [],
         'labelDotYCam': [],
         'labelFaceGrid': [],
+        'labelTrain': [],
+        'labelVal': [],
+        'labelTest': []
     }
 
     # Read metadata JSONs from metapath
@@ -266,7 +437,7 @@ def ROIExtractionTask(directory, jobId):
     dotInfo = json_read(os.path.join(recDir, 'dotInfo.json'))
     faceGrid = json_read(os.path.join(recDir, 'faceGrid.json'))
     frames = json_read(os.path.join(recDir, 'frames.json'))
-    # info = json_read(os.path.join(recDir, 'info.json'))
+    info = json_read(os.path.join(recDir, 'info.json'))
     screen = json_read(os.path.join(recDir, 'screen.json'))
 
     # prepape output paths
@@ -346,6 +517,10 @@ def ROIExtractionTask(directory, jobId):
         meta['labelDotXCam'] += [dotInfo['XCam'][j]]
         meta['labelDotYCam'] += [dotInfo['YCam'][j]]
         meta['labelFaceGrid'] += [faceGridBbox[j, :]]
+        split = info["Dataset"]
+        meta['labelTrain'] += [split == "train"]
+        meta['labelVal'] += [split == "val"]
+        meta['labelTest'] += [split == "test"]
 
         # Data Mirroring
         if args.mirror:
@@ -368,52 +543,56 @@ def ROIExtractionTask(directory, jobId):
             meta['labelDotXCam'] += [XFactor * dotInfo['XCam'][j]]
             meta['labelDotYCam'] += [YFactor * dotInfo['YCam'][j]]
             meta['labelFaceGrid'] += [f]
+            meta['labelTrain'] += [split == "train"]
+            meta['labelVal'] += [split == "val"]
+            meta['labelTest'] += [split == "test"]
 
     return meta
 
 def compareTask(meta):
-    # Load reference metadata
-    print('Will compare to the reference GitHub dataset metadata.mat...')
-    reference = sio.loadmat('./reference_metadata.mat', struct_as_record=False)
-    reference['labelRecNum'] = reference['labelRecNum'].flatten()
-    reference['frameIndex'] = reference['frameIndex'].flatten()
-    reference['labelDotXCam'] = reference['labelDotXCam'].flatten()
-    reference['labelDotYCam'] = reference['labelDotYCam'].flatten()
-    reference['labelTrain'] = reference['labelTrain'].flatten()
-    reference['labelVal'] = reference['labelVal'].flatten()
-    reference['labelTest'] = reference['labelTest'].flatten()
+    if not args.ignore_reference:
+        # Load reference metadata
+        print('Will compare to the reference GitHub dataset metadata.mat...')
+        reference = sio.loadmat('./reference_metadata.mat', struct_as_record=False)
+        reference['labelRecNum'] = reference['labelRecNum'].flatten()
+        reference['frameIndex'] = reference['frameIndex'].flatten()
+        reference['labelDotXCam'] = reference['labelDotXCam'].flatten()
+        reference['labelDotYCam'] = reference['labelDotYCam'].flatten()
+        reference['labelTrain'] = reference['labelTrain'].flatten()
+        reference['labelVal'] = reference['labelVal'].flatten()
+        reference['labelTest'] = reference['labelTest'].flatten()
 
-    # Find mapping
-    mKey = np.array(['%05d_%05d' % (rec, frame) for rec, frame in zip(meta['labelRecNum'], meta['frameIndex'])],
-                    np.object)
-    rKey = np.array(
-        ['%05d_%05d' % (rec, frame) for rec, frame in zip(reference['labelRecNum'], reference['frameIndex'])],
-        np.object)
-    mIndex = {k: i for i, k in enumerate(mKey)}
-    rIndex = {k: i for i, k in enumerate(rKey)}
-    mToR = np.zeros((len(mKey, )), int) - 1
-    for i, k in enumerate(mKey):
-        if k in rIndex:
-            mToR[i] = rIndex[k]
-        else:
-            logError('Did not find rec_frame %s from the new dataset in the reference dataset!' % k)
-    rToM = np.zeros((len(rKey, )), int) - 1
-    for i, k in enumerate(rKey):
-        if k in mIndex:
-            rToM[i] = mIndex[k]
-        else:
-            logError('Did not find rec_frame %s from the reference dataset in the new dataset!' % k, critical=False)
-            # break
+        # Find mapping
+        mKey = np.array(['%05d_%05d' % (rec, frame) for rec, frame in zip(meta['labelRecNum'], meta['frameIndex'])],
+                        np.object)
+        rKey = np.array(
+            ['%05d_%05d' % (rec, frame) for rec, frame in zip(reference['labelRecNum'], reference['frameIndex'])],
+            np.object)
+        mIndex = {k: i for i, k in enumerate(mKey)}
+        rIndex = {k: i for i, k in enumerate(rKey)}
+        mToR = np.zeros((len(mKey, )), int) - 1
+        for i, k in enumerate(mKey):
+            if k in rIndex:
+                mToR[i] = rIndex[k]
+            else:
+                logError('Did not find rec_frame %s from the new dataset in the reference dataset!' % k)
+        rToM = np.zeros((len(rKey, )), int) - 1
+        for i, k in enumerate(rKey):
+            if k in mIndex:
+                rToM[i] = mIndex[k]
+            else:
+                logError('Did not find rec_frame %s from the reference dataset in the new dataset!' % k, critical=False)
+                # break
 
-    # Copy split from reference
-    meta['labelTrain'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
-    meta['labelVal'] = np.ones((len(meta['labelRecNum'], )), np.bool)  # default choice
-    meta['labelTest'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
+        # Copy split from reference
+        meta['labelTrain'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
+        meta['labelVal'] = np.ones((len(meta['labelRecNum'], )), np.bool)  # default choice
+        meta['labelTest'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
 
-    validMappingMask = mToR >= 0
-    meta['labelTrain'][validMappingMask] = reference['labelTrain'][mToR[validMappingMask]]
-    meta['labelVal'][validMappingMask] = reference['labelVal'][mToR[validMappingMask]]
-    meta['labelTest'][validMappingMask] = reference['labelTest'][mToR[validMappingMask]]
+        validMappingMask = mToR >= 0
+        meta['labelTrain'][validMappingMask] = reference['labelTrain'][mToR[validMappingMask]]
+        meta['labelVal'][validMappingMask] = reference['labelVal'][mToR[validMappingMask]]
+        meta['labelTest'][validMappingMask] = reference['labelTest'][mToR[validMappingMask]]
 
     # Write out metadata
     metaFile = os.path.join(args.output, 'metadata.mat')
@@ -421,23 +600,25 @@ def compareTask(meta):
     sio.savemat(metaFile, meta)
 
     # Statistics
-    nMissing = np.sum(rToM < 0)
-    nExtra = np.sum(mToR < 0)
-    totalMatch = len(mKey) == len(rKey) and np.all(np.equal(mKey, rKey))
     print('======================\n\tSummary\n======================')
     print('Total added %d frames from %d recordings.' % (len(meta['frameIndex']), len(np.unique(meta['labelRecNum']))))
-    if nMissing > 0:
-        print(
-            'There are %d frames missing in the new dataset. This may affect the results. Check the log to see which files are missing.' % nMissing)
-    else:
-        print('There are no missing files.')
-    if nExtra > 0:
-        print(
-            'There are %d extra frames in the new dataset. This is generally ok as they were marked for validation split only.' % nExtra)
-    else:
-        print('There are no extra files that were not in the reference dataset.')
-    if totalMatch:
-        print('The new metadata.mat is an exact match to the reference from GitHub (including ordering)')
+    
+    if not args.ignore_reference:
+        nMissing = np.sum(rToM < 0)
+        nExtra = np.sum(mToR < 0)
+        totalMatch = len(mKey) == len(rKey) and np.all(np.equal(mKey, rKey))
+        if nMissing > 0:
+            print(
+                'There are %d frames missing in the new dataset. This may affect the results. Check the log to see which files are missing.' % nMissing)
+        else:
+            print('There are no missing files.')
+        if nExtra > 0:
+            print(
+                'There are %d extra frames in the new dataset. This is generally ok as they were marked for validation split only.' % nExtra)
+        else:
+            print('There are no extra files that were not in the reference dataset.')
+        if totalMatch:
+            print('The new metadata.mat is an exact match to the reference from GitHub (including ordering)')
 
 def plotErrorTask(All_RMS_Errors, jobId):
     # Make a data frame
@@ -569,176 +750,7 @@ def parseResultsTask(results_path, jobId):
             [f'{datapoint["frame"][0]}_{datapoint["frame"][1]}', datapoint["frame"][0], datapoint["frame"][1],
             datapoint["gazePoint"][0], datapoint["gazePoint"][1], datapoint["gazePrediction"][0],
             datapoint["gazePrediction"][1], distance])
-
-
-def prepareEyeCatcherTask(directory, directory_idx):
-
-    captures = sorted(findCapturesInSession(os.path.join(args.input, directory)), key=str)
-    total_captures = len(captures)
-
-    # Read directory level json
-    deviceMetrics_data = json_read(os.path.join(args.input, directory, "deviceMetrics.json"))
-    info_data = json_read(os.path.join(args.input, directory, "info.json"))
-    screen_data = json_read(os.path.join(args.input, directory, "screen.json"))
-
-    # dotinfo.json - { "DotNum": [ 0, 0, ... ],
-    #                  "XPts": [ 160, 160, ... ],
-    #                  "YPts": [ 284, 284, ... ],
-    #                  "XCam": [ 1.064, 1.064, ... ],
-    #                  "YCam": [ -6.0055, -6.0055, ... ],
-    #                  "Time": [ 0.205642, 0.288975, ... ] }
-    #
-    # PositionIndex == DotNum
-    # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
-    dotinfo = {
-        "DotNum": [],
-        "XPts": [],
-        "YPts": [],
-        "XCam": [],
-        "YCam": [],
-        "Time": []
-    }
-
-    output_path = os.path.join(args.output, f"{directory_idx:05d}")
-    output_frame_path = os.path.join(output_path, "frames")
-
-    faceInfoDict = newFaceInfoDict()
-
-    # frames.json - ["00000.jpg","00001.jpg"]
-    frames = []
-
-    facegrid = {
-        "X": [],
-        "Y": [],
-        "W": [],
-        "H": [],
-        "IsValid": []
-    }
-
-    if directory_idx % 10 < 8:
-        dataset_split = "train"
-    elif directory_idx % 10 < 9:
-        dataset_split = "val"
-    else:
-        dataset_split = "test"
-
-    # info.json - {"TotalFrames":99,"NumFaceDetections":97,"NumEyeDetections":56,"Dataset":"train","DeviceName":"iPhone 6"}
-    info = {
-        "TotalFrames": total_captures,
-        "NumFaceDetections": 0,
-        "NumEyeDetections": 0,
-        "Dataset": dataset_split,
-        "DeviceName": info_data["DeviceName"]
-    }
-
-    # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
-    screen = {
-        "H": [],
-        "W": [],
-        "Orientation": []
-    }
-
-    if not os.path.exists(args.output):
-        os.mkdir(args.output)
-    if not os.path.exists(output_path):
-        os.mkdir(output_path)
-    if not os.path.exists(output_frame_path):
-        os.mkdir(output_frame_path)
-
-    screen_orientation = getScreenOrientation(screen_data)
-
-    for capture_idx, capture in enumerate(captures):
-        # print(f"Processing {capture_idx + 1}/{total_captures} - {capture}")
-
-        capture_json_path = os.path.join(args.input, directory, "frames", capture + ".json")
-        capture_jpg_path = os.path.join(args.input, directory, "frames", capture + ".jpg")
-
-        if os.path.isfile(capture_json_path) and os.path.isfile(capture_jpg_path):
-            capture_data = json_read(capture_json_path)
-
-            capture_image = PILImage.open(capture_jpg_path)
-            capture_image_np = np.array(capture_image)  # dlib wants images in numpy array format
-
-            shape_np, isValid = find_face_dlib(capture_image_np)
-
-            info["NumFaceDetections"] = info["NumFaceDetections"] + 1
-
-            face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
-
-            # facegrid.json - { "X": [ 6, 6, ... ], "Y": [ 10, 10, ... ], "W": [ 13, 13, ... ], "H": [ 13, 13, ... ], "IsValid": [ 1, 1, ... ] }
-            if isValid:
-                faceGridX, faceGridY, faceGridW, faceGridH = generate_face_grid_rect(face_rect, capture_image.width,
-                                                                                        capture_image.height)
-            else:
-                faceGridX = 0
-                faceGridY = 0
-                faceGridW = 0
-                faceGridH = 0
-
-            facegrid["X"].append(faceGridX)
-            facegrid["Y"].append(faceGridY)
-            facegrid["W"].append(faceGridW)
-            facegrid["H"].append(faceGridH)
-            facegrid["IsValid"].append(isValid)
-
-            faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
-                                                                    right_eye_rect, isValid)
-            info["NumEyeDetections"] = info["NumEyeDetections"] + 1
-
-            # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
-            screen["H"].append(screen_data['H'])
-            screen["W"].append(screen_data['W'])
-            screen["Orientation"].append(screen_orientation)
-
-            # dotinfo.json - { "DotNum": [ 0, 0, ... ],
-            #                  "XPts": [ 160, 160, ... ],
-            #                  "YPts": [ 284, 284, ... ],
-            #                  "XCam": [ 1.064, 1.064, ... ],
-            #                  "YCam": [ -6.0055, -6.0055, ... ],
-            #                  "Time": [ 0.205642, 0.288975, ... ] }
-            #
-            # PositionIndex == DotNum
-            # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
-            x_raw = capture_data["XRaw"]
-            y_raw = capture_data["YRaw"]
-            x_cam, y_cam = screen2cam(x_raw,  # xScreenInPoints
-                                        y_raw,  # yScreenInPoints
-                                        screen_orientation,  # orientation,
-                                        screen_data["W"],  # widthScreenInPoints
-                                        screen_data["H"],  # heightScreenInPoints
-                                        deviceName=info_data["DeviceName"])
-
-            dotinfo["DotNum"].append(0)  # TODO replace with dot number as needed
-            dotinfo["XPts"].append(x_raw)
-            dotinfo["YPts"].append(y_raw)
-            dotinfo["XCam"].append(x_cam)
-            dotinfo["YCam"].append(y_cam)
-            dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
-
-            # Convert image from PNG to JPG
-            frame_name = str(f"{capture_idx:05d}.jpg")
-            frames.append(frame_name)
-
-            shutil.copyfile(capture_jpg_path, os.path.join(output_frame_path, frame_name))
-        else:
-            print(f"Error processing capture {capture}")
-
-    with open(os.path.join(output_path, 'frames.json'), "w") as write_file:
-        json.dump(frames, write_file)
-    with open(os.path.join(output_path, 'screen.json'), "w") as write_file:
-        json.dump(screen, write_file)
-    with open(os.path.join(output_path, 'info.json'), "w") as write_file:
-        json.dump(info, write_file)
-    with open(os.path.join(output_path, 'dotInfo.json'), "w") as write_file:
-        json.dump(dotinfo, write_file)
-    with open(os.path.join(output_path, 'faceGrid.json'), "w") as write_file:
-        json.dump(facegrid, write_file)
-    with open(os.path.join(output_path, 'dlibFace.json'), "w") as write_file:
-        json.dump(faceInfoDict["Face"], write_file)
-    with open(os.path.join(output_path, 'dlibLeftEye.json'), "w") as write_file:
-        json.dump(faceInfoDict["LeftEye"], write_file)
-    with open(os.path.join(output_path, 'dlibRightEye.json'), "w") as write_file:
-        json.dump(faceInfoDict["RightEye"], write_file)
+    
 
 
 # all tasks are handled here
@@ -753,6 +765,7 @@ if __name__ == '__main__':
     parser.add_argument('--mirror', action='store_true', help="apply data mirroring", default=False)
     parser.add_argument('--portraitOnly', action='store_true', help="use portrait data only", default=False)
     parser.add_argument('--source_compare', action='store_true', help="compare against source", default=False)
+    parser.add_argument('--ignore_reference', default=False, action='store_true', help="Ignore reference")
     args = parser.parse_args()
 
     if args.task == "":
@@ -796,8 +809,12 @@ if __name__ == '__main__':
     ######### Data Preparation Tasks #########
     elif args.task == "prepareEyeCatcherTask":
         taskFunction = prepareEyeCatcherTask
-        taskData = ""
-        dataLoader = None
+        taskData = getCaptureSessionDirList(args.input)
+        dataLoader = ListLoader
+    elif args.task == "prepareEyeCatcherTask2":
+        taskFunction = prepareEyeCatcherTask2
+        taskData = getCaptureSessionDirList(args.input)
+        dataLoader = ListLoader
     elif args.task == "ROIExtractionTask":
         taskFunction = ROIExtractionTask
         taskData = getDirList(args.input, '([0-9]){5}')
@@ -853,13 +870,20 @@ if __name__ == '__main__':
             'labelDotXCam': [],
             'labelDotYCam': [],
             'labelFaceGrid': [],
+            'labelTrain': [],
+            'labelVal': [],
+            'labelTest': []
         }
+        # Combine results from various workers
         for m in output:
             meta['labelRecNum'] += m['labelRecNum']
             meta['frameIndex'] += m['frameIndex']
             meta['labelDotXCam'] += m['labelDotXCam']
             meta['labelDotYCam'] += m['labelDotYCam']
             meta['labelFaceGrid'] += m['labelFaceGrid']
+            meta['labelTrain'] += m['labelTrain']
+            meta['labelVal'] += m['labelVal']
+            meta['labelTest'] += m['labelTest']
 
         # Integrate
         meta['labelRecNum'] = np.stack(meta['labelRecNum'], axis=0).astype(np.int16)
