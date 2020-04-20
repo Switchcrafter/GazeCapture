@@ -297,19 +297,13 @@ def initialize_hyper_parameters(args, datasets, model):
                                     weight_decay=WEIGHT_DECAY)
 
     batch_count = math.ceil(datasets['train'].size / args.batch_size)
- 
-    # # CLR params
-    # START_LR = args.start_lr or 1
-    # END_LR = args.end_lr or 3E-3
-    # LR_FACTOR = args.lr_factor or 6
-    # EPOCHS_PER_STEP = args.epochs_per_step or 4
 
-    step_size = epochs_per_step * batch_count
+    step_size = args.epochs_per_step * batch_count
     clr = cyclical_learning_rate.cyclical_lr(batch_count,
                                              shape=cyclical_learning_rate.shape_function(args.shape_type,
                                                                                          step_size),
                                              decay=cyclical_learning_rate.decay_function(args.decay_type,
-                                                                                         EPOCHS_PER_STEP),
+                                                                                         args.epochs_per_step),
                                              min_lr=args.end_lr / args.lr_factor,
                                              max_lr=args.end_lr)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr])
