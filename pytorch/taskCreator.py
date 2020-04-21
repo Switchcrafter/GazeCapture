@@ -751,7 +751,18 @@ def parseResultsTask(results_path, jobId):
             datapoint["gazePoint"][0], datapoint["gazePoint"][1], datapoint["gazePrediction"][0],
             datapoint["gazePrediction"][1], distance])
     
-
+def dataStatsTask(filepath):
+    if not os.path.isfile(filepath):
+        print(filepath + " doesn't exists.")
+        return
+    data = sio.loadmat(filepath, struct_as_record=False)
+    trainSize = data['labelTrain'][0].tolist().count(1) 
+    validSize = data['labelVal'][0].tolist().count(1)
+    testSize = data['labelTest'][0].tolist().count(1)
+    total = trainSize + validSize + testSize
+    print('{:11s}: {:8d} {:6.2f}%'.format('trainSize', trainSize, 100*trainSize/total))
+    print('{:11s}: {:8d} {:6.2f}%'.format('validSize', validSize, 100*validSize/total))
+    print('{:11s}: {:8d} {:6.2f}%'.format('testSize', testSize, 100*testSize/total))
 
 # all tasks are handled here
 if __name__ == '__main__':
@@ -857,6 +868,12 @@ if __name__ == '__main__':
         taskData = 0
         dataLoader = None
         taskFunction = live_demo
+    ######### Data Statistics Tasks #########
+    elif args.task == "dataStatsTask":
+        # e.g. "/data/gc-data-prepped-dlib/metadata.mat"
+        taskData = args.input
+        dataLoader = None
+        taskFunction = dataStatsTask
 
     # run the job
     output = taskManager.job(taskFunction, taskData, dataLoader)
