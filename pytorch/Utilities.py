@@ -222,7 +222,6 @@ class SamplingBar(Bar):
         # For Live Heatmap: print in previous line and comeback
         print('\033[F' + self.label + self.left + code + self.right, end='\n')
 
-
 class MultiProgressBar(Bar):
     def __init__(self, max_value=100, label='Progress', marker='=', left='|', right='|', arrow='>', fill='-', boundary = False):
         self.label = '{:5}'.format(label)
@@ -321,8 +320,7 @@ class MultiProgressBar(Bar):
         code = code[:index] + infoString + code[index + len(infoString):]
         
         print(self.label + self.left + code + self.right + time_info, end='\r')
-
-
+        
 def centered_text(infoString, marker='-', length=40):
     marker = marker * length
     index = (len(marker) - len(infoString)) // 2
