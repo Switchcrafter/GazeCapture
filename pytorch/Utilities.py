@@ -290,6 +290,8 @@ class MultiProgressBar(Bar):
 
     def update(self, index, value):
         self.processValue[index] = value
+        remaining = [max - val for max, val in zip(self.processMax, self.processValue ) if max !=0 ]
+        completedProcesses = remaining.count(0)
 
         # display 
         time = datetime.now() - self.start_time
@@ -300,8 +302,12 @@ class MultiProgressBar(Bar):
         
         width = self.getTerminalWidth() - (len(self.label) + len(self.left) + len(self.right) + max(len(time_eta), len(time_elapsed)))
         code = self.create_marker(width)
+
+        # append infoString at the center
+        infoString = ' {val:d}/{max:d} ({percent:d}%) '.format(val=completedProcesses, max=self.max_value, percent=int(complete / total * 100))
+        index = (len(code) - len(infoString)) // 2
+        code = code[:index] + infoString + code[index + len(infoString):]
         
-        # print(self.label + self.left + code + self.right + time_eta, end='\r')
         if complete < total:
             print(self.label + self.left + code + self.right + time_eta, end='\r')
         else:

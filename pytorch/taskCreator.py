@@ -780,7 +780,6 @@ def testTask(filepath):
         for value in range(1, max_value+1):
             sleep(0.1)
             bar.update(processIndex, value)
-            # bar.display()
 
 
 # all tasks are handled here
