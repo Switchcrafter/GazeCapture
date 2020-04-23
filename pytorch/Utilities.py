@@ -222,6 +222,89 @@ class SamplingBar(Bar):
         # For Live Heatmap: print in previous line and comeback
         print('\033[F' + self.label + self.left + code + self.right, end='\n')
 
+class MultiProgressBar(Bar):
+    def __init__(self, max_value=100, label='Progress', marker='=', left='|', right='|', arrow='>', fill='-'):
+        self.label = '{:5}'.format(label)
+        self.left = left
+        self.marker = marker
+        self.arrow = arrow
+        self.right = right
+        self.fill = fill
+        self.max_value = max_value
+        self.processValue = [0] * max_value
+        self.adjProcessValue = []
+        self.processMax = [0] * max_value
+        self.adjProcessMax = []
+        self.codeLength = 1
+        self.start_time = self.sample_time = datetime.now()
+
+    def get_status(self):
+        complete = sum(self.processValue)
+        max = sum(self.processMax)
+        count = self.max_value - self.processMax.count(0)
+        total_work = ((max/count)*self.max_value)
+        return complete, total_work
+
+    def create_marker(self, width):
+        self.adjProcessValue = [0] * width
+        self.adjProcessMax = [0] * width
+        # codeLength must be calculated through flooring
+        self.codeLength = math.floor(width / self.max_value)
+        for index in range(self.max_value):
+            if self.codeLength > 1:
+                adjIndex = (index * self.codeLength)
+            else:
+                v = math.ceil(self.max_value/width)+1
+                adjIndex = math.ceil(index / v)
+
+            self.adjProcessValue[adjIndex] += self.processValue[index]
+            self.adjProcessMax[adjIndex] += self.processMax[index]
+
+        # create marker string
+        code = ''
+        if self.codeLength >= 1:
+            limit = self.codeLength*self.max_value
+            for i in range(0, limit, self.codeLength):
+                code = code + self.getCode(i)
+        else:
+            for i in range(0, width, 1):
+                code = code + self.getCode(i)
+
+        # center justify filing remainder of the bar with empty string
+        code = code.center(width, ' ')
+        return code
+
+    def getCode(self, i):
+        length = max(self.codeLength,1)
+        if self.adjProcessMax[i] > 0:
+            # Scheduled tasks
+            marker = self.marker * math.floor(self.adjProcessValue[i] / self.adjProcessMax[i] * length)
+        else:
+            # Unscheduled tasks
+            marker = self.fill
+        return marker.ljust(length, self.fill)
+
+    def addSubProcess(self, index, max_value):
+        self.processMax[index] = max_value
+
+    def update(self, index, value):
+        self.processValue[index] = value
+
+        # display
+        time = datetime.now() - self.start_time
+        # print(self.get_completion())
+        complete, total = self.get_status()
+        time_eta = '[ETA : ' + str((time / complete) * (total - complete)) + ']'
+        time_elapsed = '[Time: ' + str(time) + ']'
+
+        width = self.getTerminalWidth() - (len(self.label) + len(self.left) + len(self.right) + max(len(time_eta), len(time_elapsed)))
+        code = self.create_marker(width)
+
+        # print(self.label + self.left + code + self.right + time_eta, end='\r')
+        if complete < total:
+            print(self.label + self.left + code + self.right + time_eta, end='\r')
+        else:
+            print(self.label + self.left + code + self.right + time_elapsed, end='\n')
 
 def centered_text(infoString, marker='-', length=40):
     marker = marker * length
