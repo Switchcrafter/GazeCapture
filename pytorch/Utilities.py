@@ -6,6 +6,7 @@ from datetime import datetime
 import torch
 import visdom
 import numpy as np
+import math
 
 
 class AverageMeter(object):
@@ -223,7 +224,7 @@ class SamplingBar(Bar):
         print('\033[F' + self.label + self.left + code + self.right, end='\n')
 
 class MultiProgressBar(Bar):
-    def __init__(self, max_value=100, label='Progress', marker='=', left='|', right='|', arrow='>', fill='-'):
+    def __init__(self, max_value=100, label='Progress', marker='=', left='|', right='|', arrow='>', fill='-', boundary = False):
         self.label = '{:5}'.format(label)
         self.left = left
         self.marker = marker
@@ -231,20 +232,22 @@ class MultiProgressBar(Bar):
         self.right = right
         self.fill = fill
         self.max_value = max_value
+        self.boundary = boundary
         self.processValue = [0] * max_value
         self.adjProcessValue = []
         self.processMax = [0] * max_value
         self.adjProcessMax = []
         self.codeLength = 1
+        self.countEmptyTask = 0 
         self.start_time = self.sample_time = datetime.now()
-
+    
     def get_status(self):
         complete = sum(self.processValue)
         max = sum(self.processMax)
-        count = self.max_value - self.processMax.count(0)
+        count = self.max_value - self.processMax.count(0) + self.countEmptyTask
         total_work = ((max/count)*self.max_value)
         return complete, total_work
-
+        
     def create_marker(self, width):
         self.adjProcessValue = [0] * width
         self.adjProcessMax = [0] * width
@@ -259,7 +262,7 @@ class MultiProgressBar(Bar):
 
             self.adjProcessValue[adjIndex] += self.processValue[index]
             self.adjProcessMax[adjIndex] += self.processMax[index]
-
+        
         # create marker string
         code = ''
         if self.codeLength >= 1:
@@ -267,51 +270,58 @@ class MultiProgressBar(Bar):
             for i in range(0, limit, self.codeLength):
                 code = code + self.getCode(i)
         else:
-            for i in range(0, width, 1):
+            v = math.ceil(self.max_value/width)+1
+            limit = math.ceil(self.max_value / v)
+            for i in range(0, limit, 1):
                 code = code + self.getCode(i)
-
+        
         # center justify filing remainder of the bar with empty string
         code = code.center(width, ' ')
         return code
-
+    
     def getCode(self, i):
         length = max(self.codeLength,1)
         if self.adjProcessMax[i] > 0:
-            # Scheduled tasks
-            marker = self.marker * math.floor(self.adjProcessValue[i] / self.adjProcessMax[i] * length)
+            # Scheduled tasks 
+            if self.boundary:
+                marker = "≠" + self.marker * math.floor(self.adjProcessValue[i] / self.adjProcessMax[i] * (length-1))
+            else:
+                marker = self.marker * math.floor(self.adjProcessValue[i] / self.adjProcessMax[i] * length)
         else:
-            # Unscheduled tasks
             marker = self.fill
         return marker.ljust(length, self.fill)
-
+        
     def addSubProcess(self, index, max_value):
         self.processMax[index] = max_value
+        if max_value == 0:
+            self.countEmptyTask += 1
+            # force update for empty processes here
+            self.update(index, 0)
 
     def update(self, index, value):
         self.processValue[index] = value
-        remaining = [max - val for max, val in zip(self.processMax, self.processValue ) if max !=0 ]
-        completedProcesses = remaining.count(0)
+        remaining = [max - val for max, val in zip(self.processMax, self.processValue ) if max != 0 ]
+        completedProcesses = self.countEmptyTask + remaining.count(0)
 
         # display 
-        time = datetime.now() - self.start_time
-        # print(self.get_completion())
         complete, total = self.get_status()
-        time_eta = '[ETA : ' + str((time / complete) * (total - complete)) + ']'
-        time_elapsed = '[Time: ' + str(time) + ']'
+        time = datetime.now() - self.start_time
+        if complete > 0 and complete < total:
+            time_info = '[ETA : ' + str((time / complete) * (total - complete)) + ']'
+        else:
+            time_info = '[Time: ' + str(time) + ']'
         
-        width = self.getTerminalWidth() - (len(self.label) + len(self.left) + len(self.right) + max(len(time_eta), len(time_elapsed)))
+        width = self.getTerminalWidth() - (len(self.label) + len(self.left) + len(self.right) + len(time_info))
         code = self.create_marker(width)
 
         # append infoString at the center
-        infoString = ' {val:d}/{max:d} ({percent:d}%) '.format(val=completedProcesses, max=self.max_value, percent=int(complete / total * 100))
+        percentage = int(complete / total * 100) if total > 0 else 0
+        infoString = ' {val:d}/{max:d} ({percent:d}%) '.format(val=completedProcesses, max=self.max_value, percent=percentage)
         index = (len(code) - len(infoString)) // 2
         code = code[:index] + infoString + code[index + len(infoString):]
         
-        if complete < total:
-            print(self.label + self.left + code + self.right + time_eta, end='\r')
-        else:
-            print(self.label + self.left + code + self.right + time_elapsed, end='\n')
-
+        print(self.label + self.left + code + self.right + time_info, end='\r')
+        
 def centered_text(infoString, marker='-', length=40):
     marker = marker * length
     index = (len(marker) - len(infoString)) // 2
