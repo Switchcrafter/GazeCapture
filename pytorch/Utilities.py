@@ -86,11 +86,15 @@ class SimpleProgressBar(Bar):
         self.sample_value = value
         self.sample_time = datetime.now()
 
-        time_eta = '[ETA : ' + str((time / value) * self.max_value) + ']'
+        if value > 0 and value < self.max_value:
+            time_info = '[ETA : ' + str((time / value) * (self.max_value-value)) + ']'
+        else:
+            time_info = '[Time: ' + str(time) + ']'
+
         assert (value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value (' + str(
             self.max_value) + ').'
         width = self.getTerminalWidth() - (
-                    len(self.label) + len(self.left) + len(self.right) + len(time_eta))
+                    len(self.label) + len(self.left) + len(self.right) + len(time_info))
         marker = self.create_marker(value, width).ljust(width, self.fill)
         marker = self.left + marker + self.right
         # append infoString at the center
@@ -99,11 +103,8 @@ class SimpleProgressBar(Bar):
                                                                              percent=int(value / self.max_value * 100))
         index = (len(marker) - len(infoString)) // 2
         marker = marker[:index] + infoString + marker[index + len(infoString):]
-        if value < self.max_value:
-            print(self.label + marker + time_eta, end='\r')
-        else:
-            time_elapsed = '[Time: ' + str(time) + ']'
-            print(self.label + marker + time_elapsed, end='\n')
+        end = '\r' if value < self.max_value else '\n'
+        print(self.label + marker + time_info, end=end)
 
 class ProgressBar(Bar):
     '''A progress bar which stretches to fill the line.'''
@@ -156,11 +157,15 @@ class ProgressBar(Bar):
         self.sample_value = value
         self.sample_time = datetime.now()
 
-        time_eta = '[ETA : ' + str((time / value) * self.max_value) + ']'
+        if value > 0 and value < self.max_value:
+            time_info = '[ETA : ' + str((time / value) * (self.max_value-value)) + ']'
+        else:
+            time_info = '[Time: ' + str(time) + ']'
+
         assert (value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value (' + str(
             self.max_value) + ').'
         width = self.getTerminalWidth() - (
-                    len(self.label) + len(self.left) + len(self.right) + len(metric) + len(error) + len(time_eta))
+                    len(self.label) + len(self.left) + len(self.right) + len(metric) + len(error) + len(time_info))
         marker = self.create_marker(value, width).ljust(width, self.fill)
         marker = self.left + marker + self.right
         # append infoString at the center
@@ -169,12 +174,8 @@ class ProgressBar(Bar):
                                                                              percent=int(value / self.max_value * 100))
         index = (len(marker) - len(infoString)) // 2
         marker = marker[:index] + infoString + marker[index + len(infoString):]
-        if value < self.max_value:
-            print(self.label + marker + metric + error + time_eta, end='\r')
-        else:
-            time_elapsed = '[Time: ' + str(time) + ']'
-            print(self.label + marker + metric + error + time_elapsed, end='\n')
-
+        end = '\r' if value < self.max_value else '\n'
+        print(self.label + marker + time_info, end=end)
 
 class SamplingBar(Bar):
     '''A sampling hotness bar which stretches to fill the line.'''
@@ -238,16 +239,16 @@ class MultiProgressBar(Bar):
         self.processMax = [0] * max_value
         self.adjProcessMax = []
         self.codeLength = 1
-        self.countEmptyTask = 0 
+        self.countEmptyTask = 0
         self.start_time = self.sample_time = datetime.now()
-    
+
     def get_status(self):
         complete = sum(self.processValue)
         max = sum(self.processMax)
         count = self.max_value - self.processMax.count(0) + self.countEmptyTask
         total_work = ((max/count)*self.max_value)
         return complete, total_work
-        
+
     def create_marker(self, width):
         self.adjProcessValue = [0] * width
         self.adjProcessMax = [0] * width
@@ -262,7 +263,7 @@ class MultiProgressBar(Bar):
 
             self.adjProcessValue[adjIndex] += self.processValue[index]
             self.adjProcessMax[adjIndex] += self.processMax[index]
-        
+
         # create marker string
         code = ''
         if self.codeLength >= 1:
@@ -274,15 +275,15 @@ class MultiProgressBar(Bar):
             limit = math.ceil(self.max_value / v)
             for i in range(0, limit, 1):
                 code = code + self.getCode(i)
-        
+
         # center justify filing remainder of the bar with empty string
         code = code.center(width, ' ')
         return code
-    
+
     def getCode(self, i):
         length = max(self.codeLength,1)
         if self.adjProcessMax[i] > 0:
-            # Scheduled tasks 
+            # Scheduled tasks
             if self.boundary:
                 marker = "≠" + self.marker * math.floor(self.adjProcessValue[i] / self.adjProcessMax[i] * (length-1))
             else:
@@ -290,7 +291,7 @@ class MultiProgressBar(Bar):
         else:
             marker = self.fill
         return marker.ljust(length, self.fill)
-        
+
     def addSubProcess(self, index, max_value):
         self.processMax[index] = max_value
         if max_value == 0:
@@ -303,14 +304,14 @@ class MultiProgressBar(Bar):
         remaining = [max - val for max, val in zip(self.processMax, self.processValue ) if max != 0 ]
         completedProcesses = self.countEmptyTask + remaining.count(0)
 
-        # display 
+        # display
         complete, total = self.get_status()
         time = datetime.now() - self.start_time
         if complete > 0 and complete < total:
             time_info = '[ETA : ' + str((time / complete) * (total - complete)) + ']'
         else:
             time_info = '[Time: ' + str(time) + ']'
-        
+
         width = self.getTerminalWidth() - (len(self.label) + len(self.left) + len(self.right) + len(time_info))
         code = self.create_marker(width)
 
@@ -319,9 +320,10 @@ class MultiProgressBar(Bar):
         infoString = ' {val:d}/{max:d} ({percent:d}%) '.format(val=completedProcesses, max=self.max_value, percent=percentage)
         index = (len(code) - len(infoString)) // 2
         code = code[:index] + infoString + code[index + len(infoString):]
-        
-        print(self.label + self.left + code + self.right + time_info, end='\r')
-        
+
+        end = '\r' if complete < total else '\n'
+        print(self.label + self.left + code + self.right + time_info, end=end)
+
 def centered_text(infoString, marker='-', length=40):
     marker = marker * length
     index = (len(marker) - len(infoString)) // 2
