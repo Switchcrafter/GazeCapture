@@ -772,10 +772,10 @@ def dataStatsTask(filepath):
 def testTask(filepath):
     from time import sleep
     import random
-    num_process = 30
+    num_process = 50
     bar = MultiProgressBar(max_value=num_process)
     for processIndex in range(num_process):
-        max_value = random.randint(0,9)
+        max_value = random.randint(1,2)
         bar.addSubProcess(processIndex, max_value)
         for value in range(1, max_value+1):
             sleep(0.1)

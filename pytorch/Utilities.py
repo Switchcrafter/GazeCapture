@@ -224,7 +224,7 @@ class SamplingBar(Bar):
 
 
 class MultiProgressBar(Bar):
-    def __init__(self, max_value=100, label='Progress', marker='=', left='|', right='|', arrow='>', fill='-'):
+    def __init__(self, max_value=100, label='Progress', marker='=', left='|', right='|', arrow='>', fill='-', boundary = False):
         self.label = '{:5}'.format(label)
         self.left = left
         self.marker = marker
@@ -232,6 +232,7 @@ class MultiProgressBar(Bar):
         self.right = right
         self.fill = fill
         self.max_value = max_value
+        self.boundary = boundary
         self.processValue = [0] * max_value
         self.adjProcessValue = []
         self.processMax = [0] * max_value
@@ -269,7 +270,9 @@ class MultiProgressBar(Bar):
             for i in range(0, limit, self.codeLength):
                 code = code + self.getCode(i)
         else:
-            for i in range(0, width, 1):
+            v = math.ceil(self.max_value/width)+1
+            limit = math.ceil(self.max_value / v)
+            for i in range(0, limit, 1):
                 code = code + self.getCode(i)
         
         # center justify filing remainder of the bar with empty string
@@ -280,12 +283,14 @@ class MultiProgressBar(Bar):
         length = max(self.codeLength,1)
         if self.adjProcessMax[i] > 0:
             # Scheduled tasks 
-            marker = self.marker * math.floor(self.adjProcessValue[i] / self.adjProcessMax[i] * length)
+            if self.boundary:
+                marker = "≠" + self.marker * math.floor(self.adjProcessValue[i] / self.adjProcessMax[i] * (length-1))
+            else:
+                marker = self.marker * math.floor(self.adjProcessValue[i] / self.adjProcessMax[i] * length)
         else:
-            # Unscheduled tasks
             marker = self.fill
         return marker.ljust(length, self.fill)
-
+        
     def addSubProcess(self, index, max_value):
         self.processMax[index] = max_value
         if max_value == 0:
