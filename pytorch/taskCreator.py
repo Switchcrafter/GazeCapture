@@ -775,11 +775,12 @@ def testTask(filepath):
     num_process = 30
     bar = MultiProgressBar(max_value=num_process)
     for processIndex in range(num_process):
-        max_value = random.randint(2,4)
+        max_value = random.randint(0,1)
         bar.addSubProcess(processIndex, max_value)
         for value in range(1, max_value+1):
             sleep(0.1)
             bar.update(processIndex, value)
+    print()
 
 
 # all tasks are handled here
