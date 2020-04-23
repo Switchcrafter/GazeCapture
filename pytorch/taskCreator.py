@@ -17,6 +17,7 @@ import matplotlib.colors as colors
 from face_utilities import *
 import dateutil.parser
 from cam2screen import screen2cam
+from Utilities import MultiProgressBar
 
 ################################################################################
 ## Utility functions
@@ -212,7 +213,7 @@ def copyTask(filepath, jobId):
 def resizeTask(filePath, jobId):
     pass
 
-def prepareEyeCatcherTask(directory, directory_idx):
+def prepareEyeCatcherTask(directory, directory_idx, progressbar):
     captures = sorted(findCapturesInSession(os.path.join(args.input, directory)), key=str)
     total_captures = len(captures)
 
@@ -284,8 +285,11 @@ def prepareEyeCatcherTask(directory, directory_idx):
     preparePath(output_frame_path)
 
     screen_orientation = getScreenOrientation(screen_data)
+    progressbar.addSubProcess(directory_idx, len(captures))
     for capture_idx, capture in enumerate(captures):
         # print(f"Processing {capture_idx + 1}/{total_captures} - {capture}")
+        progressbar.update(directory_idx, capture_idx+1)
+        # progressbar.display()
 
         capture_json_path = os.path.join(args.input, directory, "frames", capture + ".json")
         capture_jpg_path = os.path.join(args.input, directory, "frames", capture + ".jpg")
@@ -764,6 +768,21 @@ def dataStatsTask(filepath):
     print('{:11s}: {:8d} {:6.2f}%'.format('validSize', validSize, 100*validSize/total))
     print('{:11s}: {:8d} {:6.2f}%'.format('testSize', testSize, 100*testSize/total))
 
+
+def testTask(filepath):
+    from time import sleep
+    import random
+    num_process = 30
+    bar = MultiProgressBar(max_value=num_process)
+    for processIndex in range(num_process):
+        max_value = random.randint(2,4)
+        bar.addSubProcess(processIndex, max_value)
+        for value in range(1, max_value+1):
+            sleep(0.1)
+            bar.update(processIndex, value)
+            # bar.display()
+
+
 # all tasks are handled here
 if __name__ == '__main__':
     # Argument parser
@@ -874,6 +893,11 @@ if __name__ == '__main__':
         taskData = args.input
         dataLoader = None
         taskFunction = dataStatsTask
+    ######### Test Tasks #########
+    elif args.task == "testTask":
+        taskData = args.input
+        dataLoader = None
+        taskFunction = testTask
 
     # run the job
     output = taskManager.job(taskFunction, taskData, dataLoader)
