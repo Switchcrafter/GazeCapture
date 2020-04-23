@@ -38,7 +38,7 @@ def job(taskFunction, taskData, dataLoader, numWorkers = multiprocessing.cpu_cou
         BaseManager.register('MultiProgressBar', MultiProgressBar)
         manager = BaseManager()
         manager.start()
-        progressBar = manager.MultiProgressBar(len(taskData), "Completed")
+        progressBar = manager.MultiProgressBar(len(taskData), "Completed", boundary=True)
 
         scheduleBar = SimpleProgressBar(len(taskData), "Scheduled")
         for jobId in range(len(taskData)):

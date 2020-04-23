@@ -773,14 +773,13 @@ def testTask(filepath):
     from time import sleep
     import random
     num_process = 50
-    bar = MultiProgressBar(max_value=num_process)
+    bar = MultiProgressBar(max_value=num_process, boundary=True)
     for processIndex in range(num_process):
         max_value = random.randint(1,2)
         bar.addSubProcess(processIndex, max_value)
         for value in range(1, max_value+1):
             sleep(0.1)
             bar.update(processIndex, value)
-    print()
 
 
 # all tasks are handled here
