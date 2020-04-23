@@ -9,6 +9,8 @@ import numpy as np
 import scipy.io as sio
 from PIL import Image
 
+from Utilities import SimpleProgressBar
+
 '''
 Prepares the GazeCapture dataset for use with the pytorch code. Crops images, compiles JSONs into metadata.mat
 
@@ -141,7 +143,12 @@ def main():
         rightEyeBbox[:, :2] += faceBbox[:, :2]
         faceGridBbox = bboxFromJson(faceGrid)
 
+        total_frames = len(frames)
+        frames_bar = SimpleProgressBar(max_value=total_frames, label=recording)
+
         for j, frame in enumerate(frames):
+            frames_bar.update(j + 1)
+
             # Can we use it?
             if not allValid[j]:
                 continue

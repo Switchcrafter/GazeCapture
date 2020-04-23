@@ -9,6 +9,7 @@ from face_utilities import faceEyeRectsToFaceInfoDict, newFaceInfoDict, find_fac
 from PIL import Image as PILImage  # Pillow
 import numpy as np
 import dateutil.parser
+from Utilities import SimpleProgressBar
 
 
 # Example path is Surface_Pro_4/someuser/00000
@@ -109,11 +110,11 @@ def main():
     output_directory = args.output_path
 
     if data_directory is None:
-        os.error("Error: must specify --data_dir")
+        os.error("Error: must specify --data_path, like /data/EyeCapture/200407")
         return
 
     if output_directory is None:
-        os.error("Error: must specify --output_dir")
+        os.error("Error: must specify --output_path")
         return
 
     directories = sorted(findCaptureSessionDirs(data_directory))
@@ -146,6 +147,7 @@ def main():
             "YPts": [],
             "XCam": [],
             "YCam": [],
+            "Confidence": [],
             "Time": []
         }
 
@@ -197,8 +199,10 @@ def main():
 
         screen_orientation = getScreenOrientation(screen_data)
 
+        capture_progress_bar = SimpleProgressBar(max_value=total_captures, label=f"{directory_idx:05d}")
+
         for capture_idx, capture in enumerate(captures):
-            print(f"Processing {capture_idx + 1}/{total_captures} - {capture}")
+            capture_progress_bar.update(capture_idx + 1)
 
             capture_json_path = os.path.join(data_directory, directory, "frames", capture + ".json")
             capture_jpg_path = os.path.join(data_directory, directory, "frames", capture + ".jpg")
@@ -245,6 +249,7 @@ def main():
                 #                  "YPts": [ 284, 284, ... ],
                 #                  "XCam": [ 1.064, 1.064, ... ],
                 #                  "YCam": [ -6.0055, -6.0055, ... ],
+                #                  "Confidence": [ 59.3, 94.2, ... ],
                 #                  "Time": [ 0.205642, 0.288975, ... ] }
                 #
                 # PositionIndex == DotNum
@@ -257,12 +262,14 @@ def main():
                                           screen_data["W"],  # widthScreenInPoints
                                           screen_data["H"],  # heightScreenInPoints
                                           deviceName=info_data["DeviceName"])
+                confidence = capture_data["Confidence"]
 
                 dotinfo["DotNum"].append(0)  # TODO replace with dot number as needed
                 dotinfo["XPts"].append(x_raw)
                 dotinfo["YPts"].append(y_raw)
                 dotinfo["XCam"].append(x_cam)
                 dotinfo["YCam"].append(y_cam)
+                dotinfo["Confidence"].append(confidence)
                 dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
 
                 # Convert image from PNG to JPG
@@ -289,6 +296,8 @@ def main():
             json.dump(faceInfoDict["LeftEye"], write_file)
         with open(os.path.join(output_path, 'dlibRightEye.json'), "w") as write_file:
             json.dump(faceInfoDict["RightEye"], write_file)
+
+        print("")
 
     print("DONE")
 
