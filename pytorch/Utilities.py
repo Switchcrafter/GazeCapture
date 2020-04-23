@@ -86,7 +86,7 @@ class SimpleProgressBar(Bar):
         self.sample_value = value
         self.sample_time = datetime.now()
 
-        time_eta = '[ETA : ' + str((time / value) * self.max_value) + ']'
+        time_eta = '[ETA : ' + str((time / value) * (self.max_value-value)) + ']'
         assert (value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value (' + str(
             self.max_value) + ').'
         width = self.getTerminalWidth() - (
@@ -156,7 +156,7 @@ class ProgressBar(Bar):
         self.sample_value = value
         self.sample_time = datetime.now()
 
-        time_eta = '[ETA : ' + str((time / value) * self.max_value) + ']'
+        time_eta = '[ETA : ' + str((time / value) * (self.max_value-value)) + ']'
         assert (value <= self.max_value), 'ProgressBar value (' + str(value) + ') can not exceed max_value (' + str(
             self.max_value) + ').'
         width = self.getTerminalWidth() - (
