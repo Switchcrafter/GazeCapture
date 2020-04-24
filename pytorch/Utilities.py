@@ -239,16 +239,16 @@ class MultiProgressBar(Bar):
         self.processMax = [0] * max_value
         self.adjProcessMax = []
         self.codeLength = 1
-        self.countEmptyTask = 0 
+        self.countEmptyTask = 0
         self.start_time = self.sample_time = datetime.now()
-    
+
     def get_status(self):
         complete = sum(self.processValue)
         max = sum(self.processMax)
         count = self.max_value - self.processMax.count(0) + self.countEmptyTask
         total_work = ((max/count)*self.max_value)
         return complete, total_work
-        
+
     def create_marker(self, width):
         self.adjProcessValue = [0] * width
         self.adjProcessMax = [0] * width
@@ -263,7 +263,7 @@ class MultiProgressBar(Bar):
 
             self.adjProcessValue[adjIndex] += self.processValue[index]
             self.adjProcessMax[adjIndex] += self.processMax[index]
-        
+
         # create marker string
         code = ''
         if self.codeLength >= 1:
@@ -275,15 +275,15 @@ class MultiProgressBar(Bar):
             limit = math.ceil(self.max_value / v)
             for i in range(0, limit, 1):
                 code = code + self.getCode(i)
-        
+
         # center justify filing remainder of the bar with empty string
         code = code.center(width, ' ')
         return code
-    
+
     def getCode(self, i):
         length = max(self.codeLength,1)
         if self.adjProcessMax[i] > 0:
-            # Scheduled tasks 
+            # Scheduled tasks
             if self.boundary:
                 marker = "≠" + self.marker * math.floor(self.adjProcessValue[i] / self.adjProcessMax[i] * (length-1))
             else:
@@ -291,7 +291,7 @@ class MultiProgressBar(Bar):
         else:
             marker = self.fill
         return marker.ljust(length, self.fill)
-        
+
     def addSubProcess(self, index, max_value):
         self.processMax[index] = max_value
         if max_value == 0:
@@ -304,14 +304,14 @@ class MultiProgressBar(Bar):
         remaining = [max - val for max, val in zip(self.processMax, self.processValue ) if max != 0 ]
         completedProcesses = self.countEmptyTask + remaining.count(0)
 
-        # display 
+        # display
         complete, total = self.get_status()
         time = datetime.now() - self.start_time
         if complete > 0 and complete < total:
             time_info = '[ETA : ' + str((time / complete) * (total - complete)) + ']'
         else:
             time_info = '[Time: ' + str(time) + ']'
-        
+
         width = self.getTerminalWidth() - (len(self.label) + len(self.left) + len(self.right) + len(time_info))
         code = self.create_marker(width)
 
@@ -320,10 +320,10 @@ class MultiProgressBar(Bar):
         infoString = ' {val:d}/{max:d} ({percent:d}%) '.format(val=completedProcesses, max=self.max_value, percent=percentage)
         index = (len(code) - len(infoString)) // 2
         code = code[:index] + infoString + code[index + len(infoString):]
-        
+
         end = '\r' if complete < total else '\n'
         print(self.label + self.left + code + self.right + time_info, end=end)
-        
+
 def centered_text(infoString, marker='-', length=40):
     marker = marker * length
     index = (len(marker) - len(infoString)) // 2
