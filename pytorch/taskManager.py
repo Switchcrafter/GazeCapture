@@ -1,6 +1,6 @@
 import multiprocessing
 from multiprocessing import Process, Manager
-from multiprocessing.managers import BaseManager
+from multiprocessing.managers import BaseManager, SyncManager
 import os
 import platform
 import inspect
@@ -38,7 +38,7 @@ def job(taskFunction, taskData, dataLoader, numWorkers = multiprocessing.cpu_cou
         BaseManager.register('MultiProgressBar', MultiProgressBar)
         manager = BaseManager()
         manager.start()
-        progressBar = manager.MultiProgressBar(len(taskData), "Completed", boundary=True)
+        progressBar = manager.MultiProgressBar(len(taskData), "Progress ")
 
         scheduleBar = SimpleProgressBar(len(taskData), "Scheduled")
         for jobId in range(len(taskData)):
@@ -48,8 +48,10 @@ def job(taskFunction, taskData, dataLoader, numWorkers = multiprocessing.cpu_cou
 
         # collect results
         results = []
+        completeBar = SimpleProgressBar(len(taskData), "Completed")
         for p in workerProcesses:
             (jobId,result) = p.get()
+            completeBar.update(jobId+1)
             results.append(result)
         
         # leave one blank line

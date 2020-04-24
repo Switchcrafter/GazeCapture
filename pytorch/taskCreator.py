@@ -193,14 +193,15 @@ def ListLoader(listData, numWorkers, i):
 ## Task Definitions
 ################################################################################
 
-# Tasks
-def noneTask(fileName, jobId):
+# Multi-process Tasks
+
+def noneTask(fileName, jobId, progressbar):
     return fileName
 
-def cubeTask(x, jobId):
+def cubeTask(x, jobId, progressbar):
     return x**3
 
-def copyTask(filepath, jobId):
+def copyTask(filepath, jobId, progressbar):
     from_dir, from_filename, from_ext = getDirNameExt(filepath)
     relative_path = getRelativePath(from_dir, args.input)
     to_dir = os.path.join(args.output, relative_path)
@@ -210,9 +211,10 @@ def copyTask(filepath, jobId):
     shutil.copy(filepath, to_file)
     return to_file
 
-def resizeTask(filePath, jobId):
+def resizeTask(filePath, jobId, progressbar):
     pass
 
+# Equivalent: prepare_EyeCatcher
 def prepareEyeCatcherTask(directory, directory_idx, progressbar):
     captures = sorted(findCapturesInSession(os.path.join(args.input, directory)), key=str)
     total_captures = len(captures)
@@ -227,6 +229,7 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
     #                  "YPts": [ 284, 284, ... ],
     #                  "XCam": [ 1.064, 1.064, ... ],
     #                  "YCam": [ -6.0055, -6.0055, ... ],
+    #                  "Confidence": [ 59.3, 94.2, ... ],
     #                  "Time": [ 0.205642, 0.288975, ... ] }
     #
     # PositionIndex == DotNum
@@ -237,6 +240,7 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
         "YPts": [],
         "XCam": [],
         "YCam": [],
+        "Confidence": [],
         "Time": []
     }
 
@@ -287,12 +291,11 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
     screen_orientation = getScreenOrientation(screen_data)
     progressbar.addSubProcess(directory_idx, len(captures))
     for capture_idx, capture in enumerate(captures):
-        # print(f"Processing {capture_idx + 1}/{total_captures} - {capture}")
         progressbar.update(directory_idx, capture_idx+1)
-        # progressbar.display()
 
         capture_json_path = os.path.join(args.input, directory, "frames", capture + ".json")
         capture_jpg_path = os.path.join(args.input, directory, "frames", capture + ".jpg")
+        
         if os.path.isfile(capture_json_path) and os.path.isfile(capture_jpg_path):
             capture_data = json_read(capture_json_path)
             capture_image = PILImage.open(capture_jpg_path)
@@ -337,6 +340,7 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
             #                  "YPts": [ 284, 284, ... ],
             #                  "XCam": [ 1.064, 1.064, ... ],
             #                  "YCam": [ -6.0055, -6.0055, ... ],
+            #                  "Confidence": [ 59.3, 94.2, ... ],
             #                  "Time": [ 0.205642, 0.288975, ... ] }
             #
             # PositionIndex == DotNum
@@ -349,12 +353,14 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
                                         screen_data["W"],  # widthScreenInPoints
                                         screen_data["H"],  # heightScreenInPoints
                                         deviceName=info_data["DeviceName"])
+            confidence = capture_data["Confidence"]
 
             dotinfo["DotNum"].append(0)  # TODO replace with dot number as needed
             dotinfo["XPts"].append(x_raw)
             dotinfo["YPts"].append(y_raw)
             dotinfo["XCam"].append(x_cam)
             dotinfo["YCam"].append(y_cam)
+            dotinfo["Confidence"].append(confidence)
             dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
 
             # Convert image from PNG to JPG
@@ -376,14 +382,16 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
     json_write(os.path.join(output_path, 'dlibRightEye.json'), faceInfoDict["RightEye"])
     
 # Equivalent: generate_faces
-def ROIDetectionTask(directory, jobId):
+def ROIDetectionTask(directory, directory_idx, progressbar):
     recording_path = os.path.join(args.input, directory)
     output_path = os.path.join(args.output, directory)
     # Read information for valid frames
     filenames = json_read(os.path.join(recording_path, "frames.json"))
 
     faceInfoDict = newFaceInfoDict()
+    progressbar.addSubProcess(directory_idx, len(filenames))
     for idx, filename in enumerate(filenames):
+        progressbar.update(directory_idx, idx+1)
         # load image
         image_path = os.path.join(recording_path, "frames", filename)
         image = PILImage.open(image_path)
@@ -411,10 +419,10 @@ def ROIDetectionTask(directory, jobId):
     json_write(os.path.join(output_path, 'dlibFace.json'), faceInfoDict["Face"])
     json_write(os.path.join(output_path, 'dlibLeftEye.json'), faceInfoDict["LeftEye"])
     json_write(os.path.join(output_path, 'dlibRightEye.json'), faceInfoDict["RightEye"])
-    return
+    return 
 
-# Equivalent: prepareDataset
-def ROIExtractionTask(directory, jobId):
+# Equivalent: prepareDataset_dlib
+def ROIExtractionTask(directory, directory_idx, progressbar):
 
     recDir = os.path.join(args.input, directory)
     dlibDir = os.path.join(args.metapath, directory)
@@ -472,7 +480,10 @@ def ROIExtractionTask(directory, jobId):
         rightEyeBbox[:, :2] += faceBbox[:, :2]
         faceGridBbox = bboxFromJson(faceGrid)
 
+    progressbar.addSubProcess(directory_idx, len(frames))
     for j, frame in enumerate(frames):
+        progressbar.update(directory_idx, j+1)
+
         # Can we use it?
         if not allValid[j]:
             continue
@@ -553,6 +564,8 @@ def ROIExtractionTask(directory, jobId):
 
     return meta
 
+# Single process Tasks
+
 def compareTask(meta):
     if not args.ignore_reference:
         # Load reference metadata
@@ -624,7 +637,7 @@ def compareTask(meta):
         if totalMatch:
             print('The new metadata.mat is an exact match to the reference from GitHub (including ordering)')
 
-def plotErrorTask(All_RMS_Errors, jobId):
+def plotErrorTask(All_RMS_Errors):
     # Make a data frame
     rms_object = {'x': range(1, 31)}
     for key in All_RMS_Errors.keys():
@@ -674,7 +687,7 @@ def plotErrorTask(All_RMS_Errors, jobId):
     plt.legend(bbox_to_anchor=(0.6, 1), loc='upper left', borderaxespad=0.)
     plt.show()
 
-def plotErrorHeatmapTask(results_path, jobId):
+def plotErrorHeatmapTask(results_path):
     jsondata = json_read(results_path)
     x, y, c = [], [], []
 
@@ -695,7 +708,7 @@ def plotErrorHeatmapTask(results_path, jobId):
     plt.title('Heatmap of Error')
     plt.show()
 
-def plotGazePointHeatmapTask(results_path, jobId):
+def plotGazePointHeatmapTask(results_path):
     jsondata = json_read(results_path)
     x, y, c = [], [], []
     gazepoints = {}
@@ -727,7 +740,7 @@ def plotGazePointHeatmapTask(results_path, jobId):
     plt.ylabel('Y (cm)')
     plt.show()
 
-def plotErrorHistogramTask(results_path, jobId):
+def plotErrorHistogramTask(results_path):
     jsondata = json_read(results_path)
     x = []
     for datapoint in jsondata:
@@ -741,7 +754,7 @@ def plotErrorHistogramTask(results_path, jobId):
     plt.title('Histogram of Error')
     plt.show()
 
-def parseResultsTask(results_path, jobId):
+def parseResultsTask(results_path):
     jsondata = json_read(results_path)
     csvwriter = csv.writer(open("best_results.csv", "w", newline=''))
     csvwriter.writerow(
@@ -760,25 +773,25 @@ def dataStatsTask(filepath):
         print(filepath + " doesn't exists.")
         return
     data = sio.loadmat(filepath, struct_as_record=False)
-    trainSize = data['labelTrain'][0].tolist().count(1) 
-    validSize = data['labelVal'][0].tolist().count(1)
-    testSize = data['labelTest'][0].tolist().count(1)
+    trainSize = data['labelTrain'].flatten().tolist().count(1) 
+    validSize = data['labelVal'].flatten().tolist().count(1)
+    testSize = data['labelTest'].flatten().tolist().count(1)
     total = trainSize + validSize + testSize
+    print('{:11s}: {:8d} {:6.2f}%'.format('totalSize', total, 100*total/total))
     print('{:11s}: {:8d} {:6.2f}%'.format('trainSize', trainSize, 100*trainSize/total))
     print('{:11s}: {:8d} {:6.2f}%'.format('validSize', validSize, 100*validSize/total))
     print('{:11s}: {:8d} {:6.2f}%'.format('testSize', testSize, 100*testSize/total))
 
-
 def testTask(filepath):
     from time import sleep
     import random
-    num_process = 50
+    num_process = 40
     bar = MultiProgressBar(max_value=num_process, boundary=True)
     for processIndex in range(num_process):
-        max_value = random.randint(1,2)
+        max_value = random.randint(0, 4)
         bar.addSubProcess(processIndex, max_value)
         for value in range(1, max_value+1):
-            sleep(0.1)
+            sleep(0.00001)
             bar.update(processIndex, value)
 
 
