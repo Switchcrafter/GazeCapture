@@ -9,7 +9,7 @@ import numpy as np
 import scipy.io as sio
 from PIL import Image
 
-from Utilities import SimpleProgressBar
+from Utilities import MultiProgressBar
 
 '''
 Prepares the GazeCapture dataset for use with the pytorch code. Crops images, compiles JSONs into metadata.mat
@@ -43,7 +43,9 @@ def parse_arguments():
     parser.add_argument('--output_path', default=None,
                         help="Where to write the output. Can be the same as dataset_path if you wish (=default).")
     parser.add_argument('--ignore_reference', default=False, action='store_true',
-                        help="Where to write the output. Can be the same as dataset_path if you wish (=default).")
+                        help="Set to true when parsing non-MIT data. Will ignore all reference metadata")
+    parser.add_argument('--use_reference_split', default=False, action='store_true',
+                        help="Set to true to to use the reference splits. Implicitly sets --ingnore_reference")
     args = parser.parse_args()
 
     return args
@@ -57,6 +59,11 @@ def main():
 
     if args.dataset_path is None or not os.path.isdir(args.dataset_path):
         raise RuntimeError('No such dataset folder %s!' % args.dataset_path)
+
+    reference_data_split = None
+    if args.use_reference_split:
+        reference_data_split = readJson('./reference_data_split.json')
+        args.ignore_reference = True
 
     preparePath(args.output_path)
 
@@ -78,12 +85,15 @@ def main():
         'labelTest': []
     }
 
-    for i, recording in enumerate(recordings):
-        print('[%d/%d] Processing recording %s (%.2f%%)' % (i, len(recordings), recording, i / len(recordings) * 100))
+    total_recordings = len(recordings)
+
+    multi_progress_bar = MultiProgressBar(max_value=total_recordings, boundary=True)
+
+    for recording_idx, recording in enumerate(recordings):
         recDir = os.path.join(args.dataset_path, recording)
         recDirOut = os.path.join(args.output_path, recording)
 
-        if args.dlib_path == None:
+        if args.dlib_path is None:
             # Read JSONs
             appleFace = readJson(os.path.join(recDir, 'appleFace.json'))
             if appleFace is None:
@@ -144,13 +154,12 @@ def main():
         faceGridBbox = bboxFromJson(faceGrid)
 
         total_frames = len(frames)
-        frames_bar = SimpleProgressBar(max_value=total_frames, label=recording)
 
-        for j, frame in enumerate(frames):
-            frames_bar.update(j + 1)
+        multi_progress_bar.addSubProcess(index=recording_idx, max_value=total_frames)
 
+        for frame_idx, frame in enumerate(frames):
             # Can we use it?
-            if not allValid[j]:
+            if not allValid[frame_idx]:
                 continue
 
             # Load image
@@ -165,9 +174,9 @@ def main():
             img = np.array(img.convert('RGB'))
 
             # Crop images
-            imFace = cropImage(img, faceBbox[j, :])
-            imEyeL = cropImage(img, leftEyeBbox[j, :])
-            imEyeR = cropImage(img, rightEyeBbox[j, :])
+            imFace = cropImage(img, faceBbox[frame_idx, :])
+            imEyeL = cropImage(img, leftEyeBbox[frame_idx, :])
+            imEyeR = cropImage(img, rightEyeBbox[frame_idx, :])
 
             # Save images
             Image.fromarray(imFace).save(os.path.join(facePath, '%05d.jpg' % frame), quality=95)
@@ -177,14 +186,16 @@ def main():
             # Collect metadata
             meta['labelRecNum'] += [int(recording)]
             meta['frameIndex'] += [frame]
-            meta['labelDotXCam'] += [dotInfo['XCam'][j]]
-            meta['labelDotYCam'] += [dotInfo['YCam'][j]]
-            meta['labelFaceGrid'] += [faceGridBbox[j, :]]
+            meta['labelDotXCam'] += [dotInfo['XCam'][frame_idx]]
+            meta['labelDotYCam'] += [dotInfo['YCam'][frame_idx]]
+            meta['labelFaceGrid'] += [faceGridBbox[frame_idx, :]]
 
             split = info["Dataset"]
             meta['labelTrain'] += [split == "train"]
             meta['labelVal'] += [split == "val"]
             meta['labelTest'] += [split == "test"]
+
+            multi_progress_bar.update(index=recording_idx, value=frame_idx+1)
 
     # Integrate
     meta['labelRecNum'] = np.stack(meta['labelRecNum'], axis=0).astype(np.int16)
@@ -263,6 +274,20 @@ def main():
         if totalMatch:
             print('The new metadata.mat is an exact match to the reference from GitHub (including ordering)')
 
+    # Output statistics for frames
+
+    count_train = meta['labelTrain'].count(1)
+    count_val = meta['labelVal'].count(1)
+    count_test = meta['labelTest'].count(1)
+    count_total = len(meta['frameIndex'])
+
+    print("")
+    print(f"Train      {count_train:10d} frames - {(count_train / count_total) * 100:6.2f}%")
+    print(f"Validation {count_val:10d} frames - {(count_val / count_total) * 100:6.2f}%")
+    print(f"Test       {count_test:10d} frames - {(count_test / count_total) * 100:6.2f}%")
+    print("")
+
+
     # import pdb; pdb.set_trace()
     input("Press Enter to continue...")
 
@@ -323,4 +348,3 @@ def cropImage(img, bbox):
 
 if __name__ == "__main__":
     main()
-    print('DONE')
