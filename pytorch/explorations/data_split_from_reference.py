@@ -41,5 +41,5 @@ for i, frame in enumerate(data['frameIndex']):
         recordingDict['recNum'].append(int(recNum))
         recordingDict['label'].append(label)
 
-with open('reference_data_split.json', 'w') as outfile:
+with open('../metadata/reference_data_split.json', 'w') as outfile:
     json.dump(recordingDict, outfile)

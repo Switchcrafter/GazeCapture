@@ -292,7 +292,7 @@ def ROIExtractionTask(directory):
 def compareTask(meta):
     # Load reference metadata
     print('Will compare to the reference GitHub dataset metadata.mat...')
-    reference = sio.loadmat('../reference_metadata.mat', struct_as_record=False)
+    reference = sio.loadmat('../metadata/reference_metadata.mat', struct_as_record=False)
     reference['labelRecNum'] = reference['labelRecNum'].flatten()
     reference['frameIndex'] = reference['frameIndex'].flatten()
     reference['labelDotXCam'] = reference['labelDotXCam'].flatten()
