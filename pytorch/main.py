@@ -13,12 +13,12 @@ import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 
-import argument_parser
-import checkpoint_manager
-import cyclical_learning_rate
+from utility_functions import argument_parser
+from utility_functions import checkpoint_manager
+from utility_functions import cyclical_learning_rate
 from ITrackerData import load_all_data
 from ITrackerModel import ITrackerModel
-from Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations, resize, set_print_policy
+from utility_functions.Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations, resize, set_print_policy
 
 try:
     from azureml.core.run import Run
@@ -583,13 +583,13 @@ def evaluate(dataset,
                   'Time {batch_time.val:8.4f} ({batch_time.avg:8.4f})\t'
                   'MSELoss {MSELosses.val:8.4f} ({MSELosses.avg:8.4f})\t'
                   'RMSError {RMSErrors.val:8.4f} ({RMSErrors.avg:8.4f})\t'.format(
-                split=dataset.split,
-                epoch=epoch,
-                batchNum=batchNum,
-                dataset_size=dataset.size,
-                batch_time=batch_time,
-                MSELosses=MSELosses,
-                RMSErrors=RMSErrors))
+                    split=dataset.split,
+                    epoch=epoch,
+                    batchNum=batchNum,
+                    dataset_size=dataset.size,
+                    batch_time=batch_time,
+                    MSELosses=MSELosses,
+                    RMSErrors=RMSErrors))
         else:
             args.vis.plot("loss", dataset.split, "RMSError (epoch: {})".format(epoch), num_samples, RMSErrors.avg)
             progress_bar.update(num_samples, MSELosses.avg, RMSErrors.avg)

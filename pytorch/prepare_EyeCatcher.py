@@ -3,13 +3,13 @@ import os
 import json
 import shutil
 
-from cam2screen import screen2cam
-from face_utilities import faceEyeRectsToFaceInfoDict, newFaceInfoDict, find_face_dlib, \
+from utility_functions.cam2screen import screen2cam
+from utility_functions.face_utilities import faceEyeRectsToFaceInfoDict, newFaceInfoDict, find_face_dlib, \
     landmarksToRects, generate_face_grid_rect
 from PIL import Image as PILImage  # Pillow
 import numpy as np
 import dateutil.parser
-from Utilities import MultiProgressBar
+from utility_functions.Utilities import MultiProgressBar
 
 
 # Example path is Surface_Pro_4/someuser/00000

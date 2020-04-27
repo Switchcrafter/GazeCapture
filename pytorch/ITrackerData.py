@@ -10,7 +10,9 @@ from random import shuffle
 # CPU data loader
 from PIL import Image
 import torchvision.transforms as transforms
-from face_utilities import hogImage
+from utility_functions.face_utilities import hogImage
+
+from utility_functions.Utilities import centered_text
 
 try:
     # GPU data loader
@@ -29,8 +31,6 @@ except ImportError:
     class DALIGenericIterator:
         def __init__(self, *args):
             return
-
-from Utilities import centered_text
 
 
 def normalize_image_transform(image_size, split, jitter, color_space):
