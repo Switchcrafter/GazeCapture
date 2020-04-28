@@ -361,7 +361,8 @@ def plotErrorTask(All_RMS_Errors):
     # Make a data frame
     rms_object = {'x': range(1, 31)}
     for key in All_RMS_Errors.keys():
-        rms_object[key] = np.array((All_RMS_Errors[key])['RMS_Errors'])
+        if All_RMS_Errors[key]["Plot"]:
+            rms_object[key] = np.array((All_RMS_Errors[key])['RMS_Errors'])
 
     df_rms = pd.DataFrame(rms_object)
 
@@ -388,7 +389,8 @@ def plotErrorTask(All_RMS_Errors):
 
     best_rms_object = {'x': range(1, 31)}
     for key in All_RMS_Errors.keys():
-        best_rms_object[key] = np.array((All_RMS_Errors[key])['Best_RMS_Errors'])
+        if All_RMS_Errors[key]["Plot"]:
+            best_rms_object[key] = np.array((All_RMS_Errors[key])['Best_RMS_Errors'])
 
     # Make a data frame
     df_best_rms = pd.DataFrame(best_rms_object)
@@ -559,7 +561,9 @@ if __name__ == '__main__':
         dataLoader = ListLoader
     ######### Data Visualization Tasks #########
     elif args.task == "plotErrorTask":
-        from RMS_errors import All_RMS_Errors
+        script_directory = os.path.dirname(os.path.realpath(__file__))
+        json_path = os.path.join(script_directory, "../metadata/all_rms_errors.json")
+        All_RMS_Errors = json.load(open(json_path, "r"))
         taskData = All_RMS_Errors
         dataLoader = None
         taskFunction = plotErrorTask
