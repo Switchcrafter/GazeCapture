@@ -281,7 +281,7 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
 
         capture_json_path = os.path.join(args.input, directory, "frames", capture + ".json")
         capture_jpg_path = os.path.join(args.input, directory, "frames", capture + ".jpg")
-        
+
         if os.path.isfile(capture_json_path) and os.path.isfile(capture_jpg_path):
             capture_data = json_read(capture_json_path)
             capture_image = PILImage.open(capture_jpg_path)
@@ -314,7 +314,7 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
             facegrid["H"].append(faceGridH)
             facegrid["IsValid"].append(isValid)
 
-            
+
             info["NumEyeDetections"] = info["NumEyeDetections"] + 1
             # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
             screen["H"].append(screen_data['H'])
@@ -366,7 +366,7 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
     json_write(os.path.join(output_path, 'dlibFace.json'), faceInfoDict["Face"])
     json_write(os.path.join(output_path, 'dlibLeftEye.json'), faceInfoDict["LeftEye"])
     json_write(os.path.join(output_path, 'dlibRightEye.json'), faceInfoDict["RightEye"])
-    
+
 # Equivalent: generate_faces
 def ROIDetectionTask(directory, directory_idx, progressbar):
     recording_path = os.path.join(args.input, directory)
@@ -405,7 +405,7 @@ def ROIDetectionTask(directory, directory_idx, progressbar):
     json_write(os.path.join(output_path, 'dlibFace.json'), faceInfoDict["Face"])
     json_write(os.path.join(output_path, 'dlibLeftEye.json'), faceInfoDict["LeftEye"])
     json_write(os.path.join(output_path, 'dlibRightEye.json'), faceInfoDict["RightEye"])
-    return 
+    return
 
 # Equivalent: prepareDataset_dlib
 def ROIExtractionTask(directory, directory_idx, progressbar):
@@ -605,7 +605,7 @@ def compareTask(meta):
     # Statistics
     print('======================\n\tSummary\n======================')
     print('Total added %d frames from %d recordings.' % (len(meta['frameIndex']), len(np.unique(meta['labelRecNum']))))
-    
+
     if args.reference != "":
         nMissing = np.sum(rToM < 0)
         nExtra = np.sum(mToR < 0)
@@ -753,13 +753,13 @@ def parseResultsTask(results_path):
             [f'{datapoint["frame"][0]}_{datapoint["frame"][1]}', datapoint["frame"][0], datapoint["frame"][1],
             datapoint["gazePoint"][0], datapoint["gazePoint"][1], datapoint["gazePrediction"][0],
             datapoint["gazePrediction"][1], distance])
-    
+
 def dataStatsTask(filepath):
     if not os.path.isfile(filepath):
         print(filepath + " doesn't exists.")
         return
     data = sio.loadmat(filepath, struct_as_record=False)
-    trainSize = data['labelTrain'].flatten().tolist().count(1) 
+    trainSize = data['labelTrain'].flatten().tolist().count(1)
     validSize = data['labelVal'].flatten().tolist().count(1)
     testSize = data['labelTest'].flatten().tolist().count(1)
     total = trainSize + validSize + testSize
@@ -796,7 +796,7 @@ def countFilesTaskParallel(directory, directory_idx, progressbar):
     recording_path = os.path.join(args.input, directory)
     filenames = json_read(os.path.join(recording_path, "frames.json"))
     return len(filenames)
-    
+
 # all tasks are handled here
 if __name__ == '__main__':
     # Argument parser
@@ -892,6 +892,7 @@ if __name__ == '__main__':
         taskFunction = parseResultsTask
     ######### Demo Tasks #########
     elif args.task == "demoTask":
+        sys.path.append(".")
         from iTrackerGUITool import live_demo
         taskData = 0
         dataLoader = None
