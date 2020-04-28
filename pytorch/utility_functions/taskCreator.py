@@ -786,16 +786,72 @@ def countFilesTaskSerial(filepath):
     count = 0
     sessionRegex = '([0-9]){5}'
     directories = getDirList(args.input, sessionRegex)
+    # directories = directories[:10]
+    bar = MultiProgressBar(max_value=len(directories), boundary=True)
     for directory_idx, directory in enumerate(directories):
         recording_path = os.path.join(args.input, directory)
         filenames = json_read(os.path.join(recording_path, "frames.json"))
-        count += len(filenames)
+        bar.addSubProcess(directory_idx, len(filenames))
+        for idx, filename in enumerate(filenames):
+            image_path = os.path.join(recording_path, "frames", filename)
+            image = PILImage.open(image_path)
+            image = np.array(image.convert('RGB'))
+            shape_np, isValid = find_face_dlib(image)
+            bar.update(directory_idx, idx+1)
+            if isValid:
+                count += 1
     print(count)
 
-def countFilesTaskParallel(directory, directory_idx, progressbar):
+def countFilesTaskParallel(directory, directory_idx, bar):
     recording_path = os.path.join(args.input, directory)
     filenames = json_read(os.path.join(recording_path, "frames.json"))
-    return len(filenames)
+    count = 0
+    bar.addSubProcess(directory_idx, len(filenames))
+    for idx, filename in enumerate(filenames):
+        image_path = os.path.join(recording_path, "frames", filename)
+        image = PILImage.open(image_path)
+        image = np.array(image.convert('RGB'))
+        shape_np, isValid = find_face_dlib(image)
+        bar.update(directory_idx, idx+1)
+        if isValid:
+            count += 1
+    return count
+
+def countValidTask(directory, directory_idx, bar):
+    recording_path = os.path.join(args.input, directory)
+    # print(recording_path)
+    frames = json_read(os.path.join('/data/gc-data', directory, "frames.json"))
+    
+    # reference
+    faceData1 = json_read(os.path.join("/data/gc-output-dlib", directory, "dlibFace.json"))
+    count1 = faceData1["IsValid"].count(1)
+
+    # test subject "/data/gc-data-meta-rc", "/data/old_data/gc-data-meta-rc", "/data/gc-rc-meta
+    faceData2 = json_read(os.path.join("/data/old_data/gc-data-meta-rc", directory, "dlibFace.json"))
+    count2 = faceData2["IsValid"].count(1)
+
+    if count1 != count2:
+        # print(faceData1["IsValid"], faceData2["IsValid"])
+        match = np.asarray(faceData1["IsValid"]) - np.asarray(faceData2["IsValid"])
+        # more frames in ref
+        idx = np.argwhere(match > 0).flatten()
+        for i in idx:
+            from_file = os.path.join('/data/gc-data', directory, "frames", frames[i])
+            to_file = os.path.join('/data/gc-data-extra/ref', directory, frames[i])
+            # print(from_file + "-->" + to_file)
+            preparePath(os.path.join('/data/gc-data-extra/ref', directory))
+            shutil.copy(from_file, to_file)
+        
+        # more frames in test
+        idx = np.argwhere(match < 0).flatten()
+        for i in idx:
+            from_file = os.path.join('/data/gc-data', directory, "frames", frames[i])
+            to_file = os.path.join('/data/gc-data-extra/test', directory, frames[i])
+            # print(from_file + "-->" + to_file)
+            preparePath(os.path.join('/data/gc-data-extra/test', directory))
+            shutil.copy(from_file, to_file)
+            
+    return directory, len(frames), count1, count2
 
 # all tasks are handled here
 if __name__ == '__main__':
@@ -917,6 +973,11 @@ if __name__ == '__main__':
         taskData = getDirList(args.input, sessionRegex)
         dataLoader = ListLoader
         taskFunction = countFilesTaskParallel
+    elif args.task == "countValidTask":
+        sessionRegex = '([0-9]){5}'
+        taskData = getDirList(args.input, sessionRegex)
+        dataLoader = ListLoader
+        taskFunction = countValidTask
 
 
     # run the job
@@ -957,6 +1018,23 @@ if __name__ == '__main__':
     elif args.task == "countFilesTaskParallel":
         # Combine results from various workers
         print(sum(output))
+    elif args.task == "countValidTask":
+        # Combine results from various workers
+        # print(output)
+        sum = 0
+        valid_ref = 0
+        valid_test = 0
+        issues = []
+        for item in output:
+            sum += item[1] 
+            valid_ref += item[2]
+            valid_test += item[3]
+            if item[2] != item[3]:
+                issues.append(item)
+
+        print(issues)
+        print(sum, valid_ref, valid_test)
+        
 
 
 
