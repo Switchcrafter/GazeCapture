@@ -3,7 +3,7 @@ import os
 
 file_dir_path = os.path.dirname(os.path.realpath(__file__))
 
-devicesJson = open(os.path.join(file_dir_path, 'device_metrics.json'))
+devicesJson = open(os.path.join(file_dir_path, '../metadata/device_metrics.json'))
 devices = json.load(devicesJson)
 
 
