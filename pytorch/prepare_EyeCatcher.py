@@ -3,13 +3,13 @@ import os
 import json
 import shutil
 
-from cam2screen import screen2cam
-from face_utilities import faceEyeRectsToFaceInfoDict, newFaceInfoDict, find_face_dlib, \
+from utility_functions.cam2screen import screen2cam
+from utility_functions.face_utilities import faceEyeRectsToFaceInfoDict, newFaceInfoDict, find_face_dlib, \
     landmarksToRects, generate_face_grid_rect
 from PIL import Image as PILImage  # Pillow
 import numpy as np
 import dateutil.parser
-from Utilities import SimpleProgressBar
+from utility_functions.Utilities import MultiProgressBar
 
 
 # Example path is Surface_Pro_4/someuser/00000
@@ -120,11 +120,11 @@ def main():
     directories = sorted(findCaptureSessionDirs(data_directory))
     total_directories = len(directories)
 
-    print(f"Found {total_directories} directories")
+    # print(f"Found {total_directories} directories")
+
+    multi_progress_bar = MultiProgressBar(max_value=total_directories, boundary=True)
 
     for directory_idx, directory in enumerate(directories):
-        print(f"Processing {directory_idx + 1}/{total_directories} - {directory}")
-
         captures = sorted(findCapturesInSession(os.path.join(data_directory, directory)), key=str)
         total_captures = len(captures)
 
@@ -199,11 +199,9 @@ def main():
 
         screen_orientation = getScreenOrientation(screen_data)
 
-        capture_progress_bar = SimpleProgressBar(max_value=total_captures, label=f"{directory_idx:05d}")
+        multi_progress_bar.addSubProcess(index=directory_idx, max_value=total_captures)
 
         for capture_idx, capture in enumerate(captures):
-            capture_progress_bar.update(capture_idx + 1)
-
             capture_json_path = os.path.join(data_directory, directory, "frames", capture + ".json")
             capture_jpg_path = os.path.join(data_directory, directory, "frames", capture + ".jpg")
 
@@ -280,6 +278,8 @@ def main():
             else:
                 print(f"Error processing capture {capture}")
 
+            multi_progress_bar.update(index=directory_idx, value=capture_idx+1)
+
         with open(os.path.join(output_path, 'frames.json'), "w") as write_file:
             json.dump(frames, write_file)
         with open(os.path.join(output_path, 'screen.json'), "w") as write_file:
@@ -296,10 +296,6 @@ def main():
             json.dump(faceInfoDict["LeftEye"], write_file)
         with open(os.path.join(output_path, 'dlibRightEye.json'), "w") as write_file:
             json.dump(faceInfoDict["RightEye"], write_file)
-
-        print("")
-
-    print("DONE")
 
 
 main()

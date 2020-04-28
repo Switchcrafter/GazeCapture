@@ -7,7 +7,7 @@ import time
 from PIL import Image
 from PIL import ImageDraw
 
-from cam2screen import cam2screen
+from utility_functions.cam2screen import cam2screen
 
 
 def parse_commandline_arguments():

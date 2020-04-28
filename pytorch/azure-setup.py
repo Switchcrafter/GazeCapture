@@ -1,6 +1,5 @@
 import os
 
-import azureml.core
 from azureml.core import Workspace, Datastore
 
 storage_key = os.environ['DEEPEYES_STORAGE_KEY']
