@@ -175,6 +175,11 @@ def rc_landmarksToRects(shape_np, isValid):
         left_eye_rect = getRect(cv2.minAreaRect(left_eye_shape_np))
         right_eye_rect = getRect(cv2.minAreaRect(right_eye_shape_np))
 
+        # ToDo enable negative coordinate check. Last value is theta which can be negative.
+        isValid = check_negative_coordinates(face_rect[:-1]) and \
+            check_negative_coordinates(left_eye_rect[:-1]) and \
+            check_negative_coordinates(right_eye_rect[:-1])
+
     return face_rect, left_eye_rect, right_eye_rect, isValid
 
 def rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect, right_eye_rect, isValid):

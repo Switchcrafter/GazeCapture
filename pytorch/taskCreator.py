@@ -104,25 +104,6 @@ def marker(num):
     markerList = ['','.','^','s','+','D','o','p','P','X','$f$']
     return markerList[num]
 
-# Example path is Surface_Pro_4/someuser/00000
-def findCaptureSessionDirs(path):
-    session_paths = []
-    devices = os.listdir(path)
-
-    for device in devices:
-        users = os.listdir(os.path.join(path, device))
-        for user in users:
-            sessions = sorted(os.listdir(os.path.join(path, device, user)), key=str)
-
-            for session in sessions:
-                session_paths.append(os.path.join(device, user, session))
-
-    return session_paths
-
-def findCapturesInSession(path):
-    files = [os.path.splitext(f)[0] for f in os.listdir(os.path.join(path, "frames")) if f.endswith('.json') and not f == "session.json"]
-    return files
-
 def getScreenOrientation(capture_data):
     orientation = 0
 
@@ -169,8 +150,9 @@ def getFileList(path, extensionList):
 def getDirList(path, regexString):
     nameFormat = re.compile(regexString)
     folders = [dirName for dirName in os.listdir(path) if nameFormat.match(dirName)]
-    return folders
+    return sorted(folders)
 
+# used by prepareEyeCatcherTask
 def getCaptureSessionDirList(path):
     session_paths = []
     devices = os.listdir(path)
@@ -181,6 +163,11 @@ def getCaptureSessionDirList(path):
             for session in sessions:
                 session_paths.append(os.path.join(device, user, session))
     return session_paths
+
+# used by prepareEyeCatcherTask
+def getCaptureSessionFileList(path):
+    files = [os.path.splitext(f)[0] for f in os.listdir(os.path.join(path, "frames")) if f.endswith('.json') and not f == "session.json"]
+    return files
 ################################################################################
 ## Dataloaders
 ################################################################################
@@ -216,7 +203,7 @@ def resizeTask(filePath, jobId, progressbar):
 
 # Equivalent: prepare_EyeCatcher
 def prepareEyeCatcherTask(directory, directory_idx, progressbar):
-    captures = sorted(findCapturesInSession(os.path.join(args.input, directory)), key=str)
+    captures = sorted(getCaptureSessionFileList(os.path.join(args.input, directory)), key=str)
     total_captures = len(captures)
 
     # Read directory level json
@@ -567,10 +554,10 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
 # Single process Tasks
 
 def compareTask(meta):
-    if not args.ignore_reference:
+    if args.reference != "":
         # Load reference metadata
         print('Will compare to the reference GitHub dataset metadata.mat...')
-        reference = sio.loadmat('./reference_metadata.mat', struct_as_record=False)
+        reference = sio.loadmat(args.reference, struct_as_record=False)
         reference['labelRecNum'] = reference['labelRecNum'].flatten()
         reference['frameIndex'] = reference['frameIndex'].flatten()
         reference['labelDotXCam'] = reference['labelDotXCam'].flatten()
@@ -620,7 +607,7 @@ def compareTask(meta):
     print('======================\n\tSummary\n======================')
     print('Total added %d frames from %d recordings.' % (len(meta['frameIndex']), len(np.unique(meta['labelRecNum']))))
     
-    if not args.ignore_reference:
+    if args.reference != "":
         nMissing = np.sum(rToM < 0)
         nExtra = np.sum(mToR < 0)
         totalMatch = len(mKey) == len(rKey) and np.all(np.equal(mKey, rKey))
@@ -777,10 +764,12 @@ def dataStatsTask(filepath):
     validSize = data['labelVal'].flatten().tolist().count(1)
     testSize = data['labelTest'].flatten().tolist().count(1)
     total = trainSize + validSize + testSize
+    total2 = len(data['labelTrain'].flatten().tolist())
     print('{:11s}: {:8d} {:6.2f}%'.format('totalSize', total, 100*total/total))
     print('{:11s}: {:8d} {:6.2f}%'.format('trainSize', trainSize, 100*trainSize/total))
     print('{:11s}: {:8d} {:6.2f}%'.format('validSize', validSize, 100*validSize/total))
     print('{:11s}: {:8d} {:6.2f}%'.format('testSize', testSize, 100*testSize/total))
+    print('{:11s}: {:8d} {:6.2f}%'.format('total2Size', total2, 100*total2/total))
 
 def testTask(filepath):
     from time import sleep
@@ -794,7 +783,21 @@ def testTask(filepath):
             sleep(0.00001)
             bar.update(processIndex, value)
 
+def countFilesTaskSerial(filepath):
+    count = 0
+    sessionRegex = '([0-9]){5}'
+    directories = getDirList(args.input, sessionRegex)
+    for directory_idx, directory in enumerate(directories):
+        recording_path = os.path.join(args.input, directory)
+        filenames = json_read(os.path.join(recording_path, "frames.json"))
+        count += len(filenames)
+    print(count)
 
+def countFilesTaskParallel(directory, directory_idx, progressbar):
+    recording_path = os.path.join(args.input, directory)
+    filenames = json_read(os.path.join(recording_path, "frames.json"))
+    return len(filenames)
+    
 # all tasks are handled here
 if __name__ == '__main__':
     # Argument parser
@@ -807,7 +810,7 @@ if __name__ == '__main__':
     parser.add_argument('--mirror', action='store_true', help="apply data mirroring", default=False)
     parser.add_argument('--portraitOnly', action='store_true', help="use portrait data only", default=False)
     parser.add_argument('--source_compare', action='store_true', help="compare against source", default=False)
-    parser.add_argument('--ignore_reference', default=False, action='store_true', help="Ignore reference")
+    parser.add_argument('--reference', default="", help="reference .mat path")
     args = parser.parse_args()
 
     if args.task == "":
@@ -852,14 +855,6 @@ if __name__ == '__main__':
     elif args.task == "prepareEyeCatcherTask":
         taskFunction = prepareEyeCatcherTask
         taskData = getCaptureSessionDirList(args.input)
-        dataLoader = ListLoader
-    elif args.task == "prepareEyeCatcherTask2":
-        taskFunction = prepareEyeCatcherTask2
-        taskData = getCaptureSessionDirList(args.input)
-        dataLoader = ListLoader
-    elif args.task == "ROIExtractionTask":
-        taskFunction = ROIExtractionTask
-        taskData = getDirList(args.input, '([0-9]){5}')
         dataLoader = ListLoader
     elif args.task == "ROIDetectionTask":
         taskFunction = ROIDetectionTask
@@ -910,6 +905,16 @@ if __name__ == '__main__':
         taskData = args.input
         dataLoader = None
         taskFunction = testTask
+    elif args.task == "countFilesTaskSerial":
+        taskData = args.input
+        dataLoader = None
+        taskFunction = countFilesTaskSerial
+    elif args.task == "countFilesTaskParallel":
+        sessionRegex = '([0-9]){5}'
+        taskData = getDirList(args.input, sessionRegex)
+        dataLoader = ListLoader
+        taskFunction = countFilesTaskParallel
+
 
     # run the job
     output = taskManager.job(taskFunction, taskData, dataLoader)
@@ -946,6 +951,9 @@ if __name__ == '__main__':
         meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
         # print(meta)
         compareTask(meta)
+    elif args.task == "countFilesTaskParallel":
+        # Combine results from various workers
+        print(sum(output))
 
 
 
