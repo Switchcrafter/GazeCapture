@@ -6,14 +6,14 @@ import csv
 import math
 import shutil
 import argparse
-from utility_functions import taskManager
+import taskManager
 import pandas as pd
 import scipy.io as sio
 from PIL import Image as PILImage
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 import matplotlib.colors as colors
-from utility_functions.face_utilities import *
+from face_utilities import *
 import dateutil.parser
 from cam2screen import screen2cam
 from Utilities import MultiProgressBar
@@ -101,7 +101,7 @@ def RC_cropImage(img, bbox):
 
 def marker(num):
     markerList = ['','.','^','s','+','D','o','p','P','X','$f$']
-    return markerList[num]
+    return markerList[num%len(markerList)]
 
 def getScreenOrientation(capture_data):
     orientation = 0
@@ -866,7 +866,10 @@ if __name__ == '__main__':
         dataLoader = ListLoader
     ######### Data Visualization Tasks #########
     elif args.task == "plotErrorTask":
-        from RMS_errors import All_RMS_Errors
+        # from RMS_errors import All_RMS_Errors
+        script_directory = os.path.dirname(os.path.realpath(__file__))
+        json_path = os.path.join(script_directory, "../metadata/all_rms_errors.json")
+        All_RMS_Errors = json_read(json_path)
         taskData = All_RMS_Errors
         dataLoader = None
         taskFunction = plotErrorTask
