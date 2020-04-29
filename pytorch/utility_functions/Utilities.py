@@ -176,7 +176,7 @@ class ProgressBar(Bar):
         index = (len(marker) - len(infoString)) // 2
         marker = marker[:index] + infoString + marker[index + len(infoString):]
         end = '\r' if value < self.max_value else '\n'
-        print(self.label + marker + time_info, end=end)
+        print(self.label + marker + metric + error + time_info, end=end)
 
 class SamplingBar(Bar):
     '''A sampling hotness bar which stretches to fill the line.'''
