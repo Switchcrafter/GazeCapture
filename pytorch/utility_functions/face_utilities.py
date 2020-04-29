@@ -280,14 +280,6 @@ def generate_grid2(rect, webcam_image):
     im = cv2.drawContours(im, [box], 0, (0, 0, 0), -1)  # 2 for line, -1 for filled
     return im
 
-# def generate_grid2(rect, webcam_image):
-#     im = webcam_image
-
-#     box = np.int0(cv2.boxPoints(getBox(rect)))
-#     im = cv2.drawContours(im, [box], 0, (255, 0, 0), 2)  # 2 for line, -1 for filled
-#     # im = cv2.resize(im, (GRID_SIZE, GRID_SIZE), cv2.INTER_AREA)
-#     return im
-
 def generate_grid(face_rect, im):
     box = np.int0((cv2.boxPoints(getBox(face_rect))))
     im = im*0 + 255

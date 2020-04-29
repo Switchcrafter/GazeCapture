@@ -827,7 +827,7 @@ def countValidTask(directory, directory_idx, bar):
     count1 = faceData1["IsValid"].count(1)
 
     # test subject "/data/gc-data-meta-rc", "/data/old_data/gc-data-meta-rc", "/data/gc-rc-meta
-    faceData2 = json_read(os.path.join("/data/old_data/gc-data-meta-rc", directory, "dlibFace.json"))
+    faceData2 = json_read(os.path.join("/data/gc-data-meta-rc", directory, "dlibFace.json"))
     count2 = faceData2["IsValid"].count(1)
 
     if count1 != count2:
