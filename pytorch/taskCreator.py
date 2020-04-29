@@ -6,17 +6,17 @@ import csv
 import math
 import shutil
 import argparse
-import taskManager
+from utility_functions import taskManager
 import pandas as pd
 import scipy.io as sio
 from PIL import Image as PILImage
 import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 import matplotlib.colors as colors
-from face_utilities import *
+from utility_functions.face_utilities import *
 import dateutil.parser
-from cam2screen import screen2cam
-from Utilities import MultiProgressBar
+from utility_functions.cam2screen import screen2cam
+from utility_functions.Utilities import MultiProgressBar
 
 ################################################################################
 ## Utility functions
@@ -627,7 +627,8 @@ def plotErrorTask(All_RMS_Errors):
     # Make a data frame
     rms_object = {'x': range(1, 31)}
     for key in All_RMS_Errors.keys():
-        rms_object[key] = np.array((All_RMS_Errors[key])['RMS_Errors'])
+        if All_RMS_Errors[key]["Plot"]:
+            rms_object[key] = np.array((All_RMS_Errors[key])['RMS_Errors'])
 
     df_rms = pd.DataFrame(rms_object)
 
@@ -652,7 +653,8 @@ def plotErrorTask(All_RMS_Errors):
 
     best_rms_object = {'x': range(1, 31)}
     for key in All_RMS_Errors.keys():
-        best_rms_object[key] = np.array((All_RMS_Errors[key])['Best_RMS_Errors'])
+        if All_RMS_Errors[key]["Plot"]:
+            best_rms_object[key] = np.array((All_RMS_Errors[key])['Best_RMS_Errors'])
 
     # Make a data frame
     df_best_rms = pd.DataFrame(best_rms_object)

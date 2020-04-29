@@ -4,7 +4,7 @@ from multiprocessing.managers import BaseManager, SyncManager
 import os
 import platform
 import inspect
-from Utilities import SimpleProgressBar, MultiProgressBar
+from utility_functions.Utilities import SimpleProgressBar, MultiProgressBar
 import time
 
 def print_sysinfo():
