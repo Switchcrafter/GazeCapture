@@ -81,6 +81,7 @@ TARGETS = [(-10., -3.),
            (10., -15.),
            ]
 
+
 # various command-based actions
 
 def live_demo(input=0):
@@ -213,11 +214,13 @@ def live_demo(input=0):
     cv2.destroyAllWindows()
     cap.release()
 
+
 def generate_baseline_display_data(display, screenOffsetX, screenOffsetY, monitor, webcam_image):
     display = draw_overlay(display, screenOffsetX, screenOffsetY, webcam_image)
     # draw reference grid
     draw_reference_grid(display, monitor.height, monitor.width)
     return display
+
 
 def draw_landmarks(im, shape_np, anchor_indices):
     # loop over the (x, y)-coordinates for the facial landmarks
@@ -281,13 +284,6 @@ def generate_display_data(display, face_grid_image, face_image, gaze_prediction_
                                             monitor.height,
                                             deviceName=DEVICE_NAME
                                             )
-
-    # input_images = np.concatenate((face_image,
-    #                                right_eye_image,
-    #                                left_eye_image,
-    #                                face_grid_image.resize((224, 224))),
-    #                               axis=0)
-
 
     input_images = np.concatenate((face_image,
                                    right_eye_image,

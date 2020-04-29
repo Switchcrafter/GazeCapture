@@ -7,9 +7,13 @@ from PIL import Image
 from skimage import exposure
 from skimage import feature
 
-p = "shape_predictor_68_face_landmarks.dat"
+import os
+
+file_dir_path = os.path.dirname(os.path.realpath(__file__))
+landmarks_path = os.path.join(file_dir_path, '../metadata/shape_predictor_68_face_landmarks.dat')
+
 detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor(p)
+predictor = dlib.shape_predictor(landmarks_path)
 
 IMAGE_WIDTH = 224
 IMAGE_HEIGHT = 224
