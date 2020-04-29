@@ -4,6 +4,7 @@ import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 from torchvision import models
+import os
 
 '''
 Pytorch model for the iTracker.
@@ -78,6 +79,33 @@ class FaceImageModel(nn.Module):
         # 64
         return x
 
+class FaceGridRCModel(nn.Module):
+    def __init__(self, color_space):
+        super(FaceGridRCModel, self).__init__()
+        self.conv = ItrackerImageModel(color_space)
+        self.fc = nn.Sequential(
+            # FC-F1
+            # 25088
+            nn.Dropout(0.1),
+            nn.Linear(25088, 256),
+            # 256
+            nn.ReLU(inplace=True),
+
+            # FC-F2
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            # 128
+            nn.ReLU(inplace=True),
+            # 128
+        )
+
+    def forward(self, x):
+        # 3C x 224H x 224W
+        x = self.conv(x)
+        # 25088
+        x = self.fc(x)
+        # 128
+        return x
 
 class FaceGridModel(nn.Module):
     # Model for the face grid pathway
@@ -116,7 +144,8 @@ class ITrackerModel(nn.Module):
         # 1C/3Cx224Hx224W --> 64
         self.faceModel = FaceImageModel(color_space)
         # 1Cx25Hx25W --> 128
-        self.gridModel = FaceGridModel()
+        self.gridModel = FaceGridRCModel(color_space)
+
 
         # Joining both eyes
         self.eyesFC = nn.Sequential(

@@ -9,7 +9,7 @@ def parse_commandline_arguments():
     parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
     parser.add_argument('--data_path',
                         help="Path to processed dataset. It should contain metadata.mat. Use prepareDataset.py.",
-                        default='/data/gc-data-prepped-dlib/')
+                        default='/data/gc-data-prepped-rc')
     parser.add_argument('--output_path',
                         help="Path to checkpoint",
                         default="")
@@ -38,17 +38,22 @@ def parse_commandline_arguments():
     parser.add_argument('--hsm_cycle', type=int, default=8)
     parser.add_argument('--adv', action='store_true', default=False, help="Enables Adversarial Attack")
     parser.add_argument('--color_space', default='YCbCr', help='Image color space - RGB, YCbCr, L, HSV, LAB')
-    parser.add_argument('--decay_type', default='none', help='none, step, exp, time')
+    parser.add_argument('--decay_type', default='none', help='none, step_decay, exp_decay, time_decay')
     parser.add_argument('--shape_type', default='triangular', help='triangular, flat')
     parser.add_argument('--data_loader', default="cpu", help="cpu, dali_cpu, dali_gpu, dali_gpu_all")
     parser.add_argument('--visdom', action='store_true', default=False, help="Enables Visdom Server")
+    parser.add_argument('--optimizer', default="sgd", help="sgd, adam")
+    parser.add_argument('--start_lr', type=float, default=1)
+    parser.add_argument('--end_lr', type=float, default=3E-3)
+    parser.add_argument('--lr_factor', type=int, default=6)
+    parser.add_argument('--epochs_per_step', type=int, default=4)
     args = parser.parse_args()
 
     args.device_group = "".join([str(device) for device in args.local_rank])
     # Create a checkpoint directory per device (or device group) for multiple executions
     if args.output_path == "":
         args.output_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'checkpoints', 'gpu' + args.device_group)
-    
+
     args.device = None
     args.using_cuda = False
     if torch.cuda.device_count() > 1 and args.mode == "none":

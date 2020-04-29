@@ -53,11 +53,6 @@ IMAGE_SIZE = (IMAGE_WIDTH, IMAGE_HEIGHT)
 GRID_SIZE = 25
 FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
 
-START_LR = 1
-END_LR = 3E-3
-LR_FACTOR = 6
-EPOCHS_PER_STEP = 4
-
 
 def main():
     args = argument_parser.parse_commandline_arguments()
@@ -293,18 +288,24 @@ def initialize_hyper_parameters(args, datasets, model):
     # criteria = [nn.MSELoss]
     # weights = [1.0]
     # criterion = MultiCriterion(criteria, weights, reduction='mean').to(device=args.device)
-    optimizer = torch.optim.SGD(model.parameters(), START_LR,
-                                momentum=MOMENTUM,
-                                weight_decay=WEIGHT_DECAY)
+    if args.optimizer =="adam":
+        optimizer = torch.optim.Adam(model.parameters(), args.start_lr,
+                                    weight_decay=WEIGHT_DECAY)
+    else:
+        optimizer = torch.optim.SGD(model.parameters(), args.start_lr,
+                                    momentum=MOMENTUM,
+                                    weight_decay=WEIGHT_DECAY)
+
     batch_count = math.ceil(datasets['train'].size / args.batch_size)
-    step_size = EPOCHS_PER_STEP * batch_count
+
+    step_size = args.epochs_per_step * batch_count
     clr = cyclical_learning_rate.cyclical_lr(batch_count,
                                              shape=cyclical_learning_rate.shape_function(args.shape_type,
                                                                                          step_size),
                                              decay=cyclical_learning_rate.decay_function(args.decay_type,
-                                                                                         EPOCHS_PER_STEP),
-                                             min_lr=END_LR / LR_FACTOR,
-                                             max_lr=END_LR)
+                                                                                         args.epochs_per_step),
+                                             min_lr=args.end_lr / args.lr_factor,
+                                             max_lr=args.end_lr)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr])
     return criterion, optimizer, scheduler
 

@@ -324,6 +324,7 @@ class MultiProgressBar(Bar):
 
         end = '\r' if complete < total else '\n'
         print(self.label + self.left + code + self.right + time_info, end=end)
+   
 
 def centered_text(infoString, marker='-', length=40):
     marker = marker * length
