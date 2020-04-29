@@ -10,7 +10,9 @@ from random import shuffle
 # CPU data loader
 from PIL import Image
 import torchvision.transforms as transforms
-from face_utilities import hogImage
+from utility_functions.face_utilities import hogImage
+
+from utility_functions.Utilities import centered_text
 
 try:
     # GPU data loader
@@ -29,8 +31,6 @@ except ImportError:
     class DALIGenericIterator:
         def __init__(self, *args):
             return
-
-from Utilities import centered_text
 
 
 def normalize_image_transform(image_size, split, jitter, color_space):
@@ -52,6 +52,12 @@ def normalize_image_transform(image_size, split, jitter, color_space):
     return transforms.Compose(normalize_image)
 
 
+def resize_image_transform(image_size):
+    normalize_image = []
+    normalize_image.append(transforms.Resize(image_size))
+    normalize_image.append(transforms.ToTensor())
+    return transforms.Compose(normalize_image)
+
 class ExternalSourcePipeline(Pipeline):
     def __init__(self, data, batch_size, image_size, split, silent, num_threads, device_id, data_loader, color_space, shuffle=False):
         super(ExternalSourcePipeline, self).__init__(batch_size,
@@ -67,6 +73,7 @@ class ExternalSourcePipeline(Pipeline):
         self.imFaceBatch = ops.ExternalSource()
         self.imEyeLBatch = ops.ExternalSource()
         self.imEyeRBatch = ops.ExternalSource()
+        self.imFaceGridBatch = ops.ExternalSource()
         self.faceGridBatch = ops.ExternalSource()
         self.gazeBatch = ops.ExternalSource()
         self.frameBatch = ops.ExternalSource()
@@ -231,6 +238,7 @@ class ITrackerData(object):
 
         if self.data_loader == 'cpu':
             self.normalize_image = normalize_image_transform(image_size=self.imSize, jitter=jitter, split=split, color_space=self.color_space)
+            self.resize_transform = resize_image_transform(image_size=self.imSize)
 
     def __len__(self):
         return len(self.indices)
@@ -267,9 +275,12 @@ class ITrackerData(object):
         imEyeRPath = os.path.join(self.dataPath,
                                   '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                    self.metadata['frameIndex'][rowIndex]))
+        imfaceGridPath = os.path.join(self.dataPath,
+                                  '%05d/faceGrid/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                                                   self.metadata['frameIndex'][rowIndex]))
         gaze = np.array([self.metadata['labelDotXCam'][rowIndex], self.metadata['labelDotYCam'][rowIndex]], np.float32)
         frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]])
-        faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][rowIndex, :])
+        # faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][rowIndex, :])
         row = np.array([int(rowIndex)], dtype=np.uint8)
         index = np.array([int(index)], dtype=np.uint8)
 
@@ -278,6 +289,7 @@ class ITrackerData(object):
             imFace = self.loadImage(imFacePath)
             imEyeL = self.loadImage(imEyeLPath)
             imEyeR = self.loadImage(imEyeRPath)
+            imfaceGrid = self.loadImage(imfaceGridPath)
 
             # for hog experiments
             # imFace = self.get_hog_descriptor(imFace)
@@ -287,17 +299,18 @@ class ITrackerData(object):
             imFace = self.normalize_image(imFace)
             imEyeL = self.normalize_image(imEyeL)
             imEyeR = self.normalize_image(imEyeR)
+            imfaceGrid = self.resize_transform(imfaceGrid)
 
             # to tensor
             row = torch.LongTensor([int(index)])
-            faceGrid = torch.FloatTensor(faceGrid)
+            # faceGrid = torch.FloatTensor(faceGrid)
             gaze = torch.FloatTensor(gaze)
 
-            return row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, index
+            return row, imFace, imEyeL, imEyeR, imfaceGrid, gaze, frame, index
         else:
             # image loading, transformation and normalization happen in ExternalDataPipeline
             # we just pass imagePaths
-            return row, imFacePath, imEyeLPath, imEyeRPath, faceGrid, gaze, frame, index
+            return row, imFacePath, imEyeLPath, imEyeRPath, imfaceGridPath, gaze, frame, index
 
     def makeGrid(self, params):
         gridLen = self.gridSize[0] * self.gridSize[1]

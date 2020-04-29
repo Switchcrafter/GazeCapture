@@ -4,6 +4,7 @@ import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 from torchvision import models
+import os
 
 '''
 Pytorch model for the iTracker.
@@ -22,6 +23,7 @@ Year = {2016},
 Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 }
 '''
+
 
 class ItrackerImageModel(nn.Module):
     # Used for both eyes (with shared weights) and the face (with unique weights)
@@ -77,6 +79,33 @@ class FaceImageModel(nn.Module):
         # 64
         return x
 
+class FaceGridRCModel(nn.Module):
+    def __init__(self, color_space):
+        super(FaceGridRCModel, self).__init__()
+        self.conv = ItrackerImageModel(color_space)
+        self.fc = nn.Sequential(
+            # FC-F1
+            # 25088
+            nn.Dropout(0.1),
+            nn.Linear(25088, 256),
+            # 256
+            nn.ReLU(inplace=True),
+
+            # FC-F2
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            # 128
+            nn.ReLU(inplace=True),
+            # 128
+        )
+
+    def forward(self, x):
+        # 3C x 224H x 224W
+        x = self.conv(x)
+        # 25088
+        x = self.fc(x)
+        # 128
+        return x
 
 class FaceGridModel(nn.Module):
     # Model for the face grid pathway
@@ -115,7 +144,8 @@ class ITrackerModel(nn.Module):
         # 1C/3Cx224Hx224W --> 64
         self.faceModel = FaceImageModel(color_space)
         # 1Cx25Hx25W --> 128
-        self.gridModel = FaceGridModel()
+        self.gridModel = FaceGridRCModel(color_space)
+
 
         # Joining both eyes
         self.eyesFC = nn.Sequential(
@@ -147,19 +177,19 @@ class ITrackerModel(nn.Module):
 
     def forward(self, faces, eyesLeft, eyesRight, faceGrids):
         # Eye nets
-        xEyeL = self.eyeModel(eyesLeft)     # CONV-E1 -> ... -> CONV-E4
-        xEyeR = self.eyeModel(eyesRight)    # CONV-E1 -> ... -> CONV-E4
+        xEyeL = self.eyeModel(eyesLeft)  # CONV-E1 -> ... -> CONV-E4
+        xEyeR = self.eyeModel(eyesRight)  # CONV-E1 -> ... -> CONV-E4
 
         # Cat Eyes and FC
         xEyes = torch.cat((xEyeL, xEyeR), 1)
-        xEyes = self.eyesFC(xEyes)          # FC-E1
+        xEyes = self.eyesFC(xEyes)  # FC-E1
 
         # Face net
-        xFace = self.faceModel(faces)       # CONV-F1 -> ... -> CONV-E4 -> FC-F1 -> FC-F2
-        xGrid = self.gridModel(faceGrids)   # FC-FG1 -> FC-FG2
+        xFace = self.faceModel(faces)  # CONV-F1 -> ... -> CONV-E4 -> FC-F1 -> FC-F2
+        xGrid = self.gridModel(faceGrids)  # FC-FG1 -> FC-FG2
 
         # Cat all
         x = torch.cat((xEyes, xFace, xGrid), 1)
-        x = self.fc(x)                      # FC1 -> FC2
+        x = self.fc(x)  # FC1 -> FC2
 
         return x

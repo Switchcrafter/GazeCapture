@@ -3,3 +3,4 @@
 checkpoints*
 venv*
 .ipynb_checkpoints
+*__pycache__*
