@@ -24,6 +24,7 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 }
 '''
 
+
 class ItrackerImageModel(nn.Module):
     # Used for both eyes (with shared weights) and the face (with unique weights)
     # output = (input-k+2p)/s + 1
@@ -183,19 +184,19 @@ class ITrackerModel(nn.Module):
 
     def forward(self, faces, eyesLeft, eyesRight, faceGrids):
         # Eye nets
-        xEyeL = self.eyeModel(eyesLeft)     # CONV-E1 -> ... -> CONV-E4
-        xEyeR = self.eyeModel(eyesRight)    # CONV-E1 -> ... -> CONV-E4
+        xEyeL = self.eyeModel(eyesLeft)  # CONV-E1 -> ... -> CONV-E4
+        xEyeR = self.eyeModel(eyesRight)  # CONV-E1 -> ... -> CONV-E4
 
         # Cat Eyes and FC
         xEyes = torch.cat((xEyeL, xEyeR), 1)
-        xEyes = self.eyesFC(xEyes)          # FC-E1
+        xEyes = self.eyesFC(xEyes)  # FC-E1
 
         # Face net
-        xFace = self.faceModel(faces)       # CONV-F1 -> ... -> CONV-E4 -> FC-F1 -> FC-F2
-        xGrid = self.gridModel(faceGrids)   # FC-FG1 -> FC-FG2
+        xFace = self.faceModel(faces)  # CONV-F1 -> ... -> CONV-E4 -> FC-F1 -> FC-F2
+        xGrid = self.gridModel(faceGrids)  # FC-FG1 -> FC-FG2
 
         # Cat all
         x = torch.cat((xEyes, xFace, xGrid), 1)
-        x = self.fc(x)                      # FC1 -> FC2
+        x = self.fc(x)  # FC1 -> FC2
 
         return x

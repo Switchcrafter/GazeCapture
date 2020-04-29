@@ -9,9 +9,9 @@ from screeninfo import get_monitors
 
 from ITrackerData import normalize_image_transform
 from ITrackerModel import ITrackerModel
-from cam2screen import cam2screen
+from utility_functions.cam2screen import cam2screen
 
-from face_utilities import find_face_dlib,\
+from utility_functions.face_utilities import find_face_dlib,\
                            landmarksToRects,\
                            generate_face_eye_images,\
                            generate_face_grid, \

@@ -3,12 +3,13 @@ import os
 import json
 import shutil
 
-from cam2screen import screen2cam
-from face_utilities import faceEyeRectsToFaceInfoDict, newFaceInfoDict, find_face_dlib, \
+from utility_functions.cam2screen import screen2cam
+from utility_functions.face_utilities import faceEyeRectsToFaceInfoDict, newFaceInfoDict, find_face_dlib, \
     landmarksToRects, generate_face_grid_rect
 from PIL import Image as PILImage  # Pillow
 import numpy as np
 import dateutil.parser
+from utility_functions.Utilities import MultiProgressBar
 
 
 # Example path is Surface_Pro_4/someuser/00000
@@ -19,7 +20,7 @@ def findCaptureSessionDirs(path):
     for device in devices:
         users = os.listdir(os.path.join(path, device))
         for user in users:
-            sessions = os.listdir(os.path.join(path, device, user))
+            sessions = sorted(os.listdir(os.path.join(path, device, user)), key=str)
 
             for session in sessions:
                 session_paths.append(os.path.join(device, user, session))
@@ -28,14 +29,12 @@ def findCaptureSessionDirs(path):
 
 
 def findCapturesInSession(path):
-    files = [os.path.splitext(f)[0] for f in os.listdir(path) if f.endswith('.json') and not f == "session.json"]
+    files = [os.path.splitext(f)[0] for f in os.listdir(os.path.join(path, "frames")) if f.endswith('.json') and not f == "session.json"]
 
     return files
 
 
 def loadJsonData(filename):
-    data = None
-
     with open(filename) as f:
         data = json.load(f)
 
@@ -46,40 +45,40 @@ def getScreenOrientation(capture_data):
     orientation = 0
 
     # Camera Offset and Screen Orientation compensation
-    if capture_data['NativeOrientation'] == "Landscape":
-        if capture_data['CurrentOrientation'] == "Landscape":
-            # Camera above screen
-            # - Landscape on Surface devices
-            orientation = 1
-        elif capture_data['CurrentOrientation'] == "LandscapeFlipped":
-            # Camera below screen
-            # - Landscape inverted on Surface devices
-            orientation = 2
-        elif capture_data['CurrentOrientation'] == "PortraitFlipped":
-            # Camera left of screen
-            # - Portrait with camera on left on Surface devices
-            orientation = 3
-        elif capture_data['CurrentOrientation'] == "Portrait":
-            # Camera right of screen
-            # - Portrait with camera on right on Surface devices
-            orientation = 4
-    if capture_data['NativeOrientation'] == "Portrait":
-        if capture_data['CurrentOrientation'] == "Portrait":
-            # Camera above screen
-            # - Portrait on iOS devices
-            orientation = 1
-        elif capture_data['CurrentOrientation'] == "PortraitFlipped":
-            # Camera below screen
-            # - Portrait Inverted on iOS devices
-            orientation = 2
-        elif capture_data['CurrentOrientation'] == "Landscape":
-            # Camera left of screen
-            # - Landscape home button on right on iOS devices
-            orientation = 3
-        elif capture_data['CurrentOrientation'] == "LandscapeFlipped":
-            # Camera right of screen
-            # - Landscape home button on left on iOS devices
-            orientation = 4
+    # if capture_data['NativeOrientation'] == "Landscape":
+    if capture_data['Orientation'] == "Landscape":
+        # Camera above screen
+        # - Landscape on Surface devices
+        orientation = 1
+    elif capture_data['Orientation'] == "LandscapeFlipped":
+        # Camera below screen
+        # - Landscape inverted on Surface devices
+        orientation = 2
+    elif capture_data['Orientation'] == "PortraitFlipped":
+        # Camera left of screen
+        # - Portrait with camera on left on Surface devices
+        orientation = 3
+    elif capture_data['Orientation'] == "Portrait":
+        # Camera right of screen
+        # - Portrait with camera on right on Surface devices
+        orientation = 4
+    # if capture_data['NativeOrientation'] == "Portrait":
+    #     if capture_data['CurrentOrientation'] == "Portrait":
+    #         # Camera above screen
+    #         # - Portrait on iOS devices
+    #         orientation = 1
+    #     elif capture_data['CurrentOrientation'] == "PortraitFlipped":
+    #         # Camera below screen
+    #         # - Portrait Inverted on iOS devices
+    #         orientation = 2
+    #     elif capture_data['CurrentOrientation'] == "Landscape":
+    #         # Camera left of screen
+    #         # - Landscape home button on right on iOS devices
+    #         orientation = 3
+    #     elif capture_data['CurrentOrientation'] == "LandscapeFlipped":
+    #         # Camera right of screen
+    #         # - Landscape home button on left on iOS devices
+    #         orientation = 4
 
     return orientation
 
@@ -111,23 +110,27 @@ def main():
     output_directory = args.output_path
 
     if data_directory is None:
-        os.error("Error: must specify --data_dir")
+        os.error("Error: must specify --data_path, like /data/EyeCapture/200407")
         return
 
     if output_directory is None:
-        os.error("Error: must specify --output_dir")
+        os.error("Error: must specify --output_path")
         return
 
     directories = sorted(findCaptureSessionDirs(data_directory))
     total_directories = len(directories)
 
-    print(f"Found {total_directories} directories")
+    # print(f"Found {total_directories} directories")
+
+    multi_progress_bar = MultiProgressBar(max_value=total_directories, boundary=True)
 
     for directory_idx, directory in enumerate(directories):
-        print(f"Processing {directory_idx + 1}/{total_directories} - {directory}")
-
-        captures = findCapturesInSession(os.path.join(data_directory, directory))
+        captures = sorted(findCapturesInSession(os.path.join(data_directory, directory)), key=str)
         total_captures = len(captures)
+
+        deviceMetrics_data = loadJsonData(os.path.join(data_directory, directory, "deviceMetrics.json"))
+        info_data = loadJsonData(os.path.join(data_directory, directory, "info.json"))
+        screen_data = loadJsonData(os.path.join(data_directory, directory, "screen.json"))
 
         # dotinfo.json - { "DotNum": [ 0, 0, ... ],
         #                  "XPts": [ 160, 160, ... ],
@@ -144,10 +147,10 @@ def main():
             "YPts": [],
             "XCam": [],
             "YCam": [],
+            "Confidence": [],
             "Time": []
         }
 
-        recording_path = os.path.join(data_directory, directory)
         output_path = os.path.join(output_directory, f"{directory_idx:05d}")
         output_frame_path = os.path.join(output_path, "frames")
 
@@ -155,7 +158,6 @@ def main():
 
         # frames.json - ["00000.jpg","00001.jpg"]
         frames = []
-
 
         facegrid = {
             "X": [],
@@ -178,7 +180,7 @@ def main():
             "NumFaceDetections": 0,
             "NumEyeDetections": 0,
             "Dataset": dataset_split,
-            "DeviceName": None
+            "DeviceName": info_data["DeviceName"]
         }
 
         # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
@@ -195,20 +197,16 @@ def main():
         if not os.path.exists(output_frame_path):
             os.mkdir(output_frame_path)
 
-        for capture_idx, capture in enumerate(captures):
-            print(f"Processing {capture_idx + 1}/{total_captures} - {capture}")
+        screen_orientation = getScreenOrientation(screen_data)
 
-            capture_json_path = os.path.join(data_directory, directory, capture + ".jsonx")
-            capture_jpg_path = os.path.join(data_directory, directory, capture + ".jpg")
+        multi_progress_bar.addSubProcess(index=directory_idx, max_value=total_captures)
+
+        for capture_idx, capture in enumerate(captures):
+            capture_json_path = os.path.join(data_directory, directory, "frames", capture + ".json")
+            capture_jpg_path = os.path.join(data_directory, directory, "frames", capture + ".jpg")
 
             if os.path.isfile(capture_json_path) and os.path.isfile(capture_jpg_path):
                 capture_data = loadJsonData(capture_json_path)
-
-                if info["DeviceName"] is None:
-                    info["DeviceName"] = capture_data["HostModel"]
-                elif info["DeviceName"] != capture_data["HostModel"]:
-                    os.error(
-                        f"Device name changed during session, expected \'{info['DeviceName']}\' but got \'{capture_data['HostModel']}\'")
 
                 capture_image = PILImage.open(capture_jpg_path)
                 capture_image_np = np.array(capture_image)  # dlib wants images in numpy array format
@@ -239,11 +237,9 @@ def main():
                                                                        right_eye_rect, isValid)
                 info["NumEyeDetections"] = info["NumEyeDetections"] + 1
 
-                screen_orientation = getScreenOrientation(capture_data)
-
                 # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
-                screen["H"].append(capture_data['ScreenHeightInRawPixels'])
-                screen["W"].append(capture_data['ScreenWidthInRawPixels'])
+                screen["H"].append(screen_data['H'])
+                screen["W"].append(screen_data['W'])
                 screen["Orientation"].append(screen_orientation)
 
                 # dotinfo.json - { "DotNum": [ 0, 0, ... ],
@@ -251,6 +247,7 @@ def main():
                 #                  "YPts": [ 284, 284, ... ],
                 #                  "XCam": [ 1.064, 1.064, ... ],
                 #                  "YCam": [ -6.0055, -6.0055, ... ],
+                #                  "Confidence": [ 59.3, 94.2, ... ],
                 #                  "Time": [ 0.205642, 0.288975, ... ] }
                 #
                 # PositionIndex == DotNum
@@ -260,16 +257,18 @@ def main():
                 x_cam, y_cam = screen2cam(x_raw,  # xScreenInPoints
                                           y_raw,  # yScreenInPoints
                                           screen_orientation,  # orientation,
-                                          capture_data["ScreenWidthInRawPixels"],  # widthScreenInPoints
-                                          capture_data["ScreenHeightInRawPixels"],  # heightScreenInPoints
-                                          deviceName=capture_data["HostModel"])
+                                          screen_data["W"],  # widthScreenInPoints
+                                          screen_data["H"],  # heightScreenInPoints
+                                          deviceName=info_data["DeviceName"])
+                confidence = capture_data["Confidence"]
 
-                dotinfo["DotNum"].append(capture_data["PositionIndex"])
+                dotinfo["DotNum"].append(0)  # TODO replace with dot number as needed
                 dotinfo["XPts"].append(x_raw)
                 dotinfo["YPts"].append(y_raw)
                 dotinfo["XCam"].append(x_cam)
                 dotinfo["YCam"].append(y_cam)
-                dotinfo["Time"].append(getCaptureTimeString(capture_data))
+                dotinfo["Confidence"].append(confidence)
+                dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
 
                 # Convert image from PNG to JPG
                 frame_name = str(f"{capture_idx:05d}.jpg")
@@ -278,6 +277,8 @@ def main():
                 shutil.copyfile(capture_jpg_path, os.path.join(output_frame_path, frame_name))
             else:
                 print(f"Error processing capture {capture}")
+
+            multi_progress_bar.update(index=directory_idx, value=capture_idx+1)
 
         with open(os.path.join(output_path, 'frames.json'), "w") as write_file:
             json.dump(frames, write_file)
@@ -296,6 +297,5 @@ def main():
         with open(os.path.join(output_path, 'dlibRightEye.json'), "w") as write_file:
             json.dump(faceInfoDict["RightEye"], write_file)
 
-    print("DONE")
 
 main()

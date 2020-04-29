@@ -14,6 +14,11 @@ RUN pip3 install --extra-index-url https://developer.download.nvidia.com/compute
 # Alternatively download a wheel from http://developer.download.nvidia.com/compute/redist/cuda/10.0/nvidia-dali/
 # install as pip3 install <wheel>.whl
 RUN pip3 install matplotlib
+RUN pip3 install opencv-python
+RUN pip3 install cmake
+RUN pip3 install dlib
+RUN pip3 install imutils
+RUN pip3 install scikit-image
 
 # Execute the python
 ENTRYPOINT ["python"]
@@ -26,7 +31,7 @@ ENV NVIDIA_DRIVER_CAPABILITIES all
 # sudo docker build -t gazepy .
 
 # Command to execute this container (256, Mem 57%, @940/s)
-# sudo docker run --ipc=host --runtime=nvidia --gpus '"device=1,3"' -v /data:/data -v `pwd`:`pwd` -w `pwd` --rm -it gazepy main.py --hsm --batch_size 256 --local_rank 1
+# sudo docker run --ipc=host --runtime=nvidia --gpus '"device=1,3"' -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --hsm --batch_size 256 --local_rank 1
 # sudo docker run --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --hsm --batch_size 256 --local_rank 1
 
 # DataParallel mode - Unbalanced, first node is masterNode [--local_rank 2 0 1 3] (87%-46% Memory skew, @890/s)

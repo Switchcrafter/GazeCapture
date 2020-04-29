@@ -10,7 +10,9 @@ from random import shuffle
 # CPU data loader
 from PIL import Image
 import torchvision.transforms as transforms
-from face_utilities import hogImage
+from utility_functions.face_utilities import hogImage
+
+from utility_functions.Utilities import centered_text
 
 try:
     # GPU data loader
@@ -29,8 +31,6 @@ except ImportError:
     class DALIGenericIterator:
         def __init__(self, *args):
             return
-
-from Utilities import centered_text
 
 
 def normalize_image_transform(image_size, split, jitter, color_space):
@@ -275,7 +275,7 @@ class ITrackerData(object):
         imEyeRPath = os.path.join(self.dataPath,
                                   '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                    self.metadata['frameIndex'][rowIndex]))
-        faceGridPath = os.path.join(self.dataPath,
+        imfaceGridPath = os.path.join(self.dataPath,
                                   '%05d/faceGrid/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                    self.metadata['frameIndex'][rowIndex]))
         gaze = np.array([self.metadata['labelDotXCam'][rowIndex], self.metadata['labelDotYCam'][rowIndex]], np.float32)
@@ -289,7 +289,7 @@ class ITrackerData(object):
             imFace = self.loadImage(imFacePath)
             imEyeL = self.loadImage(imEyeLPath)
             imEyeR = self.loadImage(imEyeRPath)
-            imfaceGrid = self.loadImage(faceGridPath)
+            imfaceGrid = self.loadImage(imfaceGridPath)
 
             # for hog experiments
             # imFace = self.get_hog_descriptor(imFace)
@@ -310,7 +310,7 @@ class ITrackerData(object):
         else:
             # image loading, transformation and normalization happen in ExternalDataPipeline
             # we just pass imagePaths
-            return row, imFacePath, imEyeLPath, imEyeRPath, faceGridPath, gaze, frame, index
+            return row, imFacePath, imEyeLPath, imEyeRPath, imfaceGridPath, gaze, frame, index
 
     def makeGrid(self, params):
         gridLen = self.gridSize[0] * self.gridSize[1]
