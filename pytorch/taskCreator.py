@@ -360,6 +360,7 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
     # write json files
     json_write(os.path.join(output_path, 'frames.json'), frames)
     json_write(os.path.join(output_path, 'screen.json'), screen)
+    json_write(os.path.join(output_path, 'info.json'), info)
     json_write(os.path.join(output_path, 'dotInfo.json'), dotinfo)
     json_write(os.path.join(output_path, 'faceGrid.json'), facegrid)
     # write the Face, LeftEye and RightEye
