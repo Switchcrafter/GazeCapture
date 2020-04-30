@@ -289,14 +289,14 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
 
             shape_np, isValid = find_face_dlib(capture_image_np)
             info["NumFaceDetections"] = info["NumFaceDetections"] + 1
-            if args.rc:
-                face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
-                faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
-                                                                        right_eye_rect, isValid)
-            else:
-                face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
-                faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
-                                                                        right_eye_rect, isValid)
+            # if args.rc:
+            #     face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
+            #     faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
+            #                                                             right_eye_rect, isValid)
+
+            face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
+            faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
+                                                                    right_eye_rect, isValid)
 
             # facegrid.json - { "X": [ 6, 6, ... ], "Y": [ 10, 10, ... ], "W": [ 13, 13, ... ], "H": [ 13, 13, ... ], "IsValid": [ 1, 1, ... ] }
             if isValid:
@@ -858,7 +858,7 @@ def countValidTask(directory, directory_idx, bar):
 
 
 def plotRotationHistogramTask(directory, directory_idx, bar):
-    faceData = json_read(os.path.join("/data/gc-rc-meta", directory, "dlibFace.json"))
+    faceData = json_read(os.path.join(args.input, directory, "dlibFace.json"))
     Theta = faceData["Theta"]
     return Theta
 
@@ -1050,20 +1050,18 @@ if __name__ == '__main__':
         print(sum, valid_ref, valid_test)
     elif args.task == "plotRotationHistogramTask":
         # Combine results from various workers
-        print(output)
-        # x = []
-        # for item in output:
-        #     x.append(item)
+        x = [theta for theta_list in output for theta in theta_list]
+        num_bins = 60
+        # the histogram of the data
+        n, bins, patches = plt.hist(x, num_bins, facecolor='blue', alpha=0.5, density=True)
+        plt.axis([-45, 45, None, None]) 
+        plt.xlabel('Theta (degrees)')
+        plt.ylabel('Probability Density')
+        plt.title('Histogram of Rotation')
+        plt.savefig('process_results/MIT_plotRotationHistogram.png')
+        plt.show()
 
-
-        # num_bins = 30
-        # # the histogram of the data
-        # n, bins, patches = plt.hist(x, num_bins, facecolor='blue', alpha=0.5, density=1)
-        # plt.xlabel('Theta (degrees)')
-        # plt.ylabel('Probability')
-        # plt.title('Histogram of Rotation')
-        # plt.savefig('process_results/plotRotationHistogram.png')
-        # # plt.show()
+        
         
 
 
