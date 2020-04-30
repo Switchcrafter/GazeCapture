@@ -856,6 +856,12 @@ def countValidTask(directory, directory_idx, bar):
             
     return directory, len(frames), count1, count2
 
+
+def plotRotationHistogramTask(directory, directory_idx, bar):
+    faceData = json_read(os.path.join("/data/gc-rc-meta", directory, "dlibFace.json"))
+    Theta = faceData["Theta"]
+    return Theta
+
 # all tasks are handled here
 if __name__ == '__main__':
     # Argument parser
@@ -981,6 +987,11 @@ if __name__ == '__main__':
         taskData = getDirList(args.input, sessionRegex)
         dataLoader = ListLoader
         taskFunction = countValidTask
+    elif args.task == "plotRotationHistogramTask":
+        sessionRegex = '([0-9]){5}'
+        taskData = getDirList(args.input, sessionRegex)
+        dataLoader = ListLoader
+        taskFunction = plotRotationHistogramTask
 
 
     # run the job
@@ -1037,6 +1048,22 @@ if __name__ == '__main__':
 
         print(issues)
         print(sum, valid_ref, valid_test)
+    elif args.task == "plotRotationHistogramTask":
+        # Combine results from various workers
+        print(output)
+        # x = []
+        # for item in output:
+        #     x.append(item)
+
+
+        # num_bins = 30
+        # # the histogram of the data
+        # n, bins, patches = plt.hist(x, num_bins, facecolor='blue', alpha=0.5, density=1)
+        # plt.xlabel('Theta (degrees)')
+        # plt.ylabel('Probability')
+        # plt.title('Histogram of Rotation')
+        # plt.savefig('process_results/plotRotationHistogram.png')
+        # # plt.show()
         
 
 
