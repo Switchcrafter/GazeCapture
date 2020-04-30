@@ -15,4 +15,3 @@ nvidia-dali
 opencv-python
 cmake
 onnxruntime
-screeninfo
