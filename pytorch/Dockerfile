@@ -19,6 +19,7 @@ RUN pip3 install cmake
 RUN pip3 install dlib
 RUN pip3 install imutils
 RUN pip3 install scikit-image
+RUN pip3 install onnxruntime
 
 # Execute the python
 ENTRYPOINT ["python"]

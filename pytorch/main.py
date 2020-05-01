@@ -245,7 +245,7 @@ def initialize_model(args):
         print('')
 
     # Retrieve model
-    model = ITrackerModel(args.color_space).to(device=args.device)
+    model = ITrackerModel(args.color_space, args.model_type).to(device=args.device)
     # GPU optimizations and modes
     cudnn.benchmark = True
     if args.using_cuda:

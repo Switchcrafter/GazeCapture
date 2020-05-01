@@ -289,14 +289,14 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
 
             shape_np, isValid = find_face_dlib(capture_image_np)
             info["NumFaceDetections"] = info["NumFaceDetections"] + 1
-            if args.rc:
-                face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
-                faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
-                                                                        right_eye_rect, isValid)
-            else:
-                face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
-                faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
-                                                                        right_eye_rect, isValid)
+            # if args.rc:
+            #     face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
+            #     faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
+            #                                                             right_eye_rect, isValid)
+
+            face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
+            faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
+                                                                    right_eye_rect, isValid)
 
             # facegrid.json - { "X": [ 6, 6, ... ], "Y": [ 10, 10, ... ], "W": [ 13, 13, ... ], "H": [ 13, 13, ... ], "IsValid": [ 1, 1, ... ] }
             if isValid:
@@ -360,6 +360,7 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
     # write json files
     json_write(os.path.join(output_path, 'frames.json'), frames)
     json_write(os.path.join(output_path, 'screen.json'), screen)
+    json_write(os.path.join(output_path, 'info.json'), info)
     json_write(os.path.join(output_path, 'dotInfo.json'), dotinfo)
     json_write(os.path.join(output_path, 'faceGrid.json'), facegrid)
     # write the Face, LeftEye and RightEye
@@ -855,6 +856,12 @@ def countValidTask(directory, directory_idx, bar):
             
     return directory, len(frames), count1, count2
 
+
+def plotRotationHistogramTask(directory, directory_idx, bar):
+    faceData = json_read(os.path.join(args.input, directory, "dlibFace.json"))
+    Theta = faceData["Theta"]
+    return Theta
+
 # all tasks are handled here
 if __name__ == '__main__':
     # Argument parser
@@ -980,6 +987,11 @@ if __name__ == '__main__':
         taskData = getDirList(args.input, sessionRegex)
         dataLoader = ListLoader
         taskFunction = countValidTask
+    elif args.task == "plotRotationHistogramTask":
+        sessionRegex = '([0-9]){5}'
+        taskData = getDirList(args.input, sessionRegex)
+        dataLoader = ListLoader
+        taskFunction = plotRotationHistogramTask
 
 
     # run the job
@@ -1036,6 +1048,20 @@ if __name__ == '__main__':
 
         print(issues)
         print(sum, valid_ref, valid_test)
+    elif args.task == "plotRotationHistogramTask":
+        # Combine results from various workers
+        x = [theta for theta_list in output for theta in theta_list]
+        num_bins = 60
+        # the histogram of the data
+        n, bins, patches = plt.hist(x, num_bins, facecolor='blue', alpha=0.5, density=True)
+        plt.axis([-45, 45, None, None]) 
+        plt.xlabel('Theta (degrees)')
+        plt.ylabel('Probability Density')
+        plt.title('Histogram of Rotation')
+        plt.savefig('process_results/MIT_plotRotationHistogram.png')
+        plt.show()
+
+        
         
 
 

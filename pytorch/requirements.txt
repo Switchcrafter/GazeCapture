@@ -14,3 +14,4 @@ scikit-image
 nvidia-dali
 opencv-python
 cmake
+onnxruntime

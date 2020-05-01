@@ -162,6 +162,18 @@ def getEyeRectRelative(face_rect, eye_rect):
 
     return eye_rect_relative
 
+def getRect(data):
+    # get the parameter of the small rectangle
+    center, size, angle = data[0], data[1], data[2]
+
+    # The function minAreaRect seems to give angles ranging in (-90, 0].
+    # This is based on the long edge of the rectangle
+    if angle < -45:
+        angle = 90 + angle
+        size = (size[1], size[0])
+
+    return int(center[0]), int(center[1]), int(size[0]), int(size[1]), int(angle)
+
 def rc_landmarksToRects(shape_np, isValid):
     face_rect = (0, 0, 0, 0, 0)
     left_eye_rect = (0, 0, 0, 0, 0)
@@ -174,7 +186,6 @@ def rc_landmarksToRects(shape_np, isValid):
         left_eye_shape_np = shape_np[leftEyeLandmarksStart:leftEyeLandmarksEnd]
         right_eye_shape_np = shape_np[rightEyeLandmarksStart:rightEyeLandmarksEnd]
 
-        getRect = lambda data: (int(data[0][0]), int(data[0][1]), int(data[1][0]), int(data[1][1]), int(data[2]))
         face_rect = getRect(cv2.minAreaRect(shape_np))
         left_eye_rect = getRect(cv2.minAreaRect(left_eye_shape_np))
         right_eye_rect = getRect(cv2.minAreaRect(right_eye_shape_np))
@@ -219,12 +230,6 @@ def rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect, right_
 def crop_rect(img, rect):
     # get the parameter of the small rectangle
     center, size, angle = (rect[0], rect[1]), (rect[2], rect[3]), rect[4]
-
-    # The function minAreaRect seems to give angles ranging from -90 to 0 degrees,
-    # not including zero, so an interval of [-90, 0).
-    if angle < -45:
-        angle = 90 + angle
-        size = (size[1], size[0])
 
     center, size = tuple(map(int, center)), tuple(map(int, size))
     # get a square crop of the detected region with 10px padding
