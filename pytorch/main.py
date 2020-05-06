@@ -277,6 +277,8 @@ def initialize_model(args):
             print("No Parallelization")
     else:
         print("Cuda disabled")
+    
+    # use new model or load existing 
     RMSErrors, best_RMSError, best_RMSErrors, epoch, learning_rates = checkpoint_manager.extract_checkpoint_data(args,
                                                                                                                  model)
     return RMSErrors, best_RMSError, best_RMSErrors, epoch, learning_rates, model

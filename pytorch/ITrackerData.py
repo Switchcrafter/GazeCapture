@@ -51,7 +51,6 @@ def normalize_image_transform(image_size, split, jitter, color_space):
 
     return transforms.Compose(normalize_image)
 
-
 def resize_image_transform(image_size):
     normalize_image = []
     normalize_image.append(transforms.Resize(image_size))
@@ -250,19 +249,6 @@ class ITrackerData(object):
             raise RuntimeError('Could not read image: ' + path)
         return im
 
-    def get_hog_descriptor(self, im):
-        # im = Image.fromarray(hogImage(im), im.mode)
-        # hog is failing below (20,20) so this should fix
-        if im.size[0] < 20:
-            im = transforms.functional.resize(im, (20,20), interpolation=2)
-        try:
-            hog = hogImage(im)
-            im = Image.fromarray(hog, im.mode)
-        except:
-            # print(im.size)
-            pass
-        return im
-
     # merge two
     def __getitem__(self, index):
         rowIndex = self.indices[index]
@@ -275,12 +261,13 @@ class ITrackerData(object):
         imEyeRPath = os.path.join(self.dataPath,
                                   '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                    self.metadata['frameIndex'][rowIndex]))
-        imfaceGridPath = os.path.join(self.dataPath,
-                                  '%05d/faceGrid/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
-                                                                   self.metadata['frameIndex'][rowIndex]))
+        # imfaceGridPath = os.path.join(self.dataPath,
+        #                           '%05d/faceGrid/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
+        #                                                            self.metadata['frameIndex'][rowIndex]))
         gaze = np.array([self.metadata['labelDotXCam'][rowIndex], self.metadata['labelDotYCam'][rowIndex]], np.float32)
         frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]])
         # faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][rowIndex, :])
+        faceGrid = self.metadata['labelFaceGrid'][rowIndex, :]
         row = np.array([int(rowIndex)], dtype=np.uint8)
         index = np.array([int(index)], dtype=np.uint8)
 
@@ -289,41 +276,36 @@ class ITrackerData(object):
             imFace = self.loadImage(imFacePath)
             imEyeL = self.loadImage(imEyeLPath)
             imEyeR = self.loadImage(imEyeRPath)
-            imfaceGrid = self.loadImage(imfaceGridPath)
-
-            # for hog experiments
-            # imFace = self.get_hog_descriptor(imFace)
-            # imEyeL = self.get_hog_descriptor(imEyeL)
-            # imEyeR = self.get_hog_descriptor(imEyeR)
+            # imfaceGrid = self.loadImage(imfaceGridPath)
 
             imFace = self.normalize_image(imFace)
             imEyeL = self.normalize_image(imEyeL)
             imEyeR = self.normalize_image(imEyeR)
-            imfaceGrid = self.resize_transform(imfaceGrid)
+            # imfaceGrid = self.resize_transform(imfaceGrid)
 
             # to tensor
             row = torch.LongTensor([int(index)])
-            # faceGrid = torch.FloatTensor(faceGrid)
+            faceGrid = torch.FloatTensor(faceGrid)
             gaze = torch.FloatTensor(gaze)
 
-            return row, imFace, imEyeL, imEyeR, imfaceGrid, gaze, frame, index
+            return row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, index
         else:
             # image loading, transformation and normalization happen in ExternalDataPipeline
             # we just pass imagePaths
-            return row, imFacePath, imEyeLPath, imEyeRPath, imfaceGridPath, gaze, frame, index
+            return row, imFacePath, imEyeLPath, imEyeRPath, faceGrid, gaze, frame, index
 
-    def makeGrid(self, params):
-        gridLen = self.gridSize[0] * self.gridSize[1]
-        grid = np.zeros([gridLen, ], np.float32)
+    # def makeGrid(self, params):
+    #     gridLen = self.gridSize[0] * self.gridSize[1]
+    #     grid = np.zeros([gridLen, ], np.float32)
 
-        indsY = np.array([i // self.gridSize[0] for i in range(gridLen)])
-        indsX = np.array([i % self.gridSize[0] for i in range(gridLen)])
-        condX = np.logical_and(indsX >= params[0], indsX < params[0] + params[2])
-        condY = np.logical_and(indsY >= params[1], indsY < params[1] + params[3])
-        cond = np.logical_and(condX, condY)
+    #     indsY = np.array([i // self.gridSize[0] for i in range(gridLen)])
+    #     indsX = np.array([i % self.gridSize[0] for i in range(gridLen)])
+    #     condX = np.logical_and(indsX >= params[0], indsX < params[0] + params[2])
+    #     condY = np.logical_and(indsY >= params[1], indsY < params[1] + params[3])
+    #     cond = np.logical_and(condX, condY)
 
-        grid[cond] = 1
-        return grid
+    #     grid[cond] = 1
+    #     return grid
 
     def __iter__(self):
         self.index = 0

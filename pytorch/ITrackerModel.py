@@ -91,6 +91,34 @@ class FaceImageModel(nn.Module):
         # 64
         return x
 
+class FaceGridVectorModel(nn.Module):
+    # Model for the face grid pathway
+    def __init__(self, gridSize=7):
+        super(FaceGridVectorModel, self).__init__()
+        self.fc = nn.Sequential(
+            # FC-FG1
+            # 7
+            nn.Linear(gridSize, 256),
+            # 256
+            nn.ReLU(inplace=True),
+            # 256
+
+            # FC-FG2
+            # 256
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
+            # 128
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, x):
+        # 7
+        x = x.view(x.size(0), -1)
+        # 128
+        x = self.fc(x)
+        # 128
+        return x
+
 class FaceGridRCModel(nn.Module):
     def __init__(self, color_space, model_type):
         super(FaceGridRCModel, self).__init__()
@@ -155,9 +183,11 @@ class ITrackerModel(nn.Module):
         self.eyeModel = ItrackerImageModel(color_space, model_type)
         # 1C/3Cx224Hx224W --> 64
         self.faceModel = FaceImageModel(color_space, model_type)
-        # 1Cx25Hx25W --> 128
-        self.gridModel = FaceGridRCModel(color_space, model_type)
-
+        # # 1Cx25Hx25W --> 128
+        # self.gridModel = FaceGridRCModel(color_space, model_type)
+        # 7 --> 128
+        self.gridModel = FaceGridVectorModel()
+        
 
         # Joining both eyes
         self.eyesFC = nn.Sequential(

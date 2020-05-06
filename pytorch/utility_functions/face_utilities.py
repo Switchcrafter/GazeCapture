@@ -1,5 +1,7 @@
 import cv2
 import dlib
+import os
+import math
 import numpy as np
 from imutils import face_utils
 import imutils
@@ -7,7 +9,7 @@ from PIL import Image
 from skimage import exposure
 from skimage import feature
 
-import os
+
 
 file_dir_path = os.path.dirname(os.path.realpath(__file__))
 landmarks_path = os.path.join(file_dir_path, '../metadata/shape_predictor_68_face_landmarks.dat')
@@ -164,6 +166,7 @@ def getEyeRectRelative(face_rect, eye_rect):
 
 def getRect(data):
     # get the parameter of the small rectangle
+    # data => ((cx,cy), (w, h), angle)
     center, size, angle = data[0], data[1], data[2]
 
     # The function minAreaRect seems to give angles ranging in (-90, 0].
@@ -197,6 +200,7 @@ def rc_landmarksToRects(shape_np, isValid):
 
     return face_rect, left_eye_rect, right_eye_rect, isValid
 
+# append new modality rectangles to the faceInfoDict
 def rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect, right_eye_rect, isValid):
     face_dict = faceInfoDict["Face"]
     left_eye_dict = faceInfoDict["LeftEye"]
@@ -440,3 +444,20 @@ def hogImage(image):
     hogImage = exposure.rescale_intensity(hogImage, in_range=(0, 10), out_range=(0, 255))
 
     return hogImage
+
+def normalizedRect(data, shape):
+    # get the parameter of the small rectangle
+    # data => ((cx,cy), (w, h), theta)
+    cx, cy, w, h, theta = data
+    H, W, Channels = shape
+
+    C = math.cos(math.radians(theta))
+    S = math.sin(math.radians(theta))
+    T = math.tan(math.radians(theta))
+
+    cx_norm = cx/W
+    cy_norm = cy/H
+    w_norm = w * math.sqrt(math.pow(C/W, 2) + math.pow(S/H, 2))
+    h_norm = h * math.sqrt(math.pow(C/H, 2) + math.pow(S/W, 2))
+    theta_norm = math.degrees(math.atan(H/W * T))
+    return np.array([cx_norm, cy_norm, w_norm, h_norm, theta_norm, H, W])

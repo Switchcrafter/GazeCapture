@@ -79,23 +79,23 @@ def json_write(filename, data):
     with open(filename, "w") as write_file:
         json.dump(data, write_file)
 
+# def cropImage(img, bbox):
+#     bbox = np.array(bbox, int)
+#     if len(bbox) == 5:
+#         return crop_rect(img, bbox)
+#     else:
+#         aSrc = np.maximum(bbox[:2], 0)
+#         bSrc = np.minimum(bbox[:2] + bbox[2:], (img.shape[1], img.shape[0]))
+
+#         aDst = aSrc - bbox[:2]
+#         bDst = aDst + (bSrc - aSrc)
+
+#         res = np.zeros((bbox[3], bbox[2], img.shape[2]), img.dtype)
+#         res[aDst[1]:bDst[1], aDst[0]:bDst[0], :] = img[aSrc[1]:bSrc[1], aSrc[0]:bSrc[0], :]
+
+#         return res
+
 def cropImage(img, bbox):
-    bbox = np.array(bbox, int)
-    if len(bbox) == 5:
-        return crop_rect(img, bbox)
-    else:
-        aSrc = np.maximum(bbox[:2], 0)
-        bSrc = np.minimum(bbox[:2] + bbox[2:], (img.shape[1], img.shape[0]))
-
-        aDst = aSrc - bbox[:2]
-        bDst = aDst + (bSrc - aSrc)
-
-        res = np.zeros((bbox[3], bbox[2], img.shape[2]), img.dtype)
-        res[aDst[1]:bDst[1], aDst[0]:bDst[0], :] = img[aSrc[1]:bSrc[1], aSrc[0]:bSrc[0], :]
-
-        return res
-
-def RC_cropImage(img, bbox):
     bbox = np.array(bbox, int)
     return crop_rect(img, bbox)
 
@@ -289,14 +289,14 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
 
             shape_np, isValid = find_face_dlib(capture_image_np)
             info["NumFaceDetections"] = info["NumFaceDetections"] + 1
-            # if args.rc:
-            #     face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
-            #     faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
-            #                                                             right_eye_rect, isValid)
-
-            face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
-            faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
-                                                                    right_eye_rect, isValid)
+            if args.rc:
+                face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
+                faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
+                                                                        right_eye_rect, isValid)
+            else:
+                face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
+                faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
+                                                                        right_eye_rect, isValid)
 
             # facegrid.json - { "X": [ 6, 6, ... ], "Y": [ 10, 10, ... ], "W": [ 13, 13, ... ], "H": [ 13, 13, ... ], "IsValid": [ 1, 1, ... ] }
             if isValid:
@@ -383,23 +383,18 @@ def ROIDetectionTask(directory, directory_idx, progressbar):
         image_path = os.path.join(recording_path, "frames", filename)
         image = PILImage.open(image_path)
         image = np.array(image.convert('RGB'))
+        # # Resize all images to same standard size, it may affect dlib face detection
+        # image = image.resize((256, 256)) 
 
         # ROI detection
         shape_np, isValid = find_face_dlib(image)
-        if args.rc:
-            face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
-            faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict,
-                                                                face_rect,
-                                                                left_eye_rect,
-                                                                right_eye_rect,
-                                                                isValid)
-        else:
-            face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
-            faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict,
-                                                                face_rect,
-                                                                left_eye_rect,
-                                                                right_eye_rect,
-                                                                isValid)
+        face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
+        # append rects to faceInfoDict
+        faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict,
+                                                            face_rect,
+                                                            left_eye_rect,
+                                                            right_eye_rect,
+                                                            isValid)
     # ensure the output directory exists
     preparePath(output_path)
     # write the Face, LeftEye and RightEye
@@ -434,7 +429,7 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
 
     # Read input JSONs from inputpath
     dotInfo = json_read(os.path.join(recDir, 'dotInfo.json'))
-    faceGrid = json_read(os.path.join(recDir, 'faceGrid.json'))
+    # faceGrid = json_read(os.path.join(recDir, 'faceGrid.json'))
     frames = json_read(os.path.join(recDir, 'frames.json'))
     info = json_read(os.path.join(recDir, 'info.json'))
     screen = json_read(os.path.join(recDir, 'screen.json'))
@@ -445,27 +440,17 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
     rightEyePath = preparePath(os.path.join(recDirOut, 'appleRightEye'))
 
     # Preprocess
-    allValid = np.logical_and(np.logical_and(appleFace['IsValid'], appleLeftEye['IsValid']),
-                                np.logical_and(appleRightEye['IsValid'], faceGrid['IsValid']))
+    # allValid = np.logical_and(np.logical_and(appleFace['IsValid'], appleLeftEye['IsValid']),
+    #                             np.logical_and(appleRightEye['IsValid'], faceGrid['IsValid']))
+    
+    allValid = np.logical_and(np.logical_and(appleFace['IsValid'], appleLeftEye['IsValid']),appleRightEye['IsValid'])
 
     frames = np.array([int(re.match('(\d{5})\.jpg$', x).group(1)) for x in frames])
 
-    if args.rc:
-        bboxFromJson = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H'], data['Theta']), axis=1).astype(int)
-        # handle original face_grid data separately
-        bboxFromJsonFaceGrid = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H']), axis=1).astype(int)
-        faceBbox = bboxFromJson(appleFace) + [-1, -1, 1, 1, 0]  # for compatibility with matlab code
-        leftEyeBbox = bboxFromJson(appleLeftEye) + [0, -1, 0, 0, 0]
-        rightEyeBbox = bboxFromJson(appleRightEye) + [0, -1, 0, 0, 0]
-        faceGridBbox = bboxFromJsonFaceGrid(faceGrid)
-    else:
-        bboxFromJson = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H']), axis=1).astype(int)
-        faceBbox = bboxFromJson(appleFace) + [-1, -1, 1, 1]  # for compatibility with matlab code
-        leftEyeBbox = bboxFromJson(appleLeftEye) + [0, -1, 0, 0]
-        rightEyeBbox = bboxFromJson(appleRightEye) + [0, -1, 0, 0]
-        leftEyeBbox[:, :2] += faceBbox[:, :2]  # relative to face
-        rightEyeBbox[:, :2] += faceBbox[:, :2]
-        faceGridBbox = bboxFromJson(faceGrid)
+    boundingRectFromJson = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H'], data['Theta']), axis=1).astype(int)
+    faceBRect = boundingRectFromJson(appleFace)
+    leftEyeBRect = boundingRectFromJson(appleLeftEye)
+    rightEyeBRect = boundingRectFromJson(appleRightEye)
 
     progressbar.addSubProcess(directory_idx, len(frames))
     for j, frame in enumerate(frames):
@@ -489,65 +474,63 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         if img is None:
             logError('Warning: Could not read image file %s!' % imgFile)
             continue
+        
         img = np.array(img.convert('RGB'))
+        # print('shape', img.shape) # H,W,C
 
         # Crop images
-        imFace = cropImage(img, faceBbox[j, :])
-        imEyeL = cropImage(img, leftEyeBbox[j, :])
-        imEyeR = cropImage(img, rightEyeBbox[j, :])
+        imFace = cropImage(img, faceBRect[j, :])
+        imEyeL = cropImage(img, leftEyeBRect[j, :])
+        imEyeR = cropImage(img, rightEyeBRect[j, :])
+        faceVector = normalizedRect(faceBRect[j, :], img.shape)
+        # print('shape', img.shape)
+        # print('original: ', faceBRect[j, :])
+        # print('normalzd: ', faceVector)
 
-        # Rotation Correction FaceGrid
-        if args.rc:
-            faceGridPath = preparePath(os.path.join(recDirOut, 'faceGrid'))
-            imFaceGrid = generate_grid2(faceBbox[j, :], img)
-
-            imFace = cv2.resize(imFace, (256, 256), cv2.INTER_AREA)
-            imEyeL = cv2.resize(imEyeL, (256, 256), cv2.INTER_AREA)
-            imEyeR = cv2.resize(imEyeR, (256, 256), cv2.INTER_AREA)
-            imFaceGrid = cv2.resize(imFaceGrid, (256, 256), cv2.INTER_AREA)
+        # Resize crops to standard size
+        imFace = cv2.resize(imFace, (256, 256), cv2.INTER_AREA)
+        imEyeL = cv2.resize(imEyeL, (256, 256), cv2.INTER_AREA)
+        imEyeR = cv2.resize(imEyeR, (256, 256), cv2.INTER_AREA)
 
         # Save images
         PILImage.fromarray(imFace).save(os.path.join(facePath, '%05d.jpg' % frame), quality=95)
         PILImage.fromarray(imEyeL).save(os.path.join(leftEyePath, '%05d.jpg' % frame), quality=95)
         PILImage.fromarray(imEyeR).save(os.path.join(rightEyePath, '%05d.jpg' % frame), quality=95)
-        if args.rc:
-            PILImage.fromarray(imFaceGrid).save(os.path.join(faceGridPath, '%05d.jpg' % frame), quality=95)
 
         # Collect metadata
         meta['labelRecNum'] += [int(directory)]
         meta['frameIndex'] += [frame]
         meta['labelDotXCam'] += [dotInfo['XCam'][j]]
         meta['labelDotYCam'] += [dotInfo['YCam'][j]]
-        meta['labelFaceGrid'] += [faceGridBbox[j, :]]
+        # pass in normalized Face Rect here
+        # meta['labelFaceGrid'] += [faceGridBbox[j, :]]
+        meta['labelFaceGrid'] += [faceVector]
         split = info["Dataset"]
         meta['labelTrain'] += [split == "train"]
         meta['labelVal'] += [split == "val"]
         meta['labelTest'] += [split == "test"]
 
-        # Data Mirroring
-        if args.mirror:
-            imFace_mirror = cv2.flip(imFace, 1)
-            imEyeL_mirror = cv2.flip(imEyeL, 1)
-            imEyeR_mirror = cv2.flip(imEyeR, 1)
-            PILImage.fromarray(imFace_mirror).save(os.path.join(facePath, '%05d_mirror.jpg' % frame), quality=95)
-            PILImage.fromarray(imEyeL_mirror).save(os.path.join(leftEyePath, '%05d_mirror.jpg' % frame), quality=95)
-            PILImage.fromarray(imEyeR_mirror).save(os.path.join(rightEyePath, '%05d_mirror.jpg' % frame), quality=95)
-            if args.rc:
-                imFaceGrid_mirror = cv2.flip(imFaceGrid, 1)
-                PILImage.fromarray(imFaceGrid_mirror).save(os.path.join(faceGridPath, '%05d_mirror.jpg' % frame), quality=95)
+        # # Data Mirroring
+        # if args.mirror:
+        #     imFace_mirror = cv2.flip(imFace, 1)
+        #     imEyeL_mirror = cv2.flip(imEyeL, 1)
+        #     imEyeR_mirror = cv2.flip(imEyeR, 1)
+        #     PILImage.fromarray(imFace_mirror).save(os.path.join(facePath, '%05d_mirror.jpg' % frame), quality=95)
+        #     PILImage.fromarray(imEyeL_mirror).save(os.path.join(leftEyePath, '%05d_mirror.jpg' % frame), quality=95)
+        #     PILImage.fromarray(imEyeR_mirror).save(os.path.join(rightEyePath, '%05d_mirror.jpg' % frame), quality=95)
 
-            (XFactor, YFactor) = (-1.0, 1.0) if screen['Orientation'][j] <= 2 else (1.0, -1.0)
-            # mirror faceGridBbox
-            f = [24-faceGridBbox[j, 0]-faceGridBbox[j, 2], faceGridBbox[j, 1], faceGridBbox[j, 2], faceGridBbox[j, 3]]
-            # Mirror metadata - Assuming Camera is on the top center
-            meta['labelRecNum'] += [int(directory)]
-            meta['frameIndex'] += [frame]
-            meta['labelDotXCam'] += [XFactor * dotInfo['XCam'][j]]
-            meta['labelDotYCam'] += [YFactor * dotInfo['YCam'][j]]
-            meta['labelFaceGrid'] += [f]
-            meta['labelTrain'] += [split == "train"]
-            meta['labelVal'] += [split == "val"]
-            meta['labelTest'] += [split == "test"]
+        #     (XFactor, YFactor) = (-1.0, 1.0) if screen['Orientation'][j] <= 2 else (1.0, -1.0)
+        #     # TODO mirror faceGridBbox
+        #     f = [24-faceGridBbox[j, 0]-faceGridBbox[j, 2], faceGridBbox[j, 1], faceGridBbox[j, 2], faceGridBbox[j, 3]]
+        #     # Mirror metadata - Assuming Camera is on the top center
+        #     meta['labelRecNum'] += [int(directory)]
+        #     meta['frameIndex'] += [frame]
+        #     meta['labelDotXCam'] += [XFactor * dotInfo['XCam'][j]]
+        #     meta['labelDotYCam'] += [YFactor * dotInfo['YCam'][j]]
+        #     meta['labelFaceGrid'] += [f]
+        #     meta['labelTrain'] += [split == "train"]
+        #     meta['labelVal'] += [split == "val"]
+        #     meta['labelTest'] += [split == "test"]
 
     return meta
 
@@ -856,11 +839,21 @@ def countValidTask(directory, directory_idx, bar):
             
     return directory, len(frames), count1, count2
 
-
 def plotRotationHistogramTask(directory, directory_idx, bar):
     faceData = json_read(os.path.join(args.input, directory, "dlibFace.json"))
     Theta = faceData["Theta"]
     return Theta
+
+def readMetadataTask(filepath):
+    if not os.path.isfile(filepath):
+        print(filepath + " doesn't exists.")
+        return
+    data = sio.loadmat(filepath, struct_as_record=False)
+    # print(data['labelDotXCam'].dtype)
+    labelFaceGrid = data['labelFaceGrid']
+    print(data)
+    print(labelFaceGrid[:10])
+
 
 # all tasks are handled here
 if __name__ == '__main__':
@@ -973,6 +966,10 @@ if __name__ == '__main__':
         taskData = args.input
         dataLoader = None
         taskFunction = testTask
+    elif args.task == "readMetadataTask":
+        taskData = args.input
+        dataLoader = None
+        taskFunction = readMetadataTask
     elif args.task == "countFilesTaskSerial":
         taskData = args.input
         dataLoader = None
@@ -1026,7 +1023,8 @@ if __name__ == '__main__':
         meta['frameIndex'] = np.stack(meta['frameIndex'], axis=0).astype(np.int32)
         meta['labelDotXCam'] = np.stack(meta['labelDotXCam'], axis=0)
         meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
-        meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
+        # meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
+        meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0)
         # print(meta)
         compareTask(meta)
     elif args.task == "countFilesTaskParallel":
