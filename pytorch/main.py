@@ -136,7 +136,7 @@ def main():
                                                   args)
 
             # evaluate on validation set
-            eval_MSELoss, eval_RMSError = evaluate(datasets['val'],
+            val_MSELoss, val_RMSError = evaluate(datasets['val'],
                                                    model,
                                                    criterion,
                                                    epoch,
@@ -146,22 +146,37 @@ def main():
                                                    args.verbose,
                                                    args)
 
+            if args.force_test:
+                # optionally evaluate on test set for reference
+                # do not use these results for any checkpoints
+                test_MSELoss, test_RMSError = evaluate(datasets['test'],
+                                                model,
+                                                criterion,
+                                                1,
+                                                args.output_path,
+                                                args.device,
+                                                args.dataset_limit,
+                                                args.verbose,
+                                                args)
+
             # remember best RMSError and save checkpoint
-            is_best = eval_RMSError < best_RMSError
-            best_RMSError = min(eval_RMSError, best_RMSError)
+            is_best = val_RMSError < best_RMSError
+            best_RMSError = min(val_RMSError, best_RMSError)
 
             best_RMSErrors[epoch - 1] = best_RMSError
-            RMSErrors[epoch - 1] = eval_RMSError
+            RMSErrors[epoch - 1] = val_RMSError
 
             args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, scheduler.get_lr())
             args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
-            args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, eval_RMSError)
+            args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, val_RMSError)
+            if args.force_test:
+                args.vis.plotAll('RMSError', 'test', "RMSError (Overall)", epoch, test_RMSError)
             args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
             time_elapsed = datetime.now() - start_time
 
             if run:
-                run.log('MSELoss', eval_MSELoss)
-                run.log('RMSLoss', eval_RMSError)
+                run.log('MSELoss', val_MSELoss)
+                run.log('RMSLoss', val_RMSError)
                 run.log('best MSELoss', best_RMSError)
                 run.log('epoch time', time_elapsed)
 
@@ -173,8 +188,8 @@ def main():
                     'is_best': is_best,
                     'train_MSELoss': train_MSELoss,
                     'train_RMSError': train_RMSError,
-                    'eval_MSELoss': eval_MSELoss,
-                    'eval_RMSError': eval_RMSError,
+                    'val_MSELoss': val_MSELoss,
+                    'val_RMSError': val_RMSError,
                     'time_elapsed': time_elapsed,
                     'RMSErrors': RMSErrors,
                     'best_RMSErrors': best_RMSErrors,
@@ -194,7 +209,7 @@ def main():
     elif args.mode == 'Test':
         # Quick test
         start_time = datetime.now()
-        eval_MSELoss, eval_RMSError = evaluate(datasets['test'],
+        test_MSELoss, test_RMSError = evaluate(datasets['test'],
                                                model,
                                                criterion,
                                                1,
@@ -205,11 +220,11 @@ def main():
                                                args)
         time_elapsed = datetime.now() - start_time
         print('')
-        print('Testing MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
+        print('Testing MSELoss: %.5f, RMSError: %.5f' % (test_MSELoss, test_RMSError))
         print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif args.mode == 'Validate':
         start_time = datetime.now()
-        eval_MSELoss, eval_RMSError = evaluate(datasets['val'],
+        val_MSELoss, val_RMSError = evaluate(datasets['val'],
                                                model,
                                                criterion,
                                                1,
@@ -220,7 +235,7 @@ def main():
                                                args)
         time_elapsed = datetime.now() - start_time
         print('')  # print blank line after loading data
-        print('Validation MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
+        print('Validation MSELoss: %.5f, RMSError: %.5f' % (val_MSELoss, val_RMSError))
         print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif args.mode == 'ExportONNX':
         # export the model for use in other frameworks
@@ -231,8 +246,22 @@ def main():
 
 
 def initialize_visualization(args):
+    port = 8000 + args.local_rank[0]
+    # Visdom Server: start the visdom server on a separate process so it doesn't block current process
+    try:
+        FNULL = open(os.devnull, 'w')
+        visdomProcess = subprocess.Popen(["python", "-m", "visdom.server", "-port", str(port)], stdout=FNULL, stderr=FNULL)
+        while visdomProcess.poll() is not None:
+            pass
+        time.sleep(4)
+    except (KeyboardInterrupt, SystemExit):
+        visdomProcess.wait()
+        print('Thread is killed.')
+        sys.exit()
+
+    # Visdom Client
     # Initialize the visualization environment open => http://localhost:8097
-    args.vis = Visualizations(args.name, args.visdom)
+    args.vis = Visualizations(args.name, args.visdom, port)
     args.vis.resetAll()
 
 
@@ -642,17 +671,18 @@ def export_onnx_model(model, device, verbose):
 
 
 if __name__ == "__main__":
-    try:
-        FNULL = open(os.devnull, 'w')
-        visdomProcess = subprocess.Popen(["python", "-m", "visdom.server"], stdout=FNULL, stderr=FNULL)
-        while visdomProcess.poll() is not None:
-            pass
-        time.sleep(4)
-        main()
-    except (KeyboardInterrupt, SystemExit):
-        visdomProcess.wait()
-        print('Thread is killed.')
-        sys.exit()
+    # try:
+    #     FNULL = open(os.devnull, 'w')
+    #     visdomProcess = subprocess.Popen(["python", "-m", "visdom.server"], stdout=FNULL, stderr=FNULL)
+    #     while visdomProcess.poll() is not None:
+    #         pass
+    #     time.sleep(4)
+    #     main()
+    # except (KeyboardInterrupt, SystemExit):
+    #     visdomProcess.wait()
+    #     print('Thread is killed.')
+    #     sys.exit()
+    main()
     print('')
     print('DONE')
     print('')

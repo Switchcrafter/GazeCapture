@@ -334,11 +334,11 @@ def centered_text(infoString, marker='-', length=40):
 
 class Visualizations(object):
     """Plots to Visdom"""
-    def __init__(self, env_name='main', active=False):
+    def __init__(self, env_name='main', active=False, port=8000):
         self.active = active
         if self.active:
             try:
-                self.viz = visdom.Visdom()
+                self.viz = visdom.Visdom(port=port)
                 # wait until visdom connection is up
                 while self.viz.check_connection() is not True:
                     pass
@@ -357,8 +357,8 @@ class Visualizations(object):
             return np.array([[0, 0, 255],]) # Blue
         elif split_name == "val" or split_name == "val_history" :
             return np.array([[255, 0, 0],]) # Red
-        elif split_name == "test":
-            return np.array([[255, 0, 0],]) # Green
+        elif split_name == "test" or split_name == "test_history":
+            return np.array([[0, 255, 0],]) # Green
         else:
             return np.array([[0, 0, 0],]) # Black
 

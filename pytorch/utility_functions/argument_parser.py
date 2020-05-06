@@ -15,6 +15,8 @@ def parse_commandline_arguments():
                         default="")
     parser.add_argument('--save_checkpoints', action='store_true', default=False,
                         help="Save each of the checkpoints as the run progresses.")
+    parser.add_argument('--force_test', action='store_true', default=False,
+                        help="Force test every epoch during training")
     parser.add_argument('--test', action='store_true', default=False, help="Just test and terminate.")
     parser.add_argument('--validate', action='store_true', default=False,
                         help="Just validate and terminate.")
