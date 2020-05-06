@@ -18,7 +18,7 @@ from utility_functions import checkpoint_manager
 from utility_functions import cyclical_learning_rate
 from ITrackerData import load_all_data
 from ITrackerModel import ITrackerModel
-from utility_functions.Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations, resize, set_print_policy
+from utility_functions.Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations, resize, set_print_policy, getPublishedPort
 
 try:
     from azureml.core.run import Run
@@ -118,11 +118,13 @@ def main():
 
             args.vis.reset()
             # train for one epoch
-            print('\nEpoch:{} [device:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch,
+            print('\nEpoch:{} [device:{}, nodes:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}, visdom_port:{}]'.format(epoch,
                                                                                          args.device,
+                                                                                         args.local_rank,
                                                                                          best_RMSError,
                                                                                          args.hsm,
-                                                                                         args.adv))
+                                                                                         args.adv, 
+                                                                                         args.port))
             train_MSELoss, train_RMSError = train(datasets['train'],
                                                   model,
                                                   criterion,
@@ -246,24 +248,26 @@ def main():
 
 
 def initialize_visualization(args):
-    port = 8000 + args.local_rank[0]
-    # Visdom Server: start the visdom server on a separate process so it doesn't block current process
-    try:
-        FNULL = open(os.devnull, 'w')
-        visdomProcess = subprocess.Popen(["python", "-m", "visdom.server", "-port", str(port)], stdout=FNULL, stderr=FNULL)
-        while visdomProcess.poll() is not None:
-            pass
-        time.sleep(4)
-    except (KeyboardInterrupt, SystemExit):
-        visdomProcess.wait()
-        print('Thread is killed.')
-        sys.exit()
+    port = 8097
+    args.port = None
+    if args.visdom:
+        # Visdom Server: start the visdom server on a separate process so it doesn't block current process
+        try:
+            FNULL = open(os.devnull, 'w')
+            visdomProcess = subprocess.Popen(["python", "-m", "visdom.server", "-port", str(port)], stdout=FNULL, stderr=FNULL)
+            while visdomProcess.poll() is not None:
+                pass
+            time.sleep(4)
+            args.port = getPublishedPort()
+        except (KeyboardInterrupt, SystemExit):
+            visdomProcess.wait()
+            print('Thread is killed.')
+            sys.exit()
 
     # Visdom Client
     # Initialize the visualization environment open => http://localhost:8097
     args.vis = Visualizations(args.name, args.visdom, port)
     args.vis.resetAll()
-
 
 def initialize_model(args):
     if args.verbose:

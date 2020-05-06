@@ -436,3 +436,12 @@ def set_print_policy(master, local_rank):
         sys.stdout = sys.__stdout__
     else:
         sys.stdout = open(os.devnull, 'w')
+
+def getPublishedPort():
+    import docker
+    client = docker.from_env()
+    container_list = client.containers.list(filters={"expose":"8097"})
+    container = container_list[0]
+    # for c in container_list:
+    #     print(c.attrs['NetworkSettings']['Ports']['8097/tcp'][0]['HostPort'])
+    return container.attrs['NetworkSettings']['Ports']['8097/tcp'][0]['HostPort']
