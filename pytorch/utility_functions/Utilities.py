@@ -353,7 +353,7 @@ class Visualizations(object):
         self.closed_windows = []
 
     def getColor(self, split_name):
-        if split_name == "train":
+        if split_name == "train" or split_name == "train_history" :
             return np.array([[0, 0, 255],]) # Blue
         elif split_name == "val" or split_name == "val_history" :
             return np.array([[255, 0, 0],]) # Red
@@ -389,8 +389,8 @@ class Visualizations(object):
                 # remove the closed window
                 self.closed_windows.remove(window)
 
-    def plot(self, var_name, split_name, title_name, x, y):
-        if self.active:
+    def plot(self, var_name, split_name, title_name, x, y, visible=True):
+        if self.active and visible:
             if var_name not in self.split_plots:
                 self.split_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
                     legend=[split_name],
@@ -403,8 +403,8 @@ class Visualizations(object):
                 self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.split_plots[var_name], name=split_name,
                 update = 'append', opts=dict(linecolor=self.getColor(split_name)))
 
-    def plotAll(self, var_name, split_name, title_name, x, y, style='solid'):
-        if self.active:
+    def plotAll(self, var_name, split_name, title_name, x, y, style='solid', visible=True):
+        if self.active and visible:
             ytype = 'log' if split_name == "lr" else 'linear'
             if var_name not in self.epoch_plots:
                 self.epoch_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(

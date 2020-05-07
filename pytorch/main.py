@@ -64,7 +64,7 @@ def main():
         print('{0} does not exist, creating...'.format(args.output_path))
         os.makedirs(args.output_path, exist_ok=True)
 
-    RMSErrors, test_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model = initialize_model(args)
+    val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model = initialize_model(args)
 
     print('epoch = %d' % epoch)
 
@@ -86,8 +86,10 @@ def main():
         # resize variables to epochs size
         resize(learning_rates, args.epochs)
         resize(best_RMSErrors, args.epochs)
+        resize(train_RMSErrors, args.epochs)
+        resize(val_RMSErrors, args.epochs)
         resize(test_RMSErrors, args.epochs)
-        resize(RMSErrors, args.epochs)
+        
 
         if args.hsm:
             args.multinomial_weights = torch.ones(datasets['train'].size, dtype=torch.double)
@@ -96,27 +98,29 @@ def main():
 
         # Placeholder for overall (all epoch) visualizations
         args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", None, None)
+        args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", None, None)
         args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", None, None)
         args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", None, None)
-        if args.force_test:
-            args.vis.plotAll('RMSError', 'test', "RMSError (Overall)", None, None)
-        args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", None, None)
+        args.vis.plotAll('RMSError', 'test', "RMSError (Overall)", None, None, visible=args.force_test)
         
         # Populate visualizations with checkpoint info
         for epoch_num in range(1, epoch):
             args.vis.plotAll('LearningRate', 'lr_history', "LearningRate (Overall)", epoch_num,
-                             learning_rates[epoch_num], 'dot')
-            args.vis.plotAll('RMSError', 'val_history', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num], 'dot')
-            if args.force_test:
-                args.vis.plotAll('RMSError', 'test_history', "RMSError (Overall)", epoch_num, test_RMSErrors[epoch_num], 'dot')
+                             learning_rates[epoch_num-1], 'dot')
             args.vis.plotAll('BestRMSError', 'val_history', "Best RMSError (Overall)", epoch_num,
-                             best_RMSErrors[epoch_num], 'dot')
+                             best_RMSErrors[epoch_num-1], 'dot')
+            args.vis.plotAll('RMSError', 'train_history', "RMSError (Overall)", epoch_num, train_RMSErrors[epoch_num-1], 'dot')
+            args.vis.plotAll('RMSError', 'val_history', "RMSError (Overall)", epoch_num, val_RMSErrors[epoch_num-1], 'dot')
+            args.vis.plotAll('RMSError', 'test_history', "RMSError (Overall)", epoch_num, test_RMSErrors[epoch_num-1], 
+                            'dot', args.force_test)
+            
             if epoch_num == epoch - 1:
-                args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch_num, learning_rates[epoch_num])
-                args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num])
-                args.vis.plotAll('RMSError', 'test', "RMSError (Overall)", epoch_num, test_RMSErrors[epoch_num])
-                args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num])
-
+                args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch_num, learning_rates[epoch_num-1])
+                args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num-1])
+                args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch_num, train_RMSErrors[epoch_num-1])
+                args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch_num, val_RMSErrors[epoch_num-1])
+                args.vis.plotAll('RMSError', 'test', "RMSError (Overall)", epoch_num, test_RMSErrors[epoch_num-1], visible=args.force_test)
+                
         # now start training from last best epoch
         for epoch in range(epoch, args.epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, args.epochs))
@@ -175,15 +179,15 @@ def main():
             best_RMSError = min(val_RMSError, best_RMSError)
 
             best_RMSErrors[epoch - 1] = best_RMSError
-            RMSErrors[epoch - 1] = val_RMSError
+            val_RMSErrors[epoch - 1] = val_RMSError
+            train_RMSErrors[epoch - 1] = train_RMSError
             test_RMSErrors[epoch - 1] = test_RMSError
-
+            
             args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, scheduler.get_lr())
+            args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
             args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
             args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, val_RMSError)
-            if args.force_test:
-                args.vis.plotAll('RMSError', 'test', "RMSError (Overall)", epoch, test_RMSError)
-            args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
+            args.vis.plotAll('RMSError', 'test', "RMSError (Overall)", epoch, test_RMSError, visible=args.force_test)
             time_elapsed = datetime.now() - start_time
 
             if run:
@@ -203,10 +207,11 @@ def main():
                     'val_MSELoss': val_MSELoss,
                     'val_RMSError': val_RMSError,
                     'time_elapsed': time_elapsed,
-                    'RMSErrors': RMSErrors,
-                    'best_RMSErrors': best_RMSErrors,
-                    'test_RMSErrors': test_RMSErrors,
                     'learning_rates': learning_rates,
+                    'best_RMSErrors': best_RMSErrors,
+                    'train_RMSErrors': train_RMSErrors,
+                    'val_RMSErrors': val_RMSErrors,
+                    'test_RMSErrors': test_RMSErrors,
                 },
                 is_best,
                 args.output_path,
@@ -216,7 +221,7 @@ def main():
             print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
             print('')
-            print('\'RMS_Errors\': {0},'.format(RMSErrors))
+            print('\'RMS_Errors\': {0},'.format(val_RMSErrors))
             print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
             print('')
     elif args.mode == 'Test':
@@ -330,9 +335,9 @@ def initialize_model(args):
         print("Cuda disabled")
     
     # use new model or load existing 
-    RMSErrors, test_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates = checkpoint_manager.extract_checkpoint_data(args,
+    val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates = checkpoint_manager.extract_checkpoint_data(args,
                                                                                                                  model)
-    return RMSErrors, test_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model
+    return val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model
 
 
 def initialize_hyper_parameters(args, datasets, model):
