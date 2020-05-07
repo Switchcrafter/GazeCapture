@@ -18,7 +18,7 @@ from utility_functions import checkpoint_manager
 from utility_functions import cyclical_learning_rate
 from ITrackerData import load_all_data
 from ITrackerModel import ITrackerModel
-from utility_functions.Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations, resize, set_print_policy
+from utility_functions.Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations, resize, set_print_policy, getPublishedPort
 
 try:
     from azureml.core.run import Run
@@ -64,7 +64,7 @@ def main():
         print('{0} does not exist, creating...'.format(args.output_path))
         os.makedirs(args.output_path, exist_ok=True)
 
-    RMSErrors, best_RMSError, best_RMSErrors, epoch, learning_rates, model = initialize_model(args)
+    val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model = initialize_model(args)
 
     print('epoch = %d' % epoch)
 
@@ -86,7 +86,10 @@ def main():
         # resize variables to epochs size
         resize(learning_rates, args.epochs)
         resize(best_RMSErrors, args.epochs)
-        resize(RMSErrors, args.epochs)
+        resize(train_RMSErrors, args.epochs)
+        resize(val_RMSErrors, args.epochs)
+        resize(test_RMSErrors, args.epochs)
+        
 
         if args.hsm:
             args.multinomial_weights = torch.ones(datasets['train'].size, dtype=torch.double)
@@ -95,21 +98,29 @@ def main():
 
         # Placeholder for overall (all epoch) visualizations
         args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", None, None)
+        args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", None, None)
         args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", None, None)
         args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", None, None)
-        args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", None, None)
+        args.vis.plotAll('RMSError', 'test', "RMSError (Overall)", None, None, visible=args.force_test)
+        
         # Populate visualizations with checkpoint info
         for epoch_num in range(1, epoch):
             args.vis.plotAll('LearningRate', 'lr_history', "LearningRate (Overall)", epoch_num,
-                             learning_rates[epoch_num], 'dot')
-            args.vis.plotAll('RMSError', 'val_history', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num], 'dot')
+                             learning_rates[epoch_num-1], 'dot')
             args.vis.plotAll('BestRMSError', 'val_history', "Best RMSError (Overall)", epoch_num,
-                             best_RMSErrors[epoch_num], 'dot')
+                             best_RMSErrors[epoch_num-1], 'dot')
+            args.vis.plotAll('RMSError', 'train_history', "RMSError (Overall)", epoch_num, train_RMSErrors[epoch_num-1], 'dot')
+            args.vis.plotAll('RMSError', 'val_history', "RMSError (Overall)", epoch_num, val_RMSErrors[epoch_num-1], 'dot')
+            args.vis.plotAll('RMSError', 'test_history', "RMSError (Overall)", epoch_num, test_RMSErrors[epoch_num-1], 
+                            'dot', args.force_test)
+            
             if epoch_num == epoch - 1:
-                args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch_num, learning_rates[epoch_num])
-                args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num])
-                args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num])
-
+                args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch_num, learning_rates[epoch_num-1])
+                args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num-1])
+                args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch_num, train_RMSErrors[epoch_num-1])
+                args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch_num, val_RMSErrors[epoch_num-1])
+                args.vis.plotAll('RMSError', 'test', "RMSError (Overall)", epoch_num, test_RMSErrors[epoch_num-1], visible=args.force_test)
+                
         # now start training from last best epoch
         for epoch in range(epoch, args.epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, args.epochs))
@@ -118,11 +129,13 @@ def main():
 
             args.vis.reset()
             # train for one epoch
-            print('\nEpoch:{} [device:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch,
+            print('\nEpoch:{} [device:{}, nodes:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}, visdom_port:{}]'.format(epoch,
                                                                                          args.device,
+                                                                                         args.local_rank,
                                                                                          best_RMSError,
                                                                                          args.hsm,
-                                                                                         args.adv))
+                                                                                         args.adv, 
+                                                                                         args.port))
             train_MSELoss, train_RMSError = train(datasets['train'],
                                                   model,
                                                   criterion,
@@ -136,7 +149,7 @@ def main():
                                                   args)
 
             # evaluate on validation set
-            eval_MSELoss, eval_RMSError = evaluate(datasets['val'],
+            val_MSELoss, val_RMSError = evaluate(datasets['val'],
                                                    model,
                                                    criterion,
                                                    epoch,
@@ -146,22 +159,40 @@ def main():
                                                    args.verbose,
                                                    args)
 
+            test_MSELoss, test_RMSError = None, None
+            if args.force_test:
+                # optionally evaluate on test set for reference
+                # do not use these results for any checkpoints
+                test_MSELoss, test_RMSError = evaluate(datasets['test'],
+                                                model,
+                                                criterion,
+                                                1,
+                                                args.output_path,
+                                                args.device,
+                                                args.dataset_limit,
+                                                args.verbose,
+                                                args)
+                
+
             # remember best RMSError and save checkpoint
-            is_best = eval_RMSError < best_RMSError
-            best_RMSError = min(eval_RMSError, best_RMSError)
+            is_best = val_RMSError < best_RMSError
+            best_RMSError = min(val_RMSError, best_RMSError)
 
             best_RMSErrors[epoch - 1] = best_RMSError
-            RMSErrors[epoch - 1] = eval_RMSError
-
+            val_RMSErrors[epoch - 1] = val_RMSError
+            train_RMSErrors[epoch - 1] = train_RMSError
+            test_RMSErrors[epoch - 1] = test_RMSError
+            
             args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, scheduler.get_lr())
-            args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
-            args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, eval_RMSError)
             args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
+            args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
+            args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, val_RMSError)
+            args.vis.plotAll('RMSError', 'test', "RMSError (Overall)", epoch, test_RMSError, visible=args.force_test)
             time_elapsed = datetime.now() - start_time
 
             if run:
-                run.log('MSELoss', eval_MSELoss)
-                run.log('RMSLoss', eval_RMSError)
+                run.log('MSELoss', val_MSELoss)
+                run.log('RMSLoss', val_RMSError)
                 run.log('best MSELoss', best_RMSError)
                 run.log('epoch time', time_elapsed)
 
@@ -173,12 +204,14 @@ def main():
                     'is_best': is_best,
                     'train_MSELoss': train_MSELoss,
                     'train_RMSError': train_RMSError,
-                    'eval_MSELoss': eval_MSELoss,
-                    'eval_RMSError': eval_RMSError,
+                    'val_MSELoss': val_MSELoss,
+                    'val_RMSError': val_RMSError,
                     'time_elapsed': time_elapsed,
-                    'RMSErrors': RMSErrors,
-                    'best_RMSErrors': best_RMSErrors,
                     'learning_rates': learning_rates,
+                    'best_RMSErrors': best_RMSErrors,
+                    'train_RMSErrors': train_RMSErrors,
+                    'val_RMSErrors': val_RMSErrors,
+                    'test_RMSErrors': test_RMSErrors,
                 },
                 is_best,
                 args.output_path,
@@ -188,13 +221,13 @@ def main():
             print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
             print('')
-            print('\'RMS_Errors\': {0},'.format(RMSErrors))
+            print('\'RMS_Errors\': {0},'.format(val_RMSErrors))
             print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
             print('')
     elif args.mode == 'Test':
         # Quick test
         start_time = datetime.now()
-        eval_MSELoss, eval_RMSError = evaluate(datasets['test'],
+        test_MSELoss, test_RMSError = evaluate(datasets['test'],
                                                model,
                                                criterion,
                                                1,
@@ -205,11 +238,11 @@ def main():
                                                args)
         time_elapsed = datetime.now() - start_time
         print('')
-        print('Testing MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
+        print('Testing MSELoss: %.5f, RMSError: %.5f' % (test_MSELoss, test_RMSError))
         print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif args.mode == 'Validate':
         start_time = datetime.now()
-        eval_MSELoss, eval_RMSError = evaluate(datasets['val'],
+        val_MSELoss, val_RMSError = evaluate(datasets['val'],
                                                model,
                                                criterion,
                                                1,
@@ -220,7 +253,7 @@ def main():
                                                args)
         time_elapsed = datetime.now() - start_time
         print('')  # print blank line after loading data
-        print('Validation MSELoss: %.5f, RMSError: %.5f' % (eval_MSELoss, eval_RMSError))
+        print('Validation MSELoss: %.5f, RMSError: %.5f' % (val_MSELoss, val_RMSError))
         print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif args.mode == 'ExportONNX':
         # export the model for use in other frameworks
@@ -229,12 +262,35 @@ def main():
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
 
-
 def initialize_visualization(args):
-    # Initialize the visualization environment open => http://localhost:8097
-    args.vis = Visualizations(args.name, args.visdom)
-    args.vis.resetAll()
+    args.port = None
+    port = 8097
+    if args.visdom == "":
+        active = False
+    elif args.visdom == "auto":
+        active = True
+        server = "http://localhost"
+        # Visdom Server: start the visdom server on a separate process so it doesn't block current process
+        try:
+            FNULL = open(os.devnull, 'w')
+            visdomProcess = subprocess.Popen(["python", "-m", "visdom.server", "-port", str(port)], stdout=FNULL, stderr=FNULL)
+            while visdomProcess.poll() is not None:
+                pass
+            time.sleep(4)
+            args.port = getPublishedPort()
+        except (KeyboardInterrupt, SystemExit):
+            visdomProcess.wait()
+            print('Thread is killed.')
+            sys.exit()
+    else:
+        active = True
+        args.port = port
+        server = args.visdom
 
+    # Visdom Client
+    # Initialize the visualization environment open => http://localhost:8097
+    args.vis = Visualizations(args.name, active, server, port)
+    args.vis.resetAll()
 
 def initialize_model(args):
     if args.verbose:
@@ -279,9 +335,9 @@ def initialize_model(args):
         print("Cuda disabled")
     
     # use new model or load existing 
-    RMSErrors, best_RMSError, best_RMSErrors, epoch, learning_rates = checkpoint_manager.extract_checkpoint_data(args,
+    val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates = checkpoint_manager.extract_checkpoint_data(args,
                                                                                                                  model)
-    return RMSErrors, best_RMSError, best_RMSErrors, epoch, learning_rates, model
+    return val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model
 
 
 def initialize_hyper_parameters(args, datasets, model):
@@ -642,17 +698,7 @@ def export_onnx_model(model, device, verbose):
 
 
 if __name__ == "__main__":
-    try:
-        FNULL = open(os.devnull, 'w')
-        visdomProcess = subprocess.Popen(["python", "-m", "visdom.server"], stdout=FNULL, stderr=FNULL)
-        while visdomProcess.poll() is not None:
-            pass
-        time.sleep(4)
-        main()
-    except (KeyboardInterrupt, SystemExit):
-        visdomProcess.wait()
-        print('Thread is killed.')
-        sys.exit()
+    main()
     print('')
     print('DONE')
     print('')

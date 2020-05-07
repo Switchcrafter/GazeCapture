@@ -15,6 +15,8 @@ def parse_commandline_arguments():
                         default="")
     parser.add_argument('--save_checkpoints', action='store_true', default=False,
                         help="Save each of the checkpoints as the run progresses.")
+    parser.add_argument('--force_test', action='store_true', default=False,
+                        help="Force test every epoch during training")
     parser.add_argument('--test', action='store_true', default=False, help="Just test and terminate.")
     parser.add_argument('--validate', action='store_true', default=False,
                         help="Just validate and terminate.")
@@ -41,7 +43,7 @@ def parse_commandline_arguments():
     parser.add_argument('--decay_type', default='none', help='none, step_decay, exp_decay, time_decay')
     parser.add_argument('--shape_type', default='triangular', help='triangular, flat')
     parser.add_argument('--data_loader', default="cpu", help="cpu, dali_cpu, dali_gpu, dali_gpu_all")
-    parser.add_argument('--visdom', action='store_true', default=False, help="Enables Visdom Server")
+    parser.add_argument('--visdom', default="", help="Visdom Server URL. E.g. '', 'auto', 'http://deepthoughts'")
     parser.add_argument('--optimizer', default="sgd", help="sgd, adam")
     parser.add_argument('--start_lr', type=float, default=1)
     parser.add_argument('--end_lr', type=float, default=3E-3)
