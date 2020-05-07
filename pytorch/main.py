@@ -64,7 +64,7 @@ def main():
         print('{0} does not exist, creating...'.format(args.output_path))
         os.makedirs(args.output_path, exist_ok=True)
 
-    RMSErrors, best_RMSError, best_RMSErrors, epoch, learning_rates, model = initialize_model(args)
+    RMSErrors, test_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model = initialize_model(args)
 
     print('epoch = %d' % epoch)
 
@@ -86,6 +86,7 @@ def main():
         # resize variables to epochs size
         resize(learning_rates, args.epochs)
         resize(best_RMSErrors, args.epochs)
+        resize(test_RMSErrors, args.epochs)
         resize(RMSErrors, args.epochs)
 
         if args.hsm:
@@ -97,17 +98,23 @@ def main():
         args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", None, None)
         args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", None, None)
         args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", None, None)
+        if args.force_test:
+            args.vis.plotAll('RMSError', 'test', "RMSError (Overall)", None, None)
         args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", None, None)
+        
         # Populate visualizations with checkpoint info
         for epoch_num in range(1, epoch):
             args.vis.plotAll('LearningRate', 'lr_history', "LearningRate (Overall)", epoch_num,
                              learning_rates[epoch_num], 'dot')
             args.vis.plotAll('RMSError', 'val_history', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num], 'dot')
+            if args.force_test:
+                args.vis.plotAll('RMSError', 'test_history', "RMSError (Overall)", epoch_num, test_RMSErrors[epoch_num], 'dot')
             args.vis.plotAll('BestRMSError', 'val_history', "Best RMSError (Overall)", epoch_num,
                              best_RMSErrors[epoch_num], 'dot')
             if epoch_num == epoch - 1:
                 args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch_num, learning_rates[epoch_num])
                 args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch_num, RMSErrors[epoch_num])
+                args.vis.plotAll('RMSError', 'test', "RMSError (Overall)", epoch_num, test_RMSErrors[epoch_num])
                 args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch_num, best_RMSErrors[epoch_num])
 
         # now start training from last best epoch
@@ -148,6 +155,7 @@ def main():
                                                    args.verbose,
                                                    args)
 
+            test_MSELoss, test_RMSError = None, None
             if args.force_test:
                 # optionally evaluate on test set for reference
                 # do not use these results for any checkpoints
@@ -160,6 +168,7 @@ def main():
                                                 args.dataset_limit,
                                                 args.verbose,
                                                 args)
+                
 
             # remember best RMSError and save checkpoint
             is_best = val_RMSError < best_RMSError
@@ -167,6 +176,7 @@ def main():
 
             best_RMSErrors[epoch - 1] = best_RMSError
             RMSErrors[epoch - 1] = val_RMSError
+            test_RMSErrors[epoch - 1] = test_RMSError
 
             args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, scheduler.get_lr())
             args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
@@ -195,6 +205,7 @@ def main():
                     'time_elapsed': time_elapsed,
                     'RMSErrors': RMSErrors,
                     'best_RMSErrors': best_RMSErrors,
+                    'test_RMSErrors': test_RMSErrors,
                     'learning_rates': learning_rates,
                 },
                 is_best,
@@ -319,9 +330,9 @@ def initialize_model(args):
         print("Cuda disabled")
     
     # use new model or load existing 
-    RMSErrors, best_RMSError, best_RMSErrors, epoch, learning_rates = checkpoint_manager.extract_checkpoint_data(args,
+    RMSErrors, test_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates = checkpoint_manager.extract_checkpoint_data(args,
                                                                                                                  model)
-    return RMSErrors, best_RMSError, best_RMSErrors, epoch, learning_rates, model
+    return RMSErrors, test_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model
 
 
 def initialize_hyper_parameters(args, datasets, model):
@@ -682,17 +693,6 @@ def export_onnx_model(model, device, verbose):
 
 
 if __name__ == "__main__":
-    # try:
-    #     FNULL = open(os.devnull, 'w')
-    #     visdomProcess = subprocess.Popen(["python", "-m", "visdom.server"], stdout=FNULL, stderr=FNULL)
-    #     while visdomProcess.poll() is not None:
-    #         pass
-    #     time.sleep(4)
-    #     main()
-    # except (KeyboardInterrupt, SystemExit):
-    #     visdomProcess.wait()
-    #     print('Thread is killed.')
-    #     sys.exit()
     main()
     print('')
     print('DONE')
