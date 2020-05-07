@@ -334,11 +334,11 @@ def centered_text(infoString, marker='-', length=40):
 
 class Visualizations(object):
     """Plots to Visdom"""
-    def __init__(self, env_name='main', active=False, port=8000):
+    def __init__(self, env_name='main', active=False, server="http://deepthoughts", port=8097):
         self.active = active
         if self.active:
             try:
-                self.viz = visdom.Visdom(port=port)
+                self.viz = visdom.Visdom(server=server, port=port)
                 # wait until visdom connection is up
                 while self.viz.check_connection() is not True:
                     pass
@@ -444,4 +444,5 @@ def getPublishedPort():
     container = container_list[0]
     # for c in container_list:
     #     print(c.attrs['NetworkSettings']['Ports']['8097/tcp'][0]['HostPort'])
+    # print(container.attrs['NetworkSettings']['IPAddress'])
     return container.attrs['NetworkSettings']['Ports']['8097/tcp'][0]['HostPort']

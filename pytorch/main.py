@@ -246,11 +246,14 @@ def main():
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
 
-
 def initialize_visualization(args):
-    port = 8097
     args.port = None
-    if args.visdom:
+    port = 8097
+    if args.visdom == "":
+        active = False
+    elif args.visdom == "auto":
+        active = True
+        server = "http://localhost"
         # Visdom Server: start the visdom server on a separate process so it doesn't block current process
         try:
             FNULL = open(os.devnull, 'w')
@@ -263,10 +266,14 @@ def initialize_visualization(args):
             visdomProcess.wait()
             print('Thread is killed.')
             sys.exit()
+    else:
+        active = True
+        args.port = port
+        server = args.visdom
 
     # Visdom Client
     # Initialize the visualization environment open => http://localhost:8097
-    args.vis = Visualizations(args.name, args.visdom, port)
+    args.vis = Visualizations(args.name, active, server, port)
     args.vis.resetAll()
 
 def initialize_model(args):
