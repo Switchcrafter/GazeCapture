@@ -20,6 +20,9 @@ RUN pip3 install dlib
 RUN pip3 install imutils
 RUN pip3 install scikit-image
 RUN pip3 install onnxruntime
+RUN pip3 install docker
+
+EXPOSE 8097
 
 # Execute the python
 ENTRYPOINT ["python"]
@@ -88,4 +91,5 @@ ENV NVIDIA_DRIVER_CAPABILITIES all
 # iTracker.py
 # sudo docker run --ipc=host --runtime=nvidia --gpus '"device=1"' -v /data:/data -v `pwd`:`pwd` -w `pwd` --rm -it gazepy iTracker.py
 
-# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v ~/data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy  main.py --batch_size 64 --local_rank 0 --mode 'none' --data_loader 'cpu'
+# Port binding through introspection
+# sudo docker run -P --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -v /var/run/docker.sock:/var/run/docker.sock -w $(pwd) --rm -it gazepy  main.py --batch_size 64 --local_rank 2 --mode 'none' --data_loader 'cpu' --data_path '/data/EyeCapture/EyeCaptures-rc-prepped' --visdom --reset --force_test
