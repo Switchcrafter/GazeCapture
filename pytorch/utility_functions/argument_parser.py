@@ -50,6 +50,7 @@ def parse_commandline_arguments():
     parser.add_argument('--lr_factor', type=int, default=6)
     parser.add_argument('--epochs_per_step', type=int, default=4)
     parser.add_argument('--model_type', default="resNet", help="resNet, mobileNet")
+    parser.add_argument('--train_size', type=int, default=1000)
     args = parser.parse_args()
 
     args.device_group = "".join([str(device) for device in args.local_rank])

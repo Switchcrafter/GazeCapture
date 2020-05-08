@@ -339,8 +339,11 @@ def initialize_model(args):
                                                                                                                  model)
     return val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model
 
-
 def initialize_hyper_parameters(args, datasets, model):
+    # Progressive growth of training
+    args.train_size = datasets["val"].size
+    args.train_step = (datasets["train"].size - datasets["val"].size)/16
+
     criterion = nn.MSELoss(reduction='mean').to(device=args.device)
     # for multi criteria experiments use criteria and weights as list below
     # criteria = [nn.MSELoss]
@@ -367,7 +370,6 @@ def initialize_hyper_parameters(args, datasets, model):
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr])
     return criterion, optimizer, scheduler
 
-
 # Fast Gradient Sign Attack (FGSA)
 def adversarial_attack(image, data_grad, epsilon=0.1):
     # Collect the element-wise sign of the data gradient
@@ -379,13 +381,11 @@ def adversarial_attack(image, data_grad, epsilon=0.1):
     # Return the perturbed image
     return perturbed_image
 
-
 def euclidean_batch_error(output, target):
     """ For a batch of output and target returns corresponding batch of euclidean errors
     """
     # Batch Euclidean Distance sqrt(dx^2 + dy^2)
     return torch.sqrt(torch.sum(torch.pow(output - target, 2), 1))
-
 
 def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, device, dataset_limit=None, verbose=False,
           args=None):
@@ -545,13 +545,16 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
             args.vis.plot("loss", dataset.split, "RMSError (epoch: {})".format(epoch), num_samples, RMSErrors.avg)
             progress_bar.update(num_samples, MSELosses.avg, RMSErrors.avg)
 
-        if dataset_limit and dataset_limit <= batchNum:
+        if dataset_limit and batchNum >= dataset_limit:
+            break
+        
+        if num_samples >= args.train_size:
+            args.train_size = min(dataset.size, args.train_size + args.train_step)
             break
 
     # print('lrs={}'.format(lrs))
 
     return MSELosses.avg, RMSErrors.avg
-
 
 def evaluate(dataset,
              model,
@@ -662,7 +665,6 @@ def evaluate(dataset,
 
     return MSELosses.avg, RMSErrors.avg
 
-
 def export_onnx_model(model, device, verbose):
     # switch to evaluate mode
     model.eval()
@@ -695,7 +697,6 @@ def export_onnx_model(model, device, verbose):
                           input_names=in_names,
                           output_names=out_names,
                           verbose=verbose)
-
 
 if __name__ == "__main__":
     main()
