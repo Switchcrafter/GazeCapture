@@ -10,16 +10,23 @@ def extract_checkpoint_data(args, model):
     best_rms_error = math.inf
 
     epoch = 1
-    rms_errors = []
+    val_rms_errors = []
+    test_rms_errors = []
+    train_rms_errors = []
     best_rms_errors = []
     learning_rates = []
 
     if not args.reset:
-        saved = load_checkpoint(args.output_path, args.device)
+        # Load last checkpoint if training otherwise load best checkpoint for evaluation
+        filename = 'checkpoint.pth.tar' if args.mode == 'Train' else 'best_checkpoint.pth.tar'
+        saved = load_checkpoint(args.output_path, args.device, filename)
         if saved:
             epoch = saved.get('epoch', epoch)
+            # for backward compatibility
+            val_rms_errors = saved.get('RMSErrors', saved.get('val_RMSErrors', val_rms_errors)) 
+            test_rms_errors = saved.get('test_RMSErrors', test_rms_errors)
+            train_rms_errors = saved.get('train_RMSErrors', train_rms_errors)
             best_rms_error = saved.get('best_RMSError', best_rms_error)
-            rms_errors = saved.get('RMSErrors', rms_errors)
             best_rms_errors = saved.get('best_RMSErrors', best_rms_errors)
             learning_rates = saved.get('learning_rates', learning_rates)
             print(
@@ -43,7 +50,7 @@ def extract_checkpoint_data(args, model):
         else:
             print('Warning: Could not read checkpoint!')
 
-    return rms_errors, best_rms_error, best_rms_errors, epoch, learning_rates
+    return val_rms_errors, test_rms_errors, train_rms_errors, best_rms_errors, best_rms_error, epoch, learning_rates
 
 
 def load_checkpoint(checkpoints_path, device, filename='checkpoint.pth.tar'):

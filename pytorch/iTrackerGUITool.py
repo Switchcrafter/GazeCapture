@@ -19,6 +19,8 @@ from utility_functions.face_utilities import find_face_dlib, \
     rc_landmarksToRects, \
     rc_generate_face_eye_images, \
     prepare_image_inputs, \
+    grid_generate_face_eye_images,\
+    grid_prepare_image_inputs,\
     hogImage
 
 
@@ -26,27 +28,28 @@ class InferenceEngine:
     def __init__(self, mode, color_space):
         self.mode = mode
         self.color_space = color_space
+        self.model_type = 'resNet'
         if self.mode == "torch":
-            self.modelSession = ITrackerModel(self.color_space).to(device='cpu')
+            self.modelSession = ITrackerModel(self.color_space, self.model_type).to(device='cpu')
             saved = torch.load('best_checkpoint.pth.tar', map_location='cpu')
             self.modelSession.load_state_dict(saved['state_dict'])
             self.modelSession.eval()
         elif self.mode == "onnx":
             self.modelSession = onnxruntime.InferenceSession('itracker.onnx')
 
-    def run_inference(self, normalize_image, image_face, image_eye_left, image_eye_right, face_grid):
+    def run_inference(self, normalize_image, image_face, image_eye_left, image_eye_right, image_face_grid):
         # compute output
         if self.mode == "torch":
             with torch.no_grad():
-                output = self.modelSession(image_face, image_eye_left, image_eye_right, face_grid)
+                output = self.modelSession(image_face, image_eye_left, image_eye_right, image_face_grid)
                 gaze_prediction_np = output.numpy()[0]
         elif self.mode == "onnx":
             # compute output
             output = self.modelSession.run(None,
-                                           {"face": image_face.numpy(),
-                                            "eyesLeft": image_eye_left.numpy(),
-                                            "eyesRight": image_eye_right.numpy(),
-                                            "faceGrid": face_grid.numpy()})
+                                {"face": image_face.numpy(),
+                                "eyesLeft": image_eye_left.numpy(),
+                                "eyesRight": image_eye_right.numpy(),
+                                "faceGrid": image_face_grid.numpy()})
             gaze_prediction_np = (output[0])[0]
 
         return gaze_prediction_np
@@ -134,31 +137,57 @@ def live_demo(input=0):
 
         # do only for valid face objects
         if isValid:
-            face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
-            face_image, left_eye_image, right_eye_image, face_grid, face_grid_image = rc_generate_face_eye_images(
-                face_rect,
-                left_eye_rect,
-                right_eye_rect,
-                webcam_image)
+            if True:
+                face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
+                face_image, left_eye_image, right_eye_image, face_grid_image = grid_generate_face_eye_images(face_rect,
+                                                                                                            left_eye_rect,
+                                                                                                            right_eye_rect,
+                                                                                                            webcam_image)
+                # print(face_image.shape, face_grid_image.shape)
+                # OpenCV BGR -> PIL RGB conversion
+                image_eye_left, image_eye_right, image_face, image_face_grid = grid_prepare_image_inputs(face_image,
+                                                                                                left_eye_image,
+                                                                                                right_eye_image,
+                                                                                                face_grid_image)
+                # print(face_grid_image.size, face_grid_image.size)
+                # PIL RGB -> PIL YCBCr. Then Convert images into tensors
+                imEyeL, imEyeR, imFace, imFaceGrid = grid_prepare_image_tensors(color_space,
+                                                                        image_face,
+                                                                        image_eye_left,
+                                                                        image_eye_right,
+                                                                        image_face_grid,
+                                                                        normalize_image)
+                start_time = datetime.now()
+                gaze_prediction_np = inferenceEngine.run_inference(normalize_image,
+                                                                    imFace,
+                                                                    imEyeL,
+                                                                    imEyeR,
+                                                                    imFaceGrid)
+            else:
+                face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
+                face_image, left_eye_image, right_eye_image, face_grid, face_grid_image = rc_generate_face_eye_images(face_rect,
+                                                                                                                    left_eye_rect,
+                                                                                                                    right_eye_rect,
+                                                                                                                    webcam_image)
 
-            # OpenCV BGR -> PIL RGB conversion
-            image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_image,
-                                                                               left_eye_image,
-                                                                               right_eye_image)
+                # OpenCV BGR -> PIL RGB conversion
+                image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_image,
+                                                                                left_eye_image,
+                                                                                right_eye_image)
 
-            # PIL RGB -> PIL YCBCr. Then Convert images into tensors
-            imEyeL, imEyeR, imFace, imFaceGrid = prepare_image_tensors(color_space,
-                                                                       image_face,
-                                                                       image_eye_left,
-                                                                       image_eye_right,
-                                                                       face_grid,
-                                                                       normalize_image)
-            start_time = datetime.now()
-            gaze_prediction_np = inferenceEngine.run_inference(normalize_image,
-                                                               imFace,
-                                                               imEyeL,
-                                                               imEyeR,
-                                                               imFaceGrid)
+                # PIL RGB -> PIL YCBCr. Then Convert images into tensors
+                imEyeL, imEyeR, imFace, imFaceGrid = prepare_image_tensors(color_space,
+                                                                        image_face,
+                                                                        image_eye_left,
+                                                                        image_eye_right,
+                                                                        face_grid,
+                                                                        normalize_image)
+                start_time = datetime.now()
+                gaze_prediction_np = inferenceEngine.run_inference(normalize_image,
+                                                                    imFace,
+                                                                    imEyeL,
+                                                                    imEyeR,
+                                                                    imFaceGrid)
             time_elapsed = datetime.now() - start_time
 
             display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image,
@@ -205,20 +234,6 @@ def draw_landmarks(im, shape_np, anchor_indices):
         cv2.circle(im, (x, y), 1, (255, 255, 255), -1)
 
 
-# # Driver code to test above function
-# a = -1.0
-# b = 1.0
-# c = 0.0
-# x1 = 1.0
-# y1 = 0.0
-
-# x, y = mirrorImage(a, b, c, x1, y1);
-# def mirrorImage( a, b, c, x1, y1):
-#     temp = -2 * (a * x1 + b * y1 + c) /(a * a + b * b)
-#     x = temp * a + x1
-#     y = temp * b + y1
-#     return (x, y)
-
 def draw_landmarks2(im, shape_np, anchor_indices):
     im2 = cv2.flip(im, 1)
     shape2_np = shape_np.copy()
@@ -260,8 +275,9 @@ def generate_display_data(display, face_grid_image, face_image, gaze_prediction_
     input_images = np.concatenate((face_image,
                                    right_eye_image,
                                    left_eye_image,
-                                   face_grid_image.resize((224, 224))),
+                                   face_grid_image),
                                   axis=0)
+
 
     hog_images = np.concatenate((hogImage(face_image),
                                  hogImage(right_eye_image),
@@ -365,6 +381,32 @@ def prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_rig
 
     return tensor_face, tensor_eye_left, tensor_eye_right, tensor_face_grid
 
+def grid_prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_right, image_face_grid, normalize_image):
+    # Convert to the desired color space
+    image_face = image_face.convert(color_space)
+    image_eye_left = image_eye_left.convert(color_space)
+    image_eye_right = image_eye_right.convert(color_space)
+    image_face_grid = image_face_grid.convert(color_space)
+
+    # normalize the image, results in tensors
+    tensor_face = normalize_image(image_face)
+    tensor_eye_left = normalize_image(image_eye_left)
+    tensor_eye_right = normalize_image(image_eye_right)
+    tensor_face_grid = normalize_image(image_face_grid)
+
+    # convert the 3 dimensional array into a 4 dimensional array, making it a batch size of 1
+    tensor_face.unsqueeze_(0)
+    tensor_eye_left.unsqueeze_(0)
+    tensor_eye_right.unsqueeze_(0)
+    tensor_face_grid.unsqueeze_(0)
+
+    # Convert the tensors into
+    tensor_face = torch.autograd.Variable(tensor_face, requires_grad=False)
+    tensor_eye_left = torch.autograd.Variable(tensor_eye_left, requires_grad=False)
+    tensor_eye_right = torch.autograd.Variable(tensor_eye_right, requires_grad=False)
+    tensor_face_grid = torch.autograd.Variable(tensor_face_grid, requires_grad=False)
+
+    return tensor_face, tensor_eye_left, tensor_eye_right, tensor_face_grid
 
 def perspectiveCorrection(im, shape_np):
     # print(shape_np)
@@ -527,156 +569,6 @@ def rectContains(rect, point):
     elif point[1] > rect[3]:
         return False
     return True
-
-
-# # Calculate delanauy triangle
-# def calculateDelaunayTriangles(rect, points):
-#     # Create subdiv
-#     subdiv = cv2.Subdiv2D(rect);
-
-#     # Insert points into subdiv
-#     for p in points:
-#         subdiv.insert((p[0], p[1]));
-
-
-#     # List of triangles. Each triangle is a list of 3 points ( 6 numbers )
-#     triangleList = subdiv.getTriangleList();
-
-#     # Find the indices of triangles in the points array
-
-#     delaunayTri = []
-
-#     for t in triangleList:
-#         pt = []
-#         pt.append((t[0], t[1]))
-#         pt.append((t[2], t[3]))
-#         pt.append((t[4], t[5]))
-
-#         pt1 = (t[0], t[1])
-#         pt2 = (t[2], t[3])
-#         pt3 = (t[4], t[5])
-
-#         if rectContains(rect, pt1) and rectContains(rect, pt2) and rectContains(rect, pt3):
-#             ind = []
-#             for j in range(0, 3):
-#                 for k in range(0, len(points)):
-#                     if(abs(pt[j][0] - points[k][0]) < 1.0 and abs(pt[j][1] - points[k][1]) < 1.0):
-#                         ind.append(k)
-#             if len(ind) == 3:
-#                 delaunayTri.append((ind[0], ind[1], ind[2]))
-
-#     return delaunayTri
-
-# def constrainPoint(p, w, h) :
-#     p =  ( min( max( p[0], 0 ) , w - 1 ) , min( max( p[1], 0 ) , h - 1 ) )
-#     return p;
-
-
-# def delaunay_correction(img, landmarks, delaunay_color=(255, 255, 255)):
-#     avg_landmarks = np.float32([[226, 217],
-#                     [226, 248],
-#                     [230, 279],
-#                     [236, 308],
-#                     [246, 337],
-#                     [260, 363],
-#                     [280, 384],
-#                     [304, 400],
-#                     [334, 405],
-#                     [365, 401],
-#                     [390, 386],
-#                     [410, 366],
-#                     [424, 342],
-#                     [434, 314],
-#                     [439, 284],
-#                     [443, 253],
-#                     [445, 221],
-#                     [237, 195],
-#                     [249, 174],
-#                     [273, 168],
-#                     [296, 172],
-#                     [319, 182],
-#                     [348, 184],
-#                     [371, 176],
-#                     [395, 172],
-#                     [419, 179],
-#                     [431, 198],
-#                     [334, 206],
-#                     [334, 227],
-#                     [334, 247],
-#                     [334, 269],
-#                     [306, 285],
-#                     [319, 288],
-#                     [333, 291],
-#                     [347, 288],
-#                     [361, 285],
-#                     [259, 213],
-#                     [272, 205],
-#                     [288, 206],
-#                     [303, 215],
-#                     [287, 219],
-#                     [271, 219],
-#                     [365, 215],
-#                     [379, 205],
-#                     [396, 206],
-#                     [410, 214],
-#                     [397, 219],
-#                     [380, 219],
-#                     [289, 327],
-#                     [306, 319],
-#                     [322, 313],
-#                     [333, 317],
-#                     [345, 314],
-#                     [361, 321],
-#                     [377, 329],
-#                     [361, 341],
-#                     [346, 346],
-#                     [332, 347],
-#                     [320, 345],
-#                     [305, 341],
-#                     [297, 328],
-#                     [321, 326],
-#                     [333, 328],
-#                     [346, 326],
-#                     [370, 329],
-#                     [345, 329],
-#                     [332, 330],
-#                     [321, 329]])
-
-#     # Delaunay triangulation
-#     h,w,c = img.shape
-#     rect = (0, 0, w, h);
-#     dt = calculateDelaunayTriangles(rect, avg_landmarks);
-
-#     # Output image
-#     output = np.zeros((h,w,3), np.float32());
-
-#     # Warp input images to average image landmarks
-#     for i in range(0, len(imagesNorm)) :
-#         img = np.zeros((h,w,3), np.float32());
-#         # Transform triangles one by one
-#         for j in range(0, len(dt)) :
-#             tin = [];
-#             tout = [];
-
-#             for k in range(0, 3) :
-#                 pIn = pointsNorm[i][dt[j][k]];
-#                 pIn = constrainPoint(pIn, w, h);
-
-#                 pOut = pointsAvg[dt[j][k]];
-#                 pOut = constrainPoint(pOut, w, h);
-
-#                 tin.append(pIn);
-#                 tout.append(pOut);
-
-
-#             warpTriangle(imagesNorm[i], img, tin, tout);
-
-
-#         # Add image intensities for averaging
-#         output = output + img;
-
-#     return output
-
 
 def draw_outline(img, landmarks, color=(255, 255, 255)):
     for key in face_utils.FACIAL_LANDMARKS_IDXS:

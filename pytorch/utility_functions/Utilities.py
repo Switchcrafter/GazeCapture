@@ -324,6 +324,7 @@ class MultiProgressBar(Bar):
 
         end = '\r' if complete < total else '\n'
         print(self.label + self.left + code + self.right + time_info, end=end)
+   
 
 def centered_text(infoString, marker='-', length=40):
     marker = marker * length
@@ -333,11 +334,11 @@ def centered_text(infoString, marker='-', length=40):
 
 class Visualizations(object):
     """Plots to Visdom"""
-    def __init__(self, env_name='main', active=False):
+    def __init__(self, env_name='main', active=False, server="http://deepthoughts", port=8097):
         self.active = active
         if self.active:
             try:
-                self.viz = visdom.Visdom()
+                self.viz = visdom.Visdom(server=server, port=port)
                 # wait until visdom connection is up
                 while self.viz.check_connection() is not True:
                     pass
@@ -352,12 +353,12 @@ class Visualizations(object):
         self.closed_windows = []
 
     def getColor(self, split_name):
-        if split_name == "train":
+        if split_name == "train" or split_name == "train_history" :
             return np.array([[0, 0, 255],]) # Blue
         elif split_name == "val" or split_name == "val_history" :
             return np.array([[255, 0, 0],]) # Red
-        elif split_name == "test":
-            return np.array([[255, 0, 0],]) # Green
+        elif split_name == "test" or split_name == "test_history":
+            return np.array([[0, 255, 0],]) # Green
         else:
             return np.array([[0, 0, 0],]) # Black
 
@@ -388,8 +389,8 @@ class Visualizations(object):
                 # remove the closed window
                 self.closed_windows.remove(window)
 
-    def plot(self, var_name, split_name, title_name, x, y):
-        if self.active:
+    def plot(self, var_name, split_name, title_name, x, y, visible=True):
+        if self.active and visible:
             if var_name not in self.split_plots:
                 self.split_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
                     legend=[split_name],
@@ -402,8 +403,8 @@ class Visualizations(object):
                 self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.split_plots[var_name], name=split_name,
                 update = 'append', opts=dict(linecolor=self.getColor(split_name)))
 
-    def plotAll(self, var_name, split_name, title_name, x, y, style='solid'):
-        if self.active:
+    def plotAll(self, var_name, split_name, title_name, x, y, style='solid', visible=True):
+        if self.active and visible:
             ytype = 'log' if split_name == "lr" else 'linear'
             if var_name not in self.epoch_plots:
                 self.epoch_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
@@ -435,3 +436,13 @@ def set_print_policy(master, local_rank):
         sys.stdout = sys.__stdout__
     else:
         sys.stdout = open(os.devnull, 'w')
+
+def getPublishedPort():
+    import docker
+    client = docker.from_env()
+    container_list = client.containers.list(filters={"expose":"8097"})
+    container = container_list[0]
+    # for c in container_list:
+    #     print(c.attrs['NetworkSettings']['Ports']['8097/tcp'][0]['HostPort'])
+    # print(container.attrs['NetworkSettings']['IPAddress'])
+    return container.attrs['NetworkSettings']['Ports']['8097/tcp'][0]['HostPort']

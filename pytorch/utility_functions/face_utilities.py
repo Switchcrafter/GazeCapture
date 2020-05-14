@@ -162,6 +162,18 @@ def getEyeRectRelative(face_rect, eye_rect):
 
     return eye_rect_relative
 
+def getRect(data):
+    # get the parameter of the small rectangle
+    center, size, angle = data[0], data[1], data[2]
+
+    # The function minAreaRect seems to give angles ranging in (-90, 0].
+    # This is based on the long edge of the rectangle
+    if angle < -45:
+        angle = 90 + angle
+        size = (size[1], size[0])
+
+    return int(center[0]), int(center[1]), int(size[0]), int(size[1]), int(angle)
+
 def rc_landmarksToRects(shape_np, isValid):
     face_rect = (0, 0, 0, 0, 0)
     left_eye_rect = (0, 0, 0, 0, 0)
@@ -174,10 +186,14 @@ def rc_landmarksToRects(shape_np, isValid):
         left_eye_shape_np = shape_np[leftEyeLandmarksStart:leftEyeLandmarksEnd]
         right_eye_shape_np = shape_np[rightEyeLandmarksStart:rightEyeLandmarksEnd]
 
-        getRect = lambda data: (int(data[0][0]), int(data[0][1]), int(data[1][0]), int(data[1][1]), int(data[2]))
         face_rect = getRect(cv2.minAreaRect(shape_np))
         left_eye_rect = getRect(cv2.minAreaRect(left_eye_shape_np))
         right_eye_rect = getRect(cv2.minAreaRect(right_eye_shape_np))
+
+        # ToDo enable negative coordinate check. Last value is theta which can be negative.
+        isValid = check_negative_coordinates(face_rect[:-1]) and \
+            check_negative_coordinates(left_eye_rect[:-1]) and \
+            check_negative_coordinates(right_eye_rect[:-1])
 
     return face_rect, left_eye_rect, right_eye_rect, isValid
 
@@ -215,12 +231,6 @@ def crop_rect(img, rect):
     # get the parameter of the small rectangle
     center, size, angle = (rect[0], rect[1]), (rect[2], rect[3]), rect[4]
 
-    # The function minAreaRect seems to give angles ranging from -90 to 0 degrees,
-    # not including zero, so an interval of [-90, 0).
-    if angle < -45:
-        angle = 90 + angle
-        size = (size[1], size[0])
-
     center, size = tuple(map(int, center)), tuple(map(int, size))
     # get a square crop of the detected region with 10px padding
     size = (max(size) + 10, max(size) + 10)
@@ -252,6 +262,22 @@ def rc_generate_face_eye_images(face_rect, left_eye_rect, right_eye_rect, webcam
 
 
 
+def grid_generate_face_eye_images(face_rect, left_eye_rect, right_eye_rect, webcam_image):
+
+    face_image = crop_rect(webcam_image.copy(), face_rect)
+    face_image = imutils.resize(face_image, width=IMAGE_WIDTH)
+
+    left_eye_image = crop_rect(webcam_image.copy(), left_eye_rect)
+    left_eye_image = imutils.resize(left_eye_image, width=IMAGE_WIDTH)
+
+    right_eye_image = crop_rect(webcam_image.copy(), right_eye_rect)
+    right_eye_image = imutils.resize(right_eye_image, width=IMAGE_WIDTH)
+
+    face_grid_image = generate_grid2(face_rect, webcam_image.copy())
+    face_grid_image = imutils.resize(face_grid_image, width=IMAGE_WIDTH)
+
+    return face_image, left_eye_image, right_eye_image, face_grid_image
+
 def getBox(face_rect):
     return ((face_rect[0], face_rect[1]), (face_rect[2], face_rect[3]), face_rect[4])
 
@@ -262,14 +288,6 @@ def generate_grid2(rect, webcam_image):
     box = np.int0(cv2.boxPoints(getBox(rect)))
     im = cv2.drawContours(im, [box], 0, (0, 0, 0), -1)  # 2 for line, -1 for filled
     return im
-
-# def generate_grid2(rect, webcam_image):
-#     im = webcam_image
-
-#     box = np.int0(cv2.boxPoints(getBox(rect)))
-#     im = cv2.drawContours(im, [box], 0, (255, 0, 0), 2)  # 2 for line, -1 for filled
-#     # im = cv2.resize(im, (GRID_SIZE, GRID_SIZE), cv2.INTER_AREA)
-#     return im
 
 def generate_grid(face_rect, im):
     box = np.int0((cv2.boxPoints(getBox(face_rect))))
@@ -403,12 +421,11 @@ def prepare_image_inputs(face_image, left_eye_image, right_eye_image):
     return imEyeL, imEyeR, imFace
 
 
-def prepare_image_inputs2(face_grid_image, face_image, left_eye_image, right_eye_image):
-    imFaceGrid = Image.fromarray(cv2.cvtColor(face_grid_image, cv2.COLOR_BGR2GRAY), 'L')
-    # print("imFaceGrid", imFaceGrid.size, imFaceGrid.mode)
+def grid_prepare_image_inputs(face_image, left_eye_image, right_eye_image, face_grid_image):
     imFace = Image.fromarray(cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB), 'RGB')
     imEyeL = Image.fromarray(cv2.cvtColor(left_eye_image, cv2.COLOR_BGR2RGB), 'RGB')
     imEyeR = Image.fromarray(cv2.cvtColor(right_eye_image, cv2.COLOR_BGR2RGB), 'RGB')
+    imFaceGrid = Image.fromarray(cv2.cvtColor(face_grid_image, cv2.COLOR_BGR2RGB), 'RGB')
 
     return imEyeL, imEyeR, imFace, imFaceGrid
 
