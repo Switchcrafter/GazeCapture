@@ -109,7 +109,7 @@ class FaceGridModel(nn.Module):
 
 
 class ITrackerModel(nn.Module):
-    def __init__(self, color_space):
+    def __init__(self, color_space, model_type):
         super(ITrackerModel, self).__init__()
         # 1C/3Cx224Hx224W --> 25088
         self.eyeModel = ItrackerImageModel(color_space)
