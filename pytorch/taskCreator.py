@@ -6,6 +6,7 @@ import csv
 import math
 import shutil
 import argparse
+import torch
 from utility_functions import taskManager
 import pandas as pd
 import scipy.io as sio
@@ -17,6 +18,7 @@ from utility_functions.face_utilities import *
 import dateutil.parser
 from utility_functions.cam2screen import screen2cam
 from utility_functions.Utilities import MultiProgressBar
+
 
 ################################################################################
 ## Utility functions
@@ -289,14 +291,14 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
 
             shape_np, isValid = find_face_dlib(capture_image_np)
             info["NumFaceDetections"] = info["NumFaceDetections"] + 1
-            # if args.rc:
-            #     face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
-            #     faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
-            #                                                             right_eye_rect, isValid)
-
-            face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
-            faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
-                                                                    right_eye_rect, isValid)
+            if args.rc:
+                face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
+                faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
+                                                                        right_eye_rect, isValid)
+            else:
+                face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
+                faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
+                                                                        right_eye_rect, isValid)
 
             # facegrid.json - { "X": [ 6, 6, ... ], "Y": [ 10, 10, ... ], "W": [ 13, 13, ... ], "H": [ 13, 13, ... ], "IsValid": [ 1, 1, ... ] }
             if isValid:
@@ -856,11 +858,31 @@ def countValidTask(directory, directory_idx, bar):
             
     return directory, len(frames), count1, count2
 
-
 def plotRotationHistogramTask(directory, directory_idx, bar):
     faceData = json_read(os.path.join(args.input, directory, "dlibFace.json"))
     Theta = faceData["Theta"]
     return Theta
+
+def modelStatsTask(checkpoint_dirpath):
+    filepath = os.path.join(checkpoint_dirpath, 'checkpoint.pth.tar')
+    print(filepath)
+    saved = torch.load(filepath)
+    if saved:
+        epoch = saved.get('epoch', None)
+        # for backward compatibility
+        val_rms_errors = saved.get('val_RMSErrors', saved.get('RMSErrors', None)) 
+        test_rms_errors = saved.get('test_RMSErrors', None)
+        train_rms_errors = saved.get('train_RMSErrors', None)
+        best_rms_error = saved.get('best_RMSError', None)
+        best_rms_errors = saved.get('best_RMSErrors', None)
+        learning_rates = saved.get('learning_rates', None)
+
+        print('')
+        print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_rms_error))
+        print('')
+        print('\'RMS_Errors\': {0},'.format(val_rms_errors))
+        print('\'Best_RMS_Errors\': {0}'.format(best_rms_errors))
+        print('')
 
 # all tasks are handled here
 if __name__ == '__main__':
@@ -992,6 +1014,10 @@ if __name__ == '__main__':
         taskData = getDirList(args.input, sessionRegex)
         dataLoader = ListLoader
         taskFunction = plotRotationHistogramTask
+    elif args.task == "modelStatsTask":
+        taskData = args.input
+        dataLoader = None
+        taskFunction = modelStatsTask
 
 
     # run the job
