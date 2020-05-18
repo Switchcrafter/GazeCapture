@@ -955,7 +955,7 @@ if __name__ == '__main__':
     elif args.task == "plotErrorTask":
         # from RMS_errors import All_RMS_Errors
         script_directory = os.path.dirname(os.path.realpath(__file__))
-        json_path = os.path.join(script_directory, "../metadata/all_rms_errors.json")
+        json_path = os.path.join(script_directory, "metadata/all_rms_errors.json")
         All_RMS_Errors = json_read(json_path)
         taskData = All_RMS_Errors
         dataLoader = None

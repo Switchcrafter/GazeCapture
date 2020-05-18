@@ -87,8 +87,6 @@ def getFaceBox(faceDict, idx):
 def getEyeBox(faceDict, eyeDict, idx):
     faceX = faceDict['X'][idx]
     faceY = faceDict['Y'][idx]
-    faceW = faceDict['W'][idx]
-    faceH = faceDict['H'][idx]
 
     eyeX = eyeDict['X'][idx]
     eyeY = eyeDict['Y'][idx]
@@ -106,9 +104,11 @@ def drawEyeBox(draw, eyeBox, offset, color):
 
     tl = eyeBox[0]  # TL
     br = eyeBox[1]  # BR
+    x_center = (br[0] - tl[0]) / 2 + tl[0]
+    y_center = (br[1] - tl[1]) / 2 + tl[1]
 
-    tinyEyeBox = [((br[0] - tl[0]) / 2 + tl[0] - offset, (br[1] - tl[1]) / 2 + tl[1] - offset),
-                  ((br[0] - tl[0]) / 2 + tl[0] + offset, (br[1] - tl[1]) / 2 + tl[1] + offset)]
+    tinyEyeBox = [(x_center - offset, y_center - offset),
+                  (x_center + offset, y_center + offset)]
     draw.rectangle(tinyEyeBox, outline=color)
 
 
@@ -162,6 +162,7 @@ def getEyeRectRelative(face_rect, eye_rect):
 
     return eye_rect_relative
 
+
 def getRect(data):
     # get the parameter of the small rectangle
     center, size, angle = data[0], data[1], data[2]
@@ -173,6 +174,7 @@ def getRect(data):
         size = (size[1], size[0])
 
     return int(center[0]), int(center[1]), int(size[0]), int(size[1]), int(angle)
+
 
 def rc_landmarksToRects(shape_np, isValid):
     face_rect = (0, 0, 0, 0, 0)
@@ -192,10 +194,11 @@ def rc_landmarksToRects(shape_np, isValid):
 
         # ToDo enable negative coordinate check. Last value is theta which can be negative.
         isValid = check_negative_coordinates(face_rect[:-1]) and \
-            check_negative_coordinates(left_eye_rect[:-1]) and \
-            check_negative_coordinates(right_eye_rect[:-1])
+                  check_negative_coordinates(left_eye_rect[:-1]) and \
+                  check_negative_coordinates(right_eye_rect[:-1])
 
     return face_rect, left_eye_rect, right_eye_rect, isValid
+
 
 def rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect, right_eye_rect, isValid):
     face_dict = faceInfoDict["Face"]
@@ -227,6 +230,7 @@ def rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect, right_
 
     return faceInfoDict, idx
 
+
 def crop_rect(img, rect):
     # get the parameter of the small rectangle
     center, size, angle = (rect[0], rect[1]), (rect[2], rect[3]), rect[4]
@@ -245,8 +249,8 @@ def crop_rect(img, rect):
     img_crop = cv2.getRectSubPix(img_rot, size, center)
     return img_crop
 
-def rc_generate_face_eye_images(face_rect, left_eye_rect, right_eye_rect, webcam_image):
 
+def rc_generate_face_eye_images(face_rect, left_eye_rect, right_eye_rect, webcam_image):
     face_image = crop_rect(webcam_image.copy(), face_rect)
     face_image = imutils.resize(face_image, width=IMAGE_WIDTH)
 
@@ -261,9 +265,7 @@ def rc_generate_face_eye_images(face_rect, left_eye_rect, right_eye_rect, webcam
     return face_image, left_eye_image, right_eye_image, face_grid, face_grid_image
 
 
-
 def grid_generate_face_eye_images(face_rect, left_eye_rect, right_eye_rect, webcam_image):
-
     face_image = crop_rect(webcam_image.copy(), face_rect)
     face_image = imutils.resize(face_image, width=IMAGE_WIDTH)
 
@@ -278,26 +280,29 @@ def grid_generate_face_eye_images(face_rect, left_eye_rect, right_eye_rect, webc
 
     return face_image, left_eye_image, right_eye_image, face_grid_image
 
+
 def getBox(face_rect):
     return ((face_rect[0], face_rect[1]), (face_rect[2], face_rect[3]), face_rect[4])
 
+
 def generate_grid2(rect, webcam_image):
     im = np.zeros(webcam_image.shape, np.uint8)
-    im[:] = (255,255,255)
+    im[:] = (255, 255, 255)
 
     box = np.int0(cv2.boxPoints(getBox(rect)))
     im = cv2.drawContours(im, [box], 0, (0, 0, 0), -1)  # 2 for line, -1 for filled
     return im
 
+
 def generate_grid(face_rect, im):
     box = np.int0((cv2.boxPoints(getBox(face_rect))))
-    im = im*0 + 255
-    face_grid_image = cv2.drawContours(im, [box], 0, (0,0,0), -1) #2 for line, -1 for filled
-    face_grid, _,_ = cv2.split(face_grid_image)
+    im = im * 0 + 255
+    face_grid_image = cv2.drawContours(im, [box], 0, (0, 0, 0), -1)  # 2 for line, -1 for filled
+    face_grid, _, _ = cv2.split(face_grid_image)
     face_grid = cv2.resize(face_grid, (GRID_SIZE, GRID_SIZE), cv2.INTER_AREA)
     face_grid_flat = face_grid.flatten()  # flatten from 2d (25, 25) to 1d (625)
 
-    face_grid_stacked = np.stack((face_grid,)*3, axis=-1)
+    face_grid_stacked = np.stack((face_grid,) * 3, axis=-1)
     face_grid_image = Image.fromarray(face_grid_stacked).convert("RGB")
 
     return face_grid_flat, face_grid_image
@@ -406,6 +411,8 @@ def generate_face_grid(face_rect, image_width, image_height):
             y = min(GRID_SIZE - 1, faceGridY + n)
             face_grid[y, x] = 1
     face_grid_flat = face_grid.flatten()  # flatten from 2d (25, 25) to 1d (625)
+
+    # generate an image suitable for display, not used by ML
     face_grid_inverted = (255 - (255 * face_grid))
     face_grid_stacked = np.stack((face_grid_inverted,) * 3, axis=-1)
     face_grid_image = Image.fromarray(face_grid_stacked).convert("RGB")
