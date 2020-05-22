@@ -48,10 +48,10 @@ def job(taskFunction, taskData, dataLoader, numWorkers = multiprocessing.cpu_cou
 
         # collect results
         results = []
-        completeBar = SimpleProgressBar(len(taskData), "Completed")
+        # completeBar = SimpleProgressBar(len(taskData), "Completed")
         for p in workerProcesses:
             (jobId,result) = p.get()
-            completeBar.update(jobId+1)
+            # completeBar.update(jobId+1)
             results.append(result)
         
         # leave one blank line
