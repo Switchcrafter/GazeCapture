@@ -7,6 +7,8 @@ import math
 import shutil
 import argparse
 import torch
+import random
+import subprocess
 from utility_functions import taskManager
 import pandas as pd
 import scipy.io as sio
@@ -134,6 +136,7 @@ def getCaptureTimeString(capture_data):
     currenttime = dateutil.parser.parse(capture_data["Timestamp"])
     timedelta = sessiontime - currenttime
     return str(timedelta.total_seconds())
+
 
 ################################################################################
 ## DataIndexers
@@ -554,7 +557,6 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
     return meta
 
 # Single process Tasks
-
 def compareTask(meta):
     if args.reference != "":
         # Load reference metadata
@@ -775,18 +777,6 @@ def dataStatsTask(filepath):
     print('{:11s}: {:8d} {:6.2f}%'.format('testSize', testSize, 100*testSize/total))
     print('{:11s}: {:8d} {:6.2f}%'.format('total2Size', total2, 100*total2/total))
 
-def testTask(filepath):
-    from time import sleep
-    import random
-    num_process = 40
-    bar = MultiProgressBar(max_value=num_process, boundary=True)
-    for processIndex in range(num_process):
-        max_value = random.randint(0, 4)
-        bar.addSubProcess(processIndex, max_value)
-        for value in range(1, max_value+1):
-            sleep(0.00001)
-            bar.update(processIndex, value)
-
 def countFilesTaskSerial(filepath):
     count = 0
     sessionRegex = '([0-9]){5}'
@@ -884,6 +874,24 @@ def modelStatsTask(checkpoint_dirpath):
         print('\'Best_RMS_Errors\': {0}'.format(best_rms_errors))
         print('')
 
+def splitInfoTask(directory, directory_idx, progressbar):
+    recDir = os.path.join(args.input, directory)
+    info = json_read(os.path.join(recDir, 'info.json'))
+    print(info)
+    info["Dataset"] = getSplit()
+    print(info)
+    outDir = preparePath(os.path.join(args.output, directory))
+    json_write(os.path.join(outDir, 'info.json'), info)
+
+def syncTask(src):
+    HOME = os.environ['HOME']
+    USER = os.environ['USER']
+    dst = f"{USER}@deepthoughts:/nfs/deepstore/Reference/{USER}"
+    cmd = f"rsync -e 'ssh -i ~/.ssh/{USER}_deepthink_rsa' -rlptz --exclude=.git --exclude=.vscode {src} {dst}/"
+    p = subprocess.Popen(cmd, shell=True)
+    return
+
+
 # all tasks are handled here
 if __name__ == '__main__':
     # Argument parser
@@ -972,6 +980,15 @@ if __name__ == '__main__':
         taskData = "best_results.json"
         dataLoader = None
         taskFunction = plotErrorHistogramTask
+    elif args.task == "plotRotationHistogramTask":
+        sessionRegex = '([0-9]){5}'
+        taskData = getDirList(args.input, sessionRegex)
+        dataLoader = ListLoader
+        taskFunction = plotRotationHistogramTask
+    elif args.task == "modelStatsTask":
+        taskData = args.input
+        dataLoader = None
+        taskFunction = modelStatsTask
     ######### Data Parsing Tasks #########
     elif args.task == "parseResultsTask":
         taskData = "best_results.json"
@@ -991,10 +1008,6 @@ if __name__ == '__main__':
         dataLoader = None
         taskFunction = dataStatsTask
     ######### Test Tasks #########
-    elif args.task == "testTask":
-        taskData = args.input
-        dataLoader = None
-        taskFunction = testTask
     elif args.task == "countFilesTaskSerial":
         taskData = args.input
         dataLoader = None
@@ -1009,16 +1022,14 @@ if __name__ == '__main__':
         taskData = getDirList(args.input, sessionRegex)
         dataLoader = ListLoader
         taskFunction = countValidTask
-    elif args.task == "plotRotationHistogramTask":
-        sessionRegex = '([0-9]){5}'
-        taskData = getDirList(args.input, sessionRegex)
+    elif args.task == "splitInfoTask":
+        taskFunction = splitInfoTask
+        taskData = getDirList(args.input, '([0-9]){5}')
         dataLoader = ListLoader
-        taskFunction = plotRotationHistogramTask
-    elif args.task == "modelStatsTask":
+    elif args.task == "syncTask":
+        taskFunction = syncTask
         taskData = args.input
         dataLoader = None
-        taskFunction = modelStatsTask
-
 
     # run the job
     output = taskManager.job(taskFunction, taskData, dataLoader)
