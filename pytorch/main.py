@@ -65,7 +65,7 @@ def main():
         os.makedirs(args.output_path, exist_ok=True)
 
     val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model = initialize_model(args)
-
+    
     print('epoch = %d' % epoch)
 
     totalstart_time = datetime.now()
@@ -80,7 +80,7 @@ def main():
                              args.data_loader,
                              not args.disable_boost)
 
-    criterion, optimizer, scheduler = initialize_hyper_parameters(args, datasets, model)
+    criterion, optimizer, scheduler = initialize_hyper_parameters(args, epoch, datasets, model)
 
     if args.mode == 'Train':
         # resize variables to epochs size
@@ -125,7 +125,7 @@ def main():
         for epoch in range(epoch, args.epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, args.epochs))
             start_time = datetime.now()
-            learning_rates[epoch - 1] = scheduler.get_lr()
+            learning_rates[epoch - 1] = scheduler.get_lr()[0]
 
             args.vis.reset()
             # train for one epoch
@@ -172,8 +172,8 @@ def main():
                                                 args.dataset_limit,
                                                 args.verbose,
                                                 args)
-                
-
+            
+            
             # remember best RMSError and save checkpoint
             is_best = val_RMSError < best_RMSError
             best_RMSError = min(val_RMSError, best_RMSError)
@@ -183,7 +183,7 @@ def main():
             train_RMSErrors[epoch - 1] = train_RMSError
             test_RMSErrors[epoch - 1] = test_RMSError
             
-            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, scheduler.get_lr())
+            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, learning_rates[epoch - 1])
             args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
             args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
             args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, val_RMSError)
@@ -340,31 +340,42 @@ def initialize_model(args):
     return val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model
 
 
-def initialize_hyper_parameters(args, datasets, model):
+def initialize_hyper_parameters(args, epoch, datasets, model):
     criterion = nn.MSELoss(reduction='mean').to(device=args.device)
     # for multi criteria experiments use criteria and weights as list below
     # criteria = [nn.MSELoss]
     # weights = [1.0]
     # criterion = MultiCriterion(criteria, weights, reduction='mean').to(device=args.device)
     if args.optimizer =="adam":
-        optimizer = torch.optim.Adam(model.parameters(), args.start_lr,
+        optimizer = torch.optim.Adam(model.parameters(), args.max_lr,
                                     weight_decay=WEIGHT_DECAY)
     else:
-        optimizer = torch.optim.SGD(model.parameters(), args.start_lr,
+        optimizer = torch.optim.SGD(model.parameters(), args.max_lr,
                                     momentum=MOMENTUM,
                                     weight_decay=WEIGHT_DECAY)
+    # Keep it ready for warm start
+    optimizer.param_groups[0]['initial_lr'] = args.max_lr
 
-    batch_count = math.ceil(datasets['train'].size / args.batch_size)
-
+    # lr_scheduler overrides the lr in optimizer completely and controls it 
+    if args.dataset_limit > 0:
+        batch_count = args.dataset_limit
+    else:
+        batch_count = math.ceil(datasets['train'].size / args.batch_size)
     step_size = args.epochs_per_step * batch_count
-    clr = cyclical_learning_rate.cyclical_lr(batch_count,
-                                             shape=cyclical_learning_rate.shape_function(args.shape_type,
-                                                                                         step_size),
-                                             decay=cyclical_learning_rate.decay_function(args.decay_type,
-                                                                                         args.epochs_per_step),
-                                             min_lr=args.end_lr / args.lr_factor,
-                                             max_lr=args.end_lr)
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr])
+    num_batches_completed = (epoch-1) * batch_count
+
+    # # Custom implementation
+    # clr = cyclical_learning_rate.cyclical_lr(batch_count,
+    #                                          shape=cyclical_learning_rate.shape_function(args.shape_type,
+    #                                                                                      step_size),
+    #                                          decay=cyclical_learning_rate.decay_function(args.decay_type,
+    #                                                                                      args.epochs_per_step),
+    #                                          min_lr=args.base_lr,
+    #                                          max_lr=args.max_lr)
+    # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr], last_epoch = num_batches_completed)
+
+    # Pytorch's in-built method
+    scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, args.base_lr, args.max_lr, mode='triangular', scale_mode='cycle', step_size_up=step_size, last_epoch=num_batches_completed)
     return criterion, optimizer, scheduler
 
 
@@ -428,7 +439,7 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
     else:
         loader = dataset.loader
 
-    lrs = []
+    # lrs = []
 
     # load data samples and train
     # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(loader):
@@ -520,8 +531,8 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
 
         # Update LR
         scheduler.step()
-        lr_step = optimizer.state_dict()["param_groups"][0]["lr"]
-        lrs.append(lr_step)
+        # lr_step = optimizer.state_dict()["param_groups"][0]["lr"]
+        # lrs.append(lr_step)
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -547,8 +558,6 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
 
         if dataset_limit and dataset_limit <= batchNum:
             break
-
-    # print('lrs={}'.format(lrs))
 
     return MSELosses.avg, RMSErrors.avg
 
