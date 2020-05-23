@@ -375,6 +375,8 @@ def initialize_hyper_parameters(args, epoch, datasets, model):
     # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr], last_epoch = num_batches_completed)
 
     # Pytorch's in-built method
+    # mode (str) – One of {triangular, triangular2, exp_range}
+    # scale_fn
     scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, args.base_lr, args.max_lr, mode='triangular', scale_mode='cycle', step_size_up=step_size, last_epoch=num_batches_completed)
     return criterion, optimizer, scheduler
 
