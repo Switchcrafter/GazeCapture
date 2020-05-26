@@ -377,7 +377,9 @@ def initialize_hyper_parameters(args, epoch, datasets, model):
     # Pytorch's in-built method
     # mode (str) – One of {triangular, triangular2, exp_range}
     # scale_fn
-    scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, args.base_lr, args.max_lr, mode='triangular', scale_mode='cycle', step_size_up=step_size, last_epoch=num_batches_completed)
+    cycle_momentum = True if args.optimizer == 'sgd' else False
+    decay=cyclical_learning_rate.decay_function(args.decay_type, args.epochs_per_step)
+    scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, args.base_lr, args.max_lr, mode='triangular', scale_mode='cycle', scale_fn=decay, step_size_up=step_size, cycle_momentum=cycle_momentum, last_epoch=num_batches_completed)
     return criterion, optimizer, scheduler
 
 
