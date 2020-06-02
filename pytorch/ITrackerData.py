@@ -66,6 +66,7 @@ class ExternalSourcePipeline(Pipeline):
                                                      seed=12)
 
         self.split = split
+        self.color_space = color_space
         if shuffle:
             data.shuffle()
         self.sourceIterator = iter(data)
@@ -74,7 +75,6 @@ class ExternalSourcePipeline(Pipeline):
         self.imEyeLBatch = ops.ExternalSource()
         self.imEyeRBatch = ops.ExternalSource()
         self.imFaceGridBatch = ops.ExternalSource()
-        self.faceGridBatch = ops.ExternalSource()
         self.gazeBatch = ops.ExternalSource()
         self.frameBatch = ops.ExternalSource()
         self.indexBatch = ops.ExternalSource()
@@ -117,9 +117,15 @@ class ExternalSourcePipeline(Pipeline):
                                                 mean=mean,
                                                 std=std)
         else:
-            # data_loader == "dali_gpu" or data_loader == "dali_gpu_all":
-            # ImageDecoder below accepts CPU inputs, but returns GPU outputs (hence device = "mixed"), HWC ordering
-            self.decode = ops.ImageDecoder(device = "mixed", output_type = output_type)
+            # # data_loader == "dali_gpu" or data_loader == "dali_gpu_all":
+            # # ImageDecoder below accepts CPU inputs, but returns GPU outputs (hence device = "mixed"), HWC ordering
+            # YCbCr mode as output is not supported by ImageDecoder
+            # Refer: https://github.com/NVIDIA/DALI/pull/582/files ("Unknown output format")
+            if self.color_space == "YCbCr":
+                self.decode = ops.ImageDecoder(device = "mixed", output_type = types.RGB)
+                self.color = ops.ColorSpaceConversion(device = 'gpu', image_type = types.RGB, output_type = output_type)
+            else:
+                self.decode = ops.ImageDecoder(device = "mixed", output_type = output_type)
             self.resize_big = ops.Resize(device="gpu", resize_x=240, resize_y=240)
             # depreciated replace with HSV and ops.BrightnessContrast soon
             self.color_jitter = ops.ColorTwist(device="gpu")
@@ -138,35 +144,49 @@ class ExternalSourcePipeline(Pipeline):
         self.imFace = self.imFaceBatch()
         self.imEyeL = self.imEyeLBatch()
         self.imEyeR = self.imEyeRBatch()
-        self.faceGrid = self.faceGridBatch()
+        self.imFaceGrid = self.imFaceGridBatch()
         self.gaze = self.gazeBatch()
         self.frame = self.frameBatch()
         self.index = self.indexBatch()
 
         sat, con, bri, hue = self.dSaturation(), self.dContrast(), self.dBright(), self.dHue()
-        if self.split == 'train':
-            imFaceD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.decode(self.imFace)), saturation=sat, contrast=con, brightness=bri, hue=hue))))
-            imEyeLD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.decode(self.imEyeL)), saturation=sat, contrast=con, brightness=bri, hue=hue))))
-            imEyeRD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.decode(self.imEyeR)), saturation=sat, contrast=con, brightness=bri, hue=hue))))
+        if self.color_space == "YCbCr":
+            if self.split == 'train':
+                imFaceD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.color(self.decode(self.imFace))), saturation=sat, contrast=con, brightness=bri, hue=hue))))
+                imEyeLD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.color(self.decode(self.imEyeL))), saturation=sat, contrast=con, brightness=bri, hue=hue))))
+                imEyeRD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.color(self.decode(self.imEyeR))), saturation=sat, contrast=con, brightness=bri, hue=hue))))
+                imFaceGridD = self.norm(self.resize(self.color(self.decode(self.imFaceGrid))))
+            else:
+                imFaceD = self.norm(self.resize(self.color(self.decode(self.imFace))))
+                imEyeLD = self.norm(self.resize(self.color(self.decode(self.imEyeL))))
+                imEyeRD = self.norm(self.resize(self.color(self.decode(self.imEyeR))))
+                imFaceGridD = self.norm(self.resize(self.color(self.decode(self.imFaceGrid))))
         else:
-            imFaceD = self.norm(self.resize(self.decode(self.imFace)))
-            imEyeLD = self.norm(self.resize(self.decode(self.imEyeL)))
-            imEyeRD = self.norm(self.resize(self.decode(self.imEyeR)))
+            if self.split == 'train':
+                imFaceD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.decode(self.imFace)), saturation=sat, contrast=con, brightness=bri, hue=hue))))
+                imEyeLD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.decode(self.imEyeL)), saturation=sat, contrast=con, brightness=bri, hue=hue))))
+                imEyeRD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.decode(self.imEyeR)), saturation=sat, contrast=con, brightness=bri, hue=hue))))
+                imFaceGridD = self.norm(self.resize(self.decode(self.imFaceGrid)))
+            else:
+                imFaceD = self.norm(self.resize(self.decode(self.imFace)))
+                imEyeLD = self.norm(self.resize(self.decode(self.imEyeL)))
+                imEyeRD = self.norm(self.resize(self.decode(self.imEyeR)))
+                imFaceGridD = self.norm(self.resize(self.decode(self.imFaceGrid)))
 
-        return (self.row, imFaceD, imEyeLD, imEyeRD, self.faceGrid, self.gaze, self.frame, self.index)
+        return (self.row, imFaceD, imEyeLD, imEyeRD, imFaceGridD, self.gaze, self.frame, self.index)
 
     @property
     def size(self):
         return len(self.sourceIterator)
 
     def iter_setup(self):
-        (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, faceGridBatch, gazeBatch, frameBatch,
+        (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch, frameBatch,
          indexBatch) = self.sourceIterator.next()
         self.feed_input(self.row, rowBatch)
         self.feed_input(self.imFace, imFaceBatch)
         self.feed_input(self.imEyeL, imEyeLBatch)
         self.feed_input(self.imEyeR, imEyeRBatch)
-        self.feed_input(self.faceGrid, faceGridBatch)
+        self.feed_input(self.imFaceGrid, imFaceGridBatch)
         self.feed_input(self.gaze, gazeBatch)
         self.feed_input(self.frame, frameBatch)
         self.feed_input(self.index, indexBatch)
@@ -275,7 +295,7 @@ class ITrackerData(object):
         imEyeRPath = os.path.join(self.dataPath,
                                   '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                    self.metadata['frameIndex'][rowIndex]))
-        imfaceGridPath = os.path.join(self.dataPath,
+        imFaceGridPath = os.path.join(self.dataPath,
                                   '%05d/faceGrid/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                    self.metadata['frameIndex'][rowIndex]))
         gaze = np.array([self.metadata['labelDotXCam'][rowIndex], self.metadata['labelDotYCam'][rowIndex]], np.float32)
@@ -289,12 +309,7 @@ class ITrackerData(object):
             imFace = self.loadImage(imFacePath)
             imEyeL = self.loadImage(imEyeLPath)
             imEyeR = self.loadImage(imEyeRPath)
-            imfaceGrid = self.loadImage(imfaceGridPath)
-
-            # for hog experiments
-            # imFace = self.get_hog_descriptor(imFace)
-            # imEyeL = self.get_hog_descriptor(imEyeL)
-            # imEyeR = self.get_hog_descriptor(imEyeR)
+            imfaceGrid = self.loadImage(imFaceGridPath)
 
             imFace = self.normalize_image(imFace)
             imEyeL = self.normalize_image(imEyeL)
@@ -310,7 +325,7 @@ class ITrackerData(object):
         else:
             # image loading, transformation and normalization happen in ExternalDataPipeline
             # we just pass imagePaths
-            return row, imFacePath, imEyeLPath, imEyeRPath, imfaceGridPath, gaze, frame, index
+            return row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, frame, index
 
     def makeGrid(self, params):
         gridLen = self.gridSize[0] * self.gridSize[1]
@@ -338,23 +353,24 @@ class ITrackerData(object):
         imFaceBatch = []
         imEyeLBatch = []
         imEyeRBatch = []
-        faceGridBatch = []
+        imFaceGridBatch = []
         gazeBatch = []
         frameBatch = []
         indexBatch = []
         labels = []
         for _ in range(self.batch_size):
-            row, imFacePath, imEyeLPath, imEyeRPath, faceGrid, gaze, frame, index = self.__getitem__(self.index)
+            row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, frame, index = self.__getitem__(self.index)
             # print(row, index, self.index, self.size)
             imFace = open(imFacePath, 'rb')
             imEyeL = open(imEyeLPath, 'rb')
             imEyeR = open(imEyeRPath, 'rb')
+            imFaceGrid = open(imFaceGridPath, 'rb')
 
             rowBatch.append(row)
             imFaceBatch.append(np.frombuffer(imFace.read(), dtype=np.uint8))
             imEyeLBatch.append(np.frombuffer(imEyeL.read(), dtype=np.uint8))
             imEyeRBatch.append(np.frombuffer(imEyeR.read(), dtype=np.uint8))
-            faceGridBatch.append(faceGrid)
+            imFaceGridBatch.append(np.frombuffer(imFaceGrid.read(), dtype=np.uint8))
             gazeBatch.append(gaze)
             frameBatch.append(frame)
             indexBatch.append(index)
@@ -362,9 +378,10 @@ class ITrackerData(object):
             imFace.close()
             imEyeL.close()
             imEyeR.close()
+            imFaceGrid.close()
 
             self.index = (self.index + 1) % self.size
-        return rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, faceGridBatch, gazeBatch, frameBatch, indexBatch
+        return rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch, frameBatch, indexBatch
 
     next = __next__
 
@@ -433,7 +450,7 @@ def load_data(split,
         # auto_reset=True resets the iterator after each epoch
         # DALIGenericIterator has inbuilt build for all pipelines
         loader = DALIGenericIterator(pipes,
-                                     ['row', 'imFace', 'imEyeL', 'imEyeR', 'faceGrid', 'gaze', 'frame', 'indices'],
+                                     ['row', 'imFace', 'imEyeL', 'imEyeR', 'imFaceGrid', 'gaze', 'frame', 'indices'],
                                      size=len(data),
                                      fill_last_batch=False,
                                      last_batch_padded=True, auto_reset=True)

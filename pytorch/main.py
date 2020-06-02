@@ -446,19 +446,19 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
     # lrs = []
 
     # load data samples and train
-    # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(loader):
+    # for i, (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) in enumerate(loader):
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "cpu":
-            (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) = data
+            (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) = data
         else:  # dali modes
             if args.data_loader == "dali_gpu_all":
                 # TODO test with dp mode
                 batch_data = data[int(args.local_rank[0])]
             else:  # dali_gpu, dali_cpu
                 batch_data = data[0]
-            row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"], \
+            row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"], \
                                                                           batch_data["imEyeL"], batch_data["imEyeR"], \
-                                                                          batch_data["faceGrid"], \
+                                                                          batch_data["imFaceGrid"], \
                                                                           batch_data["gaze"], batch_data["frame"], \
                                                                           batch_data["indices"]
 
@@ -471,17 +471,17 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
         imFace = imFace.to(device=device)
         imEyeL = imEyeL.to(device=device)
         imEyeR = imEyeR.to(device=device)
-        faceGrid = faceGrid.to(device=device)
+        imFaceGrid = imFaceGrid.to(device=device)
         gaze = gaze.to(device=device)
 
         imFace = torch.autograd.Variable(imFace, requires_grad=True)
         imEyeL = torch.autograd.Variable(imEyeL, requires_grad=True)
         imEyeR = torch.autograd.Variable(imEyeR, requires_grad=True)
-        faceGrid = torch.autograd.Variable(faceGrid, requires_grad=True)
+        imFaceGrid = torch.autograd.Variable(imFaceGrid, requires_grad=True)
         gaze = torch.autograd.Variable(gaze, requires_grad=False)
 
         # compute output
-        output = model(imFace, imEyeL, imEyeR, faceGrid)
+        output = model(imFace, imEyeL, imEyeR, imFaceGrid)
 
         loss = criterion(output, gaze)
         error = euclidean_batch_error(output, gaze)
@@ -510,16 +510,16 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
             imFace_grad = imFace.grad.data
             imEyeL_grad = imEyeL.grad.data
             imEyeR_grad = imEyeR.grad.data
-            faceGrid_grad = faceGrid.grad.data
+            imFaceGrid_grad = imFaceGrid.grad.data
 
             # Generate perturbed input for Adversarial Attack
             perturbed_imFace = adversarial_attack(imFace, imFace_grad)
             perturbed_imEyeL = adversarial_attack(imEyeL, imEyeL_grad)
             perturbed_imEyeR = adversarial_attack(imEyeR, imEyeR_grad)
-            perturbed_faceGrid = adversarial_attack(faceGrid, faceGrid_grad)
+            perturbed_imFaceGrid = adversarial_attack(imFaceGrid, imFaceGrid_grad)
 
             # Regenerate output for the perturbed input
-            output_adv = model(perturbed_imFace, perturbed_imEyeL, perturbed_imEyeR, perturbed_faceGrid)
+            output_adv = model(perturbed_imFace, perturbed_imEyeL, perturbed_imEyeR, perturbed_imFaceGrid)
             loss_adv = criterion(output_adv, gaze)
 
             # concatenate both real and adversarial loss functions
@@ -591,21 +591,21 @@ def evaluate(dataset,
 
     results = []
 
-    # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(dataset.loader):
+    # for i, (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) in enumerate(dataset.loader):
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "cpu":
-            (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) = data
+            (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) = data
         else:  # dali modes
             if args.data_loader == "dali_gpu_all":
                 # TODO test with dp mode
                 batch_data = data[int(args.local_rank[0])]
             else:  # dali_gpu, #dali_cpu
                 batch_data = data[0]
-            row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], \
+            row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices = batch_data["row"], \
                                                                           batch_data["imFace"], \
                                                                           batch_data["imEyeL"], \
                                                                           batch_data["imEyeR"], \
-                                                                          batch_data["faceGrid"], \
+                                                                          batch_data["imFaceGrid"], \
                                                                           batch_data["gaze"], \
                                                                           batch_data["frame"], \
                                                                           batch_data["indices"]
@@ -619,12 +619,12 @@ def evaluate(dataset,
         imFace = imFace.to(device=device)
         imEyeL = imEyeL.to(device=device)
         imEyeR = imEyeR.to(device=device)
-        faceGrid = faceGrid.to(device=device)
+        imFaceGrid = imFaceGrid.to(device=device)
         gaze = gaze.to(device=device)
 
         # compute output
         with torch.no_grad():
-            output = model(imFace, imEyeL, imEyeR, faceGrid)
+            output = model(imFace, imEyeL, imEyeR, imFaceGrid)
 
         # Combine the tensor results together into a collated list so that we have the gazePoint and gazePrediction
         # for each frame
@@ -687,11 +687,12 @@ def export_onnx_model(model, device, verbose):
     imFace = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
     imEyeL = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
     imEyeR = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
-    faceGrid = torch.zeros((batch_size, face_grid_size)).to(device=device).float()
+    imFaceGrid = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
+    ## faceGrid = torch.zeros((batch_size, face_grid_size)).to(device=device).float()
 
-    dummy_in = (imFace, imEyeL, imEyeR, faceGrid)
+    dummy_in = (imFace, imEyeL, imEyeR, imFaceGrid)
 
-    in_names = ["face", "eyesLeft", "eyesRight", "faceGrid"]
+    in_names = ["face", "eyesLeft", "eyesRight", "imFaceGrid"]
     out_names = ["data"]
 
     try:
