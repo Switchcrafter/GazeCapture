@@ -67,6 +67,7 @@ class ExternalSourcePipeline(Pipeline):
 
         self.split = split
         self.color_space = color_space
+        self.data_loader = data_loader
         if shuffle:
             data.shuffle()
         self.sourceIterator = iter(data)
@@ -102,37 +103,24 @@ class ExternalSourcePipeline(Pipeline):
 
         if data_loader == "cpu":
             print("Error: cpu data loader shouldn't be handled by DALI")
-        elif data_loader == "dali_cpu":
-            self.decode = ops.ImageDecoder(device = "cpu", output_type = output_type)
-            self.resize_big = ops.Resize(device="cpu", resize_x=240, resize_y=240)
-            # depreciated replace with HSV and ops.BrightnessContrast soon
-            self.color_jitter = ops.ColorTwist(device="cpu")
-            # random area 0.93-1.0 corresponds to croping randomly from an image of size between (224-240)
-            self.crop = ops.RandomResizedCrop(device="cpu", random_area=[0.93, 1.00], size=image_size)
-            self.resize = ops.Resize(device="cpu", resize_x=image_size[0], resize_y=image_size[1])
-            self.norm = ops.CropMirrorNormalize(device="cpu",
-                                                output_dtype=types.FLOAT,
-                                                output_layout='CHW',
-                                                image_type=output_type,
-                                                mean=mean,
-                                                std=std)
         else:
-            # # data_loader == "dali_gpu" or data_loader == "dali_gpu_all":
-            # # ImageDecoder below accepts CPU inputs, but returns GPU outputs (hence device = "mixed"), HWC ordering
-            # YCbCr mode as output is not supported by ImageDecoder
-            # Refer: https://github.com/NVIDIA/DALI/pull/582/files ("Unknown output format")
-            if self.color_space == "YCbCr":
-                self.decode = ops.ImageDecoder(device = "mixed", output_type = types.RGB)
-                self.color = ops.ColorSpaceConversion(device = 'gpu', image_type = types.RGB, output_type = output_type)
-            else:
-                self.decode = ops.ImageDecoder(device = "mixed", output_type = output_type)
-            self.resize_big = ops.Resize(device="gpu", resize_x=240, resize_y=240)
+            # ---------- Decoding Operations --------- #
+            # ImageDecoder in mixed mode doesn't support YCbCr 
+            # Ref: https://github.com/NVIDIA/DALI/pull/582/files
+            self.decode = ops.ImageDecoder(device="cpu", output_type=output_type)
+
+            # ---------- Augmentation Operations --------- #
+            # execute rest of the operations on the target device based upon the mode
+            device = "cpu" if data_loader == "dali_cpu" else "gpu"
+            self.resize_big = ops.Resize(device=device, resize_x=240, resize_y=240)
             # depreciated replace with HSV and ops.BrightnessContrast soon
-            self.color_jitter = ops.ColorTwist(device="gpu")
+            self.color_jitter = ops.ColorTwist(device=device)
             # random area 0.93-1.0 corresponds to croping randomly from an image of size between (224-240)
-            self.crop = ops.RandomResizedCrop(device="gpu", random_area=[0.93, 1.00], size=image_size)
-            self.resize = ops.Resize(device="gpu", resize_x=image_size[0], resize_y=image_size[1])
-            self.norm = ops.CropMirrorNormalize(device="gpu",
+            self.crop = ops.RandomResizedCrop(device=device, random_area=[0.93, 1.00], size=image_size)
+            
+            # ---------- Normalization Operations --------- #
+            self.resize = ops.Resize(device=device, resize_x=image_size[0], resize_y=image_size[1])
+            self.norm = ops.CropMirrorNormalize(device=device,
                                                 output_dtype=types.FLOAT,
                                                 output_layout='CHW',
                                                 image_type=output_type,
@@ -150,28 +138,33 @@ class ExternalSourcePipeline(Pipeline):
         self.index = self.indexBatch()
 
         sat, con, bri, hue = self.dSaturation(), self.dContrast(), self.dBright(), self.dHue()
-        if self.color_space == "YCbCr":
-            if self.split == 'train':
-                imFaceD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.color(self.decode(self.imFace))), saturation=sat, contrast=con, brightness=bri, hue=hue))))
-                imEyeLD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.color(self.decode(self.imEyeL))), saturation=sat, contrast=con, brightness=bri, hue=hue))))
-                imEyeRD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.color(self.decode(self.imEyeR))), saturation=sat, contrast=con, brightness=bri, hue=hue))))
-                imFaceGridD = self.norm(self.resize(self.color(self.decode(self.imFaceGrid))))
-            else:
-                imFaceD = self.norm(self.resize(self.color(self.decode(self.imFace))))
-                imEyeLD = self.norm(self.resize(self.color(self.decode(self.imEyeL))))
-                imEyeRD = self.norm(self.resize(self.color(self.decode(self.imEyeR))))
-                imFaceGridD = self.norm(self.resize(self.color(self.decode(self.imFaceGrid))))
-        else:
-            if self.split == 'train':
-                imFaceD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.decode(self.imFace)), saturation=sat, contrast=con, brightness=bri, hue=hue))))
-                imEyeLD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.decode(self.imEyeL)), saturation=sat, contrast=con, brightness=bri, hue=hue))))
-                imEyeRD = self.norm(self.resize(self.crop(self.color_jitter(self.resize_big(self.decode(self.imEyeR)), saturation=sat, contrast=con, brightness=bri, hue=hue))))
-                imFaceGridD = self.norm(self.resize(self.decode(self.imFaceGrid)))
-            else:
-                imFaceD = self.norm(self.resize(self.decode(self.imFace)))
-                imEyeLD = self.norm(self.resize(self.decode(self.imEyeL)))
-                imEyeRD = self.norm(self.resize(self.decode(self.imEyeR)))
-                imFaceGridD = self.norm(self.resize(self.decode(self.imFaceGrid)))
+
+        # Decoding
+        imFaceD = self.decode(self.imFace)
+        imEyeLD = self.decode(self.imFace)
+        imEyeRD = self.decode(self.imFace)
+        imFaceGridD = self.decode(self.imFaceGrid)
+
+        # # GPU conversion (if required) # .gpu() .as_cpu()
+        if self.data_loader == "dali_gpu" or self.data_loader == "dali_gpu_all":
+            # print(self.device_id)
+            imFaceD = imFaceD.gpu()
+            imEyeLD = imEyeLD.gpu()
+            imEyeRD = imEyeRD.gpu()
+            imFaceGridD = imFaceGridD.gpu()
+
+        # Augmentations (for training only)
+        if self.split == 'train':
+            imFaceD = self.color_jitter(self.resize_big(imFaceD), saturation=sat, contrast=con, brightness=bri, hue=hue)
+            imEyeLD = self.color_jitter(self.resize_big(imEyeLD), saturation=sat, contrast=con, brightness=bri, hue=hue)
+            imEyeRD = self.color_jitter(self.resize_big(imEyeRD), saturation=sat, contrast=con, brightness=bri, hue=hue)
+            # Note: We do not augment the faceGrid
+
+        # Normalize
+        imFaceD = self.norm(self.resize(imFaceD))
+        imEyeLD = self.norm(self.resize(imEyeLD))
+        imEyeRD = self.norm(self.resize(imEyeRD))
+        imFaceGridD = self.norm(self.resize(imFaceGridD))
 
         return (self.row, imFaceD, imEyeLD, imEyeRD, imFaceGridD, self.gaze, self.frame, self.index)
 
