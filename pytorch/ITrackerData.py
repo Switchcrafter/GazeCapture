@@ -117,7 +117,7 @@ class ExternalSourcePipeline(Pipeline):
             self.color_jitter = ops.ColorTwist(device=device)
             # random area 0.93-1.0 corresponds to croping randomly from an image of size between (224-240)
             self.crop = ops.RandomResizedCrop(device=device, random_area=[0.93, 1.00], size=image_size)
-            
+
             # ---------- Normalization Operations --------- #
             self.resize = ops.Resize(device=device, resize_x=image_size[0], resize_y=image_size[1])
             self.norm = ops.CropMirrorNormalize(device=device,
@@ -126,7 +126,7 @@ class ExternalSourcePipeline(Pipeline):
                                                 image_type=output_type,
                                                 mean=mean,
                                                 std=std)
-
+    
     def define_graph(self):
         self.row = self.rowBatch()
         self.imFace = self.imFaceBatch()
@@ -136,36 +136,27 @@ class ExternalSourcePipeline(Pipeline):
         self.gaze = self.gazeBatch()
         self.frame = self.frameBatch()
         self.index = self.indexBatch()
-
         sat, con, bri, hue = self.dSaturation(), self.dContrast(), self.dBright(), self.dHue()
 
-        # Decoding
-        imFaceD = self.decode(self.imFace)
-        imEyeLD = self.decode(self.imFace)
-        imEyeRD = self.decode(self.imFace)
-        imFaceGridD = self.decode(self.imFaceGrid)
-
-        # # GPU conversion (if required) # .gpu() .as_cpu()
-        if self.data_loader == "dali_gpu" or self.data_loader == "dali_gpu_all":
-            # print(self.device_id)
-            imFaceD = imFaceD.gpu()
-            imEyeLD = imEyeLD.gpu()
-            imEyeRD = imEyeRD.gpu()
-            imFaceGridD = imFaceGridD.gpu()
-
-        # Augmentations (for training only)
-        if self.split == 'train':
-            imFaceD = self.color_jitter(self.resize_big(imFaceD), saturation=sat, contrast=con, brightness=bri, hue=hue)
-            imEyeLD = self.color_jitter(self.resize_big(imEyeLD), saturation=sat, contrast=con, brightness=bri, hue=hue)
-            imEyeRD = self.color_jitter(self.resize_big(imEyeRD), saturation=sat, contrast=con, brightness=bri, hue=hue)
-            # Note: We do not augment the faceGrid
-
-        # Normalize
-        imFaceD = self.norm(self.resize(imFaceD))
-        imEyeLD = self.norm(self.resize(imEyeLD))
-        imEyeRD = self.norm(self.resize(imEyeRD))
-        imFaceGridD = self.norm(self.resize(imFaceGridD))
-
+        def stream(image, augment=True):
+            # Decoding
+            image = self.decode(image)
+            if self.data_loader == "dali_gpu" or self.data_loader == "dali_gpu_all":
+                image = image.gpu()
+            # Augmentations (for training only)
+            if self.split == 'train' and augment:
+                image = self.resize_big(image)
+                image = self.color_jitter(image, saturation=sat, contrast=con, brightness=bri, hue=hue)
+            # Normalize
+            image = self.resize(image)
+            image = self.norm(image)
+            return image
+        
+        # pass the input through dali stream
+        imFaceD = stream(self.imFace)
+        imEyeLD = stream(self.imEyeL)
+        imEyeRD = stream(self.imEyeR)
+        imFaceGridD = stream(self.imFaceGrid, False)
         return (self.row, imFaceD, imEyeLD, imEyeRD, imFaceGridD, self.gaze, self.frame, self.index)
 
     @property
