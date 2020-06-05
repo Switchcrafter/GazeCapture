@@ -76,13 +76,14 @@ def main():
                              args.workers,
                              args.batch_size,
                              args.verbose,
+                             args.local_rank,
                              args.color_space,
                              args.data_loader,
                              not args.disable_boost)
 
     criterion, optimizer, scheduler = initialize_hyper_parameters(args, epoch, datasets, model)
 
-    if args.mode == 'Train':
+    if args.phase == 'Train':
         # resize variables to epochs size
         resize(learning_rates, args.epochs)
         resize(best_RMSErrors, args.epochs)
@@ -224,7 +225,7 @@ def main():
             print('\'RMS_Errors\': {0},'.format(val_RMSErrors))
             print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
             print('')
-    elif args.mode == 'Test':
+    elif args.phase == 'Test':
         # Quick test
         start_time = datetime.now()
         test_MSELoss, test_RMSError = evaluate(datasets['test'],
@@ -240,7 +241,7 @@ def main():
         print('')
         print('Testing MSELoss: %.5f, RMSError: %.5f' % (test_MSELoss, test_RMSError))
         print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-    elif args.mode == 'Validate':
+    elif args.phase == 'Validate':
         start_time = datetime.now()
         val_MSELoss, val_RMSError = evaluate(datasets['val'],
                                                model,
@@ -255,7 +256,7 @@ def main():
         print('')  # print blank line after loading data
         print('Validation MSELoss: %.5f, RMSError: %.5f' % (val_MSELoss, val_RMSError))
         print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-    elif args.mode == 'ExportONNX':
+    elif args.phase == 'ExportONNX':
         # export the model for use in other frameworks
         export_onnx_model(model, args.device, args.verbose)
 
@@ -308,7 +309,7 @@ def initialize_model(args):
         if args.mode == 'dp':
             print('Using DataParallel Backend')
             if not args.disable_sync:
-                from sync_batchnorm import convert_model
+                from utility_functions.sync_batchnorm import convert_model
                 # Convert batchNorm layers into synchronized batchNorm
                 model = convert_model(model)
             model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=args.device)
@@ -316,7 +317,7 @@ def initialize_model(args):
             # Single-Process Multiple-GPU: You'll observe all gpus running a single process (processes with same PID)
             print('Using DistributedDataParallel Backend - Single-Process Multi-GPU')
             torch.distributed.init_process_group(backend="nccl")
-            model = torch.nn.parallel.DistributedDataParallel(model)
+            model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)
         elif args.mode == 'ddp2':
             # Multi-Process Single-GPU : You'll observe multiple gpus running different processes (different PIDs)
             # OMP_NUM_THREADS = nb_cpu_threads / nproc_per_node
@@ -324,8 +325,9 @@ def initialize_model(args):
             if not args.disable_sync:
                 # Convert batchNorm layers into synchronized batchNorm
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=args.local_rank,
-                                                              output_device=args.local_rank[0])
+            model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True,
+                                                            device_ids=args.local_rank,
+                                                            output_device=args.local_rank[0])
             ###### code after this place runs in their own process #####
             set_print_policy(args.master, torch.distributed.get_rank())
             print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
@@ -401,6 +403,26 @@ def euclidean_batch_error(output, target):
     # Batch Euclidean Distance sqrt(dx^2 + dy^2)
     return torch.sqrt(torch.sum(torch.pow(output - target, 2), 1))
 
+# def mergeDataShards(data):
+#     data_merge = {}
+#     for i in range(len(data)):
+#         for key, value in data[i].items():
+#             if key in data_merge.items():
+#                 data_merge[key] = torch.cat((data_merge[key], value)) 
+#             else:
+#                 data_merge[key] = value
+#             print(data_merge[key].size())
+#     return data_merge
+
+def mergeDataShards(data):
+    data_merge = {}
+    for i in range(len(data)):
+        for key, value in data[i].items():
+            if type(data_merge.get(key)) == type(None):
+                data_merge[key] = value
+            else:
+                data_merge[key] = torch.cat((data_merge[key], value), 0) 
+    return data_merge
 
 def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, device, dataset_limit=None, verbose=False,
           args=None):
@@ -452,8 +474,10 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
             (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) = data
         else:  # dali modes
             if args.data_loader == "dali_gpu_all":
-                # TODO test with dp mode
+                # TODO For dp mode use data from each gpu for local training
                 batch_data = data[int(args.local_rank[0])]
+                # TODO combine data from all gpus for sharded data on single gpu training
+                # batch_data = mergeDataShards(data)
             else:  # dali_gpu, dali_cpu
                 batch_data = data[0]
             row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"], \

@@ -89,13 +89,13 @@ def parse_commandline_arguments():
     else:
         args.batch_size = 1
 
-    args.mode = 'Train'
+    args.phase = 'Train'
     if args.test:
-        args.mode = 'Test'
+        args.phase = 'Test'
     elif args.validate:
-        args.mode = 'Validate'
+        args.phase = 'Validate'
     elif args.exportONNX:
-        args.mode = 'ExportONNX'
+        args.phase = 'ExportONNX'
 
     if args.verbose:
         print('Number of arguments:', len(sys.argv), 'arguments.')

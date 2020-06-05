@@ -114,7 +114,7 @@ class ExternalSourcePipeline(Pipeline):
             device = "cpu" if data_loader == "dali_cpu" else "gpu"
             self.resize_big = ops.Resize(device=device, resize_x=240, resize_y=240)
             # depreciated replace with HSV and ops.BrightnessContrast soon
-            self.color_jitter = ops.ColorTwist(device=device)
+            self.color_jitter = ops.ColorTwist(device=device, image_type=output_type)
             # random area 0.93-1.0 corresponds to croping randomly from an image of size between (224-240)
             self.crop = ops.RandomResizedCrop(device=device, random_area=[0.93, 1.00], size=image_size)
 
@@ -126,7 +126,7 @@ class ExternalSourcePipeline(Pipeline):
                                                 image_type=output_type,
                                                 mean=mean,
                                                 std=std)
-    
+            
     def define_graph(self):
         self.row = self.rowBatch()
         self.imFace = self.imFaceBatch()
@@ -151,7 +151,7 @@ class ExternalSourcePipeline(Pipeline):
             image = self.resize(image)
             image = self.norm(image)
             return image
-        
+    
         # pass the input through dali stream
         imFaceD = stream(self.imFace)
         imEyeLD = stream(self.imEyeL)
@@ -166,6 +166,8 @@ class ExternalSourcePipeline(Pipeline):
     def iter_setup(self):
         (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch, frameBatch,
          indexBatch) = self.sourceIterator.next()
+        # XXX test code for data sharding
+        print(self.device_id, self.split, indexBatch[0][0], len(indexBatch), rowBatch[0][0], len(rowBatch)) 
         self.feed_input(self.row, rowBatch)
         self.feed_input(self.imFace, imFaceBatch)
         self.feed_input(self.imEyeL, imEyeLBatch)
@@ -282,11 +284,12 @@ class ITrackerData(object):
         imFaceGridPath = os.path.join(self.dataPath,
                                   '%05d/faceGrid/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                    self.metadata['frameIndex'][rowIndex]))
+        # Note: Converted from double (float64) to float (float32) as pipeline output is float in MSE calculation
         gaze = np.array([self.metadata['labelDotXCam'][rowIndex], self.metadata['labelDotYCam'][rowIndex]], np.float32)
         frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]])
         # faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][rowIndex, :])
-        row = np.array([int(rowIndex)], dtype=np.uint8)
-        index = np.array([int(index)], dtype=np.uint8)
+        row = np.array([int(rowIndex)])
+        index = np.array([int(index)])
 
         if self.data_loader == 'cpu':
             # Image loading, transformation and normalization happen here
@@ -378,6 +381,7 @@ def load_data(split,
               workers,
               batch_size,
               verbose,
+              local_rank,
               color_space,
               data_loader,
               eval_boost):
@@ -406,27 +410,37 @@ def load_data(split,
     else:
         num_gpus = torch.cuda.device_count()
         if data_loader == "dali_gpu" or data_loader == "dali_cpu":
+            # pipes = [ExternalSourcePipeline(data,
+            #                                 batch_size=batch_size,
+            #                                 image_size=image_size,
+            #                                 split=split,
+            #                                 silent=not verbose,
+            #                                 num_threads=8,
+            #                                 device_id=local_rank[0],
+            #                                 data_loader=data_loader,
+            #                                 color_space=color_space,
+            #                                 shuffle=shuffle)]
             pipes = [ExternalSourcePipeline(data,
                                             batch_size=batch_size,
                                             image_size=image_size,
                                             split=split,
                                             silent=not verbose,
                                             num_threads=8,
-                                            device_id=num_gpus - 1,
+                                            device_id=local_rank[0],
                                             data_loader=data_loader,
                                             color_space=color_space,
-                                            shuffle=shuffle)]
+                                            shuffle=False)]
         elif data_loader == "dali_gpu_all":
             pipes = [ExternalSourcePipeline(data,
                                             batch_size=batch_size,
                                             image_size=image_size,
                                             split=split,
                                             silent=not verbose,
-                                            num_threads=1,
+                                            num_threads=8,
                                             device_id=i,
                                             data_loader=data_loader,
                                             color_space=color_space,
-                                            shuffle=shuffle) for i in range(num_gpus)]
+                                            shuffle=False) for i in range(num_gpus)]
         else:
             # todo raise error
             print("Invalid data_loader mode", data_loader)
@@ -448,6 +462,7 @@ def load_all_data(path,
                   workers,
                   batch_size,
                   verbose,
+                  local_rank,
                   color_space='YCbCr',
                   data_loader='cpu',
                   eval_boost=False):
@@ -463,6 +478,7 @@ def load_all_data(path,
                          workers,
                          batch_size,
                          verbose,
+                         local_rank,
                          color_space,
                          data_loader,
                          eval_boost)
