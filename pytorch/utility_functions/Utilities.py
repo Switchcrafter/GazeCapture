@@ -446,3 +446,13 @@ def getPublishedPort():
     #     print(c.attrs['NetworkSettings']['Ports']['8097/tcp'][0]['HostPort'])
     # print(container.attrs['NetworkSettings']['IPAddress'])
     return container.attrs['NetworkSettings']['Ports']['8097/tcp'][0]['HostPort']
+
+def mergeDataShards(data):
+    data_merge = {}
+    for i in range(len(data)):
+        for key, value in data[i].items():
+            if type(data_merge.get(key)) == type(None):
+                data_merge[key] = value
+            else:
+                data_merge[key] = torch.cat((data_merge[key], value), 0) 
+    return data_merge

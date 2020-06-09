@@ -79,7 +79,8 @@ def main():
                              args.local_rank,
                              args.color_space,
                              args.data_loader,
-                             not args.disable_boost)
+                             not args.disable_boost,
+                             args.mode)
 
     criterion, optimizer, scheduler = initialize_hyper_parameters(args, epoch, datasets, model)
 
@@ -329,6 +330,7 @@ def initialize_model(args):
                                                             device_ids=args.local_rank,
                                                             output_device=args.local_rank[0])
             ###### code after this place runs in their own process #####
+            # XXX: Uncomment this after the sharding experiments
             set_print_policy(args.master, torch.distributed.get_rank())
             print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
         else:
@@ -340,7 +342,6 @@ def initialize_model(args):
     val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates = checkpoint_manager.extract_checkpoint_data(args,
                                                                                                                  model)
     return val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model
-
 
 def initialize_hyper_parameters(args, epoch, datasets, model):
     criterion = nn.MSELoss(reduction='mean').to(device=args.device)
@@ -384,7 +385,6 @@ def initialize_hyper_parameters(args, epoch, datasets, model):
     scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, args.base_lr, args.max_lr, mode='triangular', scale_mode='cycle', scale_fn=decay, step_size_up=step_size, cycle_momentum=cycle_momentum, last_epoch=num_batches_completed)
     return criterion, optimizer, scheduler
 
-
 # Fast Gradient Sign Attack (FGSA)
 def adversarial_attack(image, data_grad, epsilon=0.1):
     # Collect the element-wise sign of the data gradient
@@ -396,33 +396,11 @@ def adversarial_attack(image, data_grad, epsilon=0.1):
     # Return the perturbed image
     return perturbed_image
 
-
 def euclidean_batch_error(output, target):
     """ For a batch of output and target returns corresponding batch of euclidean errors
     """
     # Batch Euclidean Distance sqrt(dx^2 + dy^2)
     return torch.sqrt(torch.sum(torch.pow(output - target, 2), 1))
-
-# def mergeDataShards(data):
-#     data_merge = {}
-#     for i in range(len(data)):
-#         for key, value in data[i].items():
-#             if key in data_merge.items():
-#                 data_merge[key] = torch.cat((data_merge[key], value)) 
-#             else:
-#                 data_merge[key] = value
-#             print(data_merge[key].size())
-#     return data_merge
-
-def mergeDataShards(data):
-    data_merge = {}
-    for i in range(len(data)):
-        for key, value in data[i].items():
-            if type(data_merge.get(key)) == type(None):
-                data_merge[key] = value
-            else:
-                data_merge[key] = torch.cat((data_merge[key], value), 0) 
-    return data_merge
 
 def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, device, dataset_limit=None, verbose=False,
           args=None):
@@ -460,31 +438,26 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
             if not verbose:
                 args.sampling_bar.display(args.multinomial_weights)
         else:  # dali modes
-            # todo: HSM support for DALI
+            # TODO: HSM support for DALI
             loader = dataset.loader
     else:
         loader = dataset.loader
 
-    # lrs = []
-
     # load data samples and train
-    # for i, (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) in enumerate(loader):
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "cpu":
             (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) = data
         else:  # dali modes
-            if args.data_loader == "dali_gpu_all":
-                # TODO For dp mode use data from each gpu for local training
-                batch_data = data[int(args.local_rank[0])]
-                # TODO combine data from all gpus for sharded data on single gpu training
-                # batch_data = mergeDataShards(data)
-            else:  # dali_gpu, dali_cpu
-                batch_data = data[0]
+            batch_data = data[0]
+            # batch_data = data
             row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"], \
                                                                           batch_data["imEyeL"], batch_data["imEyeR"], \
                                                                           batch_data["imFaceGrid"], \
                                                                           batch_data["gaze"], batch_data["frame"], \
                                                                           batch_data["indices"]
+        # # XXX: sharding debug code
+        # rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
+        # print(rank, torch.cuda.current_device(), indices.data.cpu().numpy()[0][0], len(indices), row.data.cpu().numpy()[0][0], len(row)) 
 
         batchNum = i + 1
         actual_batch_size = imFace.size(0)
@@ -620,11 +593,7 @@ def evaluate(dataset,
         if args.data_loader == "cpu":
             (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) = data
         else:  # dali modes
-            if args.data_loader == "dali_gpu_all":
-                # TODO test with dp mode
-                batch_data = data[int(args.local_rank[0])]
-            else:  # dali_gpu, #dali_cpu
-                batch_data = data[0]
+            batch_data = data[0]
             row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices = batch_data["row"], \
                                                                           batch_data["imFace"], \
                                                                           batch_data["imEyeL"], \
