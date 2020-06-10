@@ -139,7 +139,7 @@ class ExternalSourcePipeline(Pipeline):
         def stream(image, augment=True):
             # Decoding
             image = self.decode(image)
-            if self.data_loader == "dali_gpu" or self.data_loader == "dali_gpu_all":
+            if self.data_loader == "dali_gpu":
                 image = image.gpu()
             # Augmentations (for training only)
             if self.split == 'train' and augment:
@@ -437,7 +437,7 @@ def load_data(split,
             batch_size=batch_size,
             shuffle=True,
             num_workers=workers,
-            pin_memory=False) 
+            pin_memory=True) 
     elif data_loader == "dali_gpu" or data_loader == "dali_cpu":
         pipes = [ExternalSourcePipeline(data,
                                         batch_size=batch_size,
@@ -450,7 +450,7 @@ def load_data(split,
                                         color_space=color_space,
                                         shuffle=True)]
 
-        # TODO: Enable Pin memory for cpu and dali modes
+        # DALI automatically allocates Pinned memory whereever possible
         # auto_reset=True resets the iterator after each epoch
         # DALIGenericIterator has inbuilt build for all pipelines
         loader = DALIGenericIterator(pipes,
