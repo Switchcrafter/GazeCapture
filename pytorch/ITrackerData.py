@@ -56,12 +56,13 @@ def resize_image_transform(image_size):
     normalize_image.append(transforms.ToTensor())
     return transforms.Compose(normalize_image)
 
+
 class ExternalSourcePipeline(Pipeline):
     def __init__(self, data, batch_size, image_size, split, silent, num_threads, device_id, data_loader, color_space, shuffle=False):
         super(ExternalSourcePipeline, self).__init__(batch_size,
                                                      num_threads,
                                                      device_id,
-                                                     seed=12)
+                                                     seed=-1)
 
         self.split = split
         self.color_space = color_space
@@ -413,6 +414,8 @@ def load_data(split,
     else:
         shard_id, num_shards = 0, 1
 
+    if eval_boost:
+        batch_size = batch_size if split == 'train' else batch_size * 2
     data = ITrackerData(dataPath,
                         metadata,
                         batch_size,
@@ -430,8 +433,6 @@ def load_data(split,
     # DALI implementation would do a cross-shard shuffle
     # CPU implementation would do a in-shard shuffle
     if data_loader == "cpu":
-        if eval_boost:
-            batch_size = batch_size if split == 'train' else batch_size * 2
         loader = torch.utils.data.DataLoader(
             data,
             batch_size=batch_size,

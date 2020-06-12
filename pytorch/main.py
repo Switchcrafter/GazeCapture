@@ -125,6 +125,12 @@ def main():
                 
         # now start training from last best epoch
         for epoch in range(epoch, args.epochs + 1):
+            # Free up PyTorch Reserved Memory
+            # if torch.cuda.memory_reserved():
+            #     print(torch.cuda.memory_summary())
+            #     torch.cuda.clear_memory_allocated()
+            #     torch.cuda.empty_cache()
+
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, args.epochs))
             start_time = datetime.now()
             learning_rates[epoch - 1] = scheduler.get_lr()[0]
