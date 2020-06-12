@@ -125,7 +125,7 @@ def main():
                 
         # now start training from last best epoch
         for epoch in range(epoch, args.epochs + 1):
-            # Free up PyTorch Reserved Memory
+            # TODO: Free up PyTorch Reserved Memory
             # if torch.cuda.memory_reserved():
             #     print(torch.cuda.memory_summary())
             #     torch.cuda.clear_memory_allocated()
