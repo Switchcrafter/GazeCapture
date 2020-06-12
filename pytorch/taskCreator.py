@@ -905,6 +905,7 @@ if __name__ == '__main__':
     parser.add_argument('--portraitOnly', action='store_true', help="use portrait data only", default=False)
     parser.add_argument('--source_compare', action='store_true', help="compare against source", default=False)
     parser.add_argument('--reference', default="", help="reference .mat path")
+    parser.add_argument('--ext', help="", nargs='+', default=[".jpg", ".jpeg", ".JPG", ".JPEG"])
     args = parser.parse_args()
 
     if args.task == "":
@@ -933,8 +934,7 @@ if __name__ == '__main__':
     # pre-processing for the task
     if args.task == "noneTask":
         taskFunction = noneTask
-        extensionList = [".jpg", ".jpeg", ".JPG", ".JPEG"]
-        taskData = getFileList("./gc-data/", extensionList)
+        taskData = getFileList("./gc-data/", args.ext)
         dataLoader = ListLoader
     elif args.task == "cubeTask":
         taskFunction = cubeTask
@@ -942,8 +942,7 @@ if __name__ == '__main__':
         dataLoader = ListLoader
     elif args.task == "copyTask":
         taskFunction = copyTask
-        extensionList = [".jpg", ".jpeg", ".JPG", ".JPEG"]
-        taskData = getFileList(args.input, extensionList)
+        taskData = getFileList(args.input, args.ext)
         dataLoader = ListLoader
     ######### Data Preparation Tasks #########
     elif args.task == "prepareEyeCatcherTask":
