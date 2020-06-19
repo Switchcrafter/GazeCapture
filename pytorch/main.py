@@ -336,7 +336,6 @@ def initialize_model(args):
                                                             device_ids=args.local_rank,
                                                             output_device=args.local_rank[0])
             ###### code after this place runs in their own process #####
-            # XXX: Uncomment this after the sharding experiments
             set_print_policy(args.master, torch.distributed.get_rank())
             print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
         else:
@@ -373,22 +372,24 @@ def initialize_hyper_parameters(args, epoch, datasets, model):
     step_size = args.epochs_per_step * batch_count
     num_batches_completed = (epoch-1) * batch_count
 
-    # # Custom implementation
-    # clr = cyclical_learning_rate.cyclical_lr(batch_count,
-    #                                          shape=cyclical_learning_rate.shape_function(args.shape_type,
-    #                                                                                      step_size),
-    #                                          decay=cyclical_learning_rate.decay_function(args.decay_type,
-    #                                                                                      args.epochs_per_step),
-    #                                          min_lr=args.base_lr,
-    #                                          max_lr=args.max_lr)
-    # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr], last_epoch = num_batches_completed)
-
-    # Pytorch's in-built method
-    # mode (str) – One of {triangular, triangular2, exp_range}
-    # scale_fn
-    cycle_momentum = True if args.optimizer == 'sgd' else False
-    decay=cyclical_learning_rate.decay_function(args.decay_type, args.epochs_per_step)
-    scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, args.base_lr, args.max_lr, mode='triangular', scale_mode='cycle', scale_fn=decay, step_size_up=step_size, cycle_momentum=cycle_momentum, last_epoch=num_batches_completed)
+    decay = cyclical_learning_rate.decay_function(args.decay_type, 
+                args.epochs_per_step)
+    if args.clr == "custom":
+        # Custom implementation
+        shape = cyclical_learning_rate.shape_function(args.shape_type, step_size)
+        clr = cyclical_learning_rate.cyclical_lr(batch_count, shape=shape, 
+                decay=decay, min_lr=args.base_lr, max_lr=args.max_lr)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr], 
+                        last_epoch = num_batches_completed)
+    else:
+        # Pytorch's in-built method
+        # mode (str) – One of {triangular, triangular2, exp_range}
+        cycle_momentum = True if args.optimizer == 'sgd' else False
+        scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, args.base_lr, 
+                        args.max_lr, mode='triangular', scale_mode='cycle', 
+                        scale_fn=decay, step_size_up=step_size, 
+                        cycle_momentum=cycle_momentum, 
+                        last_epoch=num_batches_completed)
     return criterion, optimizer, scheduler
 
 # Fast Gradient Sign Attack (FGSA)

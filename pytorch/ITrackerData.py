@@ -115,7 +115,7 @@ class ExternalSourcePipeline(Pipeline):
             # depreciated replace with HSV and ops.BrightnessContrast soon
             self.color_jitter = ops.ColorTwist(device=device, image_type=output_type)
             # random area 0.93-1.0 corresponds to croping randomly from an image of size between (224-240)
-            self.crop = ops.RandomResizedCrop(device=device, random_area=[0.93, 1.00], size=image_size)
+            self.crop = ops.RandomResizedCrop(device=device, random_area=[0.93, 0.93], size=image_size)
 
             # ---------- Normalization Operations --------- #
             self.resize = ops.Resize(device=device, resize_x=image_size[0], resize_y=image_size[1])
