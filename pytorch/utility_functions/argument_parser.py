@@ -79,7 +79,7 @@ def parse_commandline_arguments():
         args.device_group = "".join([str(device) for device in args.local_rank])
         args.output_path = os.path.join(
                             os.path.dirname(os.path.realpath(__file__)), 
-                            '../checkpoints', 
+                            'checkpoints', 
                             'gpu' + args.device_group)
 
     args.device = None
