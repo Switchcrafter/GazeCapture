@@ -16,6 +16,7 @@ import torch.utils.data
 from utility_functions import argument_parser
 from utility_functions import checkpoint_manager
 from utility_functions import cyclical_learning_rate
+from utility_functions.Criterion import MultiCriterion
 from ITrackerData import load_all_data
 from ITrackerModel import ITrackerModel
 from utility_functions.Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations, resize, set_print_policy, getPublishedPort
@@ -351,8 +352,8 @@ def initialize_model(args):
 def initialize_hyper_parameters(args, epoch, datasets, model):
     criterion = nn.MSELoss(reduction='mean').to(device=args.device)
     # for multi criteria experiments use criteria and weights as list below
-    # criteria = [nn.MSELoss]
-    # weights = [1.0]
+    # criteria = [nn.MSELoss, nn.L1Loss]
+    # weights = [0.5, 0.5]
     # criterion = MultiCriterion(criteria, weights, reduction='mean').to(device=args.device)
     if args.optimizer =="adam":
         optimizer = torch.optim.Adam(model.parameters(), args.max_lr,
