@@ -85,16 +85,17 @@ def parse_commandline_arguments():
     args.device = None
     args.using_cuda = False
     if torch.cuda.device_count() > 1 and args.mode == "none":
-        print("#############################################################################################")
+        print("##################################################################")
         print("Running non-parallel mode ['none'] on multi-GPU machine.\n" +
         "Avoid `-m torch.distributed.launch --nproc_per_node=<num devices>`\n" +
         "that would create multiple parallel runs on different GPUs without\n"+ 
         "any synchronization.\n" +
-        "For no parallelization use    : --local_rank 0 --mode 'none' \n" +
-        "For data parallelization use  : --local_rank 0 1 2 3 --mode 'dp' \n" +
-        "For distributed DP1 use       : -m torch.distributed.launch --nproc_per_node=1 --mode 'ddp1' \n" +
-        "For distributed DP2 use       : -m torch.distributed.launch --nproc_per_node=4 --mode 'ddp2' \n")
-        print("##############################################################################################")
+        "Usage: args for parallelization modes."
+        "none: --local_rank 0 --mode 'none' \n" +
+        "DP  : --local_rank 0 1 2 3 --mode 'dp' \n" +
+        "DDP1: -m torch.distributed.launch --nproc_per_node=1 --mode 'ddp1' \n" +
+        "DDP2: -m torch.distributed.launch --nproc_per_node=4 --mode 'ddp2' \n")
+        print("###################################################################")
     args.master = args.local_rank[0] if args.master < 0 else args.master
     args.batch_size = args.batch_size * torch.cuda.device_count() if args.mode == 'ddp2' else args.batch_size
     if not args.disable_cuda and torch.cuda.is_available() and len(args.local_rank) > 0:
