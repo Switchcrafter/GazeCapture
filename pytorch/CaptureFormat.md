@@ -64,7 +64,12 @@ Capture -> Prepare -> ML
 
 #### This is how we will store the data from EyeCapture
 
-{dataHome}\{schemaVersion}\{deviceSku}\{userName}\
+    /{dataHome}/{schemaVersion}/{deviceSku}/{userName}/sessionId/*.json
+    /{dataHome}/{schemaVersion}/{deviceSku}/{userName}/sessionId/frames/*.json & *.jpg
+
+e.g.
+
+    /data/200407/Surface_Pro_6_1796_Commercial/sha256hashof(jbeavers)/guid/frames/00000.json & 00000.jpg
 
 {frameId}.jpg       Camera Images in JPG Lossless
 frames.json         JSON array of jpg file names
