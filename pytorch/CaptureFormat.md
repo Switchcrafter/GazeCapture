@@ -6,6 +6,7 @@ Schema Version 200407
 
 Each capture session creates a new subdirectory for data capture named as an increasing int with five digits (e.g. 00005).  There are a number of metadata files:
 
+```
  screen.json: { H: ..., W: ..., Orientation: ...}
  
  info.json: { DeviceName: ... }
@@ -17,6 +18,7 @@ Each capture session creates a new subdirectory for data capture named as an inc
      heightScreenInCm: ...,
      ppi: ...
      }
+```
 
 Frame data is captured into a subdirectory of the session directory named 'frames'.  two files from an app on the target device; a png compressed image and a json metadata file.  The frame json file contains:
 
@@ -27,11 +29,12 @@ Frame data is captured into a subdirectory of the session directory named 'frame
 
 This data is then post-processed to add metadata files:
 
+```
  dotCam.json: { XCam: ..., YCam: ... }
  faceGrid: { X: ..., Y: ..., W: ..., H: ..., IsValid: ... }
  leftEyeGrid: { X: ..., Y: ..., W: ..., H: ..., IsValid: ... }
  rightEyeGrid: { X: ..., Y: ..., W: ..., H: ..., IsValid: ... }
-
+```
 And extracted images:
 
  face.jpg
@@ -53,6 +56,7 @@ Capture -> Prepare -> ML
 
 #### This is how MIT GazeCapture stores the data:
 
+```
 {dataHome}\{sessionId}\frames\{frameId}.jpg
 {dataHome}\{sessionId}\frames.json              JSON array of jpg file names
 {dataHome}\{sessionId}\dotInfo.json             JSON array of X/Y target point for each frame
@@ -61,6 +65,7 @@ Capture -> Prepare -> ML
     TotalFrames, NumFaceDetections, NumEyeDetections, Dataset (train/validate/test), DeviceName
 {dataHome}\{sessionId}\screen.json              Screen W/H/Orientation for frames
     Arrays: H, W, Orientation
+```
 
 #### This is how we will store the data from EyeCapture
 
@@ -71,6 +76,7 @@ e.g.
 
     /data/200407/Surface_Pro_6_1796_Commercial/sha256hashof(jbeavers)/guid/frames/00000.json & 00000.jpg
 
+```
 {frameId}.jpg       Camera Images in JPG Lossless
 {frameId}.json      { "XRaw":..., "YRaw":..., "Confidence":... }
 frames.json         JSON array of jpg file names
@@ -80,6 +86,7 @@ info.json
                     TotalFrames, NumFaceDetections, NumEyeDetections, Dataset (train/validate/test), DeviceName
 screen.json         JSON arrays: H, W, Orientation
                     Since we only support capturing in the default landscape orientation, these values are just duplicates
+```
 
 ### Prepare Dataset step
 
@@ -87,6 +94,7 @@ This step using facial feature recognition to identify the face and eye bounding
 
 Since we are only going to support capture and playback on 'identical' devices for now in a singular orientation, we can optionally skip the dotCam calculation step.
 
+```
 info.json       Updates NumFaceDetections and NumEyeDetections based on dlib results
 
 faceGrid.json
@@ -97,3 +105,4 @@ dlibRightEyeGrid.json
 appleFace/{frameId}.jpg
 appleLeftEye/{frameId}.jpg
 appleRightEye/{frameId}.jpg
+```
