@@ -74,7 +74,8 @@ Capture -> Prepare -> ML
 
 e.g.
 
-    /data/200407/Surface_Pro_6_1796_Commercial/sha256hashof(jbeavers)/guid/frames/00000.json & 00000.jpg
+    /data/200407/Surface_Pro_6_1796_Commercial/md5hash(jbeavers)/sessionId/frames/00000.json
+    /data/200407/Surface_Pro_6_1796_Commercial/md5hash(jbeavers)/sessionId/frames/00000.jpg
 
 ```
 {frameId}.jpg       Camera Images in JPG Lossless
