@@ -158,6 +158,13 @@ PUT https://deepeyes-wa.teamgleason.org/API/DeepData/200407/Surface_Pro_6_1796_C
 PUT https://deepeyes-wa.teamgleason.org/API/DeepData/200407/Surface_Pro_6_1796_Commercial/jbeavers%40microsoft.com/2020-07-10T02-22-12/00067-00023.json
 ```
 
+you can also upload per session metadata files using the same approach, e.g.
+
+```
+PUT https://deepeyes-wa.teamgleason.org/API/DeepData/200407/Surface_Pro_6_1796_Commercial/jbeavers%40microsoft.com/2020-07-10T02-22-12/deviceMetrics.json
+PUT https://deepeyes-wa.teamgleason.org/API/DeepData/200407/Surface_Pro_6_1796_Commercial/jbeavers%40microsoft.com/2020-07-10T02-22-12/screen.json
+```
+
 ### Prepare Dataset step
 
 This step using facial feature recognition to identify the face and eye bounding boxes and extract the face and eyes images.  It also calculates the camera distance offsets (dotCam) using screen metrics and device + orientation to camera position lookup table.
