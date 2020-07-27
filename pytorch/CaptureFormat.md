@@ -126,8 +126,8 @@ e.g.
 ``` 
 or
 ```
-    /data/200407/Surface_Pro_6_1796_Commercial/P0F_+nViS55W3yNOti3bXw==/2020-07-10T02-22-12/frames/%gazeTarget%-%cameraSnapshot%.json
-    /data/200407/Surface_Pro_6_1796_Commercial/P0F_+nViS55W3yNOti3bXw==/2020-07-10T02-22-12/frames/%gazeTarget%-%cameraSnapshot%.jpg
+    /data/200407/Surface_Pro_6_1796_Commercial/P0F_+nViS55W3yNOti3bXw==/2020-07-10T02:22:12/frames/%gazeTarget%-%cameraSnapshot%.json
+    /data/200407/Surface_Pro_6_1796_Commercial/P0F_+nViS55W3yNOti3bXw==/2020-07-10T02:22:12/frames/%gazeTarget%-%cameraSnapshot%.jpg
 ```
 
 #### Further Notes (now obsolete?)
@@ -153,15 +153,15 @@ PUT /API/DeepData/200407/%DeviceSku%/%PlainTextEmailAddress%/%SessionId%/%FrameI
 e.g.
 
 ```
-PUT https://deepeyes-wa.teamgleason.org/API/DeepData/200407/Surface_Pro_6_1796_Commercial/jbeavers%40microsoft.com/2020-07-10T02-22-12/00067-00023.jpg
-PUT https://deepeyes-wa.teamgleason.org/API/DeepData/200407/Surface_Pro_6_1796_Commercial/jbeavers%40microsoft.com/2020-07-10T02-22-12/00067-00023.json
+PUT https://deepeyes-wa.teamgleason.org/API/DeepData/200407/Surface_Pro_6_1796_Commercial/jbeavers%40microsoft.com/2020-07-10T02%3A22%3A12/00067-00023.jpg
+PUT https://deepeyes-wa.teamgleason.org/API/DeepData/200407/Surface_Pro_6_1796_Commercial/jbeavers%40microsoft.com/2020-07-10T02%3A22%3A12/00067-00023.json
 ```
 
 you can also upload per session metadata files using the same approach, e.g.
 
 ```
-PUT https://deepeyes-wa.teamgleason.org/API/DeepData/200407/Surface_Pro_6_1796_Commercial/jbeavers%40microsoft.com/2020-07-10T02-22-12/deviceMetrics.json
-PUT https://deepeyes-wa.teamgleason.org/API/DeepData/200407/Surface_Pro_6_1796_Commercial/jbeavers%40microsoft.com/2020-07-10T02-22-12/screen.json
+PUT https://deepeyes-wa.teamgleason.org/API/DeepData/200407/Surface_Pro_6_1796_Commercial/jbeavers%40microsoft.com/2020-07-10T02%3A22%3A12/deviceMetrics.json
+PUT https://deepeyes-wa.teamgleason.org/API/DeepData/200407/Surface_Pro_6_1796_Commercial/jbeavers%40microsoft.com/2020-07-10T02%3A22%3A12/screen.json
 ```
 
 ### Prepare Dataset step
