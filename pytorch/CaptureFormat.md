@@ -4,7 +4,7 @@ Schema Version 200407
 
 ## Overview
 
-Each capture session creates a new subdirectory for data capture named as an increasing int with five digits (e.g. 00005).  There are a number of metadata files:
+Each capture session creates a new subdirectory for data capture.  There are a number of metadata files:
 
 ```
  screen.json: {
@@ -44,7 +44,6 @@ For example 00001-00015.jpg/00001-00015.json, 00003-00007.jpg/00003-00007.json, 
 Confidence is set to 'pixel distance of gaze position from gaze target as measured by reference eye tracker'.
 This value can be used to filter out data points where the user was not actively looking at the gaze target when the camera snapshot was taken.
 It can also be used to make relative accuracy observations between the reference eye tracker and the DeepEyes prediction model results.
-
 
 This data is then post-processed using DLib or similar head/eye feature detection to add metadata files:
 
