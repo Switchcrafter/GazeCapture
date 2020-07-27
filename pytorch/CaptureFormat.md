@@ -148,7 +148,7 @@ screen.json         JSON arrays: H, W, Orientation
 After a session is complete, data is uploaded to the storage service using a REST PUT API.  The REST URL looks suspiciously like the file path:
 
 ```
-PUT /API/DeepData/200407/%DeviceSku%/%PlainTextEmailAddress%/%SessionId%/%FrameId%/%FileName%
+PUT /API/DeepData/200407/%DeviceSku%/%PlainTextEmailAddress%/%SessionId%/%FileName%
 ```
 e.g.
 
