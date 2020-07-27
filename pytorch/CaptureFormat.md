@@ -121,13 +121,8 @@ Capture -> Prepare -> ML
 e.g.
 
 ```
-    /data/200407/Surface_Pro_6_1796_Commercial/%base64(md5hash(jbeavers@microsoft.com))%/%sessionId%/frames/%gazeTarget%-%cameraSnapshot%.json
-    /data/200407/Surface_Pro_6_1796_Commercial/%base64(md5hash(jbeavers@microsoft.com))%/%sessionId%/frames/%gazeTarget%-%cameraSnapshot%.jpg
-``` 
-or
-```
-    /data/200407/Surface_Pro_6_1796_Commercial/P0F_+nViS55W3yNOti3bXw==/2020-07-10T02:22:12/frames/%gazeTarget%-%cameraSnapshot%.json
-    /data/200407/Surface_Pro_6_1796_Commercial/P0F_+nViS55W3yNOti3bXw==/2020-07-10T02:22:12/frames/%gazeTarget%-%cameraSnapshot%.jpg
+    /data/200407/Surface_Pro_6_1796_Commercial/P0F_+nViS55W3yNOti3bXw==/2020-07-10T02:22:12/frames/00004-00021.json
+    /data/200407/Surface_Pro_6_1796_Commercial/P0F_+nViS55W3yNOti3bXw==/2020-07-10T02:22:12/frames/00004-00021.jpg
 ```
 
 #### Further Notes (now obsolete?)
