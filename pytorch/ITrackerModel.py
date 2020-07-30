@@ -37,10 +37,10 @@ class ItrackerImageModel(nn.Module):
             self.conv = self.model.features
             self.conv[18][0] = nn.Conv2d(320, 512, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0), bias=False)
             self.conv[18][1] = nn.BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-        elif model_type == "faceNet":
-            from facenet_pytorch import InceptionResnetV1
-            # For a model pretrained on VGGFace2
-            self.model = InceptionResnetV1(pretrained='vggface2').eval()
+        # elif model_type == "faceNet":
+        #     from facenet_pytorch import InceptionResnetV1
+        #     # For a model pretrained on VGGFace2
+        #     self.model = InceptionResnetV1(pretrained='vggface2')
         else: # resNet
             self.model = models.resnet18(pretrained=True)
             # ToDo For L-channel (greyscale) only model
@@ -70,13 +70,13 @@ class FaceImageModel(nn.Module):
         self.fc = nn.Sequential(
             # FC-F1
             # 25088
-            nn.Dropout(0.1),
+            nn.Dropout(0.4),
             nn.Linear(25088, 128),
             # 128
             nn.ReLU(inplace=True),
 
             # FC-F2
-            nn.Dropout(0.1),
+            nn.Dropout(0.4),
             nn.Linear(128, 64),
             # 64
             nn.ReLU(inplace=True),
@@ -98,13 +98,13 @@ class FaceGridRCModel(nn.Module):
         self.fc = nn.Sequential(
             # FC-F1
             # 25088
-            nn.Dropout(0.1),
+            nn.Dropout(0.4),
             nn.Linear(25088, 256),
             # 256
             nn.ReLU(inplace=True),
 
             # FC-F2
-            nn.Dropout(0.1),
+            nn.Dropout(0.4),
             nn.Linear(256, 128),
             # 128
             nn.ReLU(inplace=True),
@@ -133,7 +133,7 @@ class FaceGridModel(nn.Module):
 
             # FC-FG2
             # 256
-            nn.Dropout(0.1),
+            nn.Dropout(0.4),
             nn.Linear(256, 128),
             # 128
             nn.ReLU(inplace=True),
@@ -162,7 +162,7 @@ class ITrackerModel(nn.Module):
         # Joining both eyes
         self.eyesFC = nn.Sequential(
             # FC-E1
-            nn.Dropout(0.1),
+            nn.Dropout(0.4),
             # 50176
             nn.Linear(2 * 25088, 128),
             # 128
@@ -173,7 +173,7 @@ class ITrackerModel(nn.Module):
         # Joining everything
         self.fc = nn.Sequential(
             # FC1
-            nn.Dropout(0.1),
+            nn.Dropout(0.4),
             # 384 FC-E1 (128) + FC-F2(64) + FC-FG2(128)
             nn.Linear(128 + 64 + 128, 128),
             # 128
@@ -182,7 +182,7 @@ class ITrackerModel(nn.Module):
 
             # FC2
             # 128
-            nn.Dropout(0.1),
+            nn.Dropout(0.4),
             nn.Linear(128, 2),
             # 2
         )

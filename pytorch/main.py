@@ -19,6 +19,7 @@ from utility_functions import cyclical_learning_rate
 from utility_functions.Criterion import MultiCriterion
 from ITrackerData import load_all_data
 from ITrackerModel import ITrackerModel
+from ModelZoo import DeepEyeModel
 from utility_functions.Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations, resize, set_print_policy, getPublishedPort
 
 try:
@@ -298,7 +299,7 @@ def initialize_visualization(args):
 
     # Visdom Client
     # Initialize the visualization environment open => http://localhost:8097
-    args.vis = Visualizations(args.name, active, server, port)
+    args.vis = Visualizations(args.name, active, server, port, args.local_rank[0])
     args.vis.resetAll()
 
 def initialize_model(args):
@@ -310,8 +311,14 @@ def initialize_model(args):
         print('')
 
     # Retrieve model
-    model = ITrackerModel(args.color_space, args.model_type).to(device=args.device)
+    # model = ITrackerModel(args.color_space, args.model_type).to(device=args.device)
+    model = DeepEyeModel().to(device=args.device)
+    # print(model)
+
     # GPU optimizations and modes
+    # Enable Heuristics: cuDNN will apply heuristics before training to figure 
+    # out the most performant algorithm for the model architecture and input. 
+    # This is especially helpful, if input shapes don't change during training.
     cudnn.benchmark = True
     if args.using_cuda:
         if args.mode == 'dp':
