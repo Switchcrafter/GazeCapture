@@ -14,6 +14,7 @@ from screeninfo import get_monitors
 from ITrackerData import normalize_image_transform
 from ITrackerModel import ITrackerModel
 from utility_functions.cam2screen import cam2screen
+from ModelZoo import DeepEyeModel
 
 from utility_functions.face_utilities import find_face_dlib, \
     rc_landmarksToRects, \
@@ -30,8 +31,10 @@ class InferenceEngine:
         self.color_space = color_space
         self.model_type = 'resNet'
         if self.mode == "torch":
-            self.modelSession = ITrackerModel(self.color_space, self.model_type).to(device='cpu')
-            saved = torch.load('best_checkpoint.pth.tar', map_location='cpu')
+            # self.modelSession = ITrackerModel(self.color_space, self.model_type).to(device='cpu')
+            # saved = torch.load('best_checkpoint.pth.tar', map_location='cpu')
+            self.modelSession = DeepEyeModel().to(device='cpu')
+            saved = torch.load('utility_functions/checkpoints/demo_0.85/best_checkpoint.pth.tar', map_location='cpu')
             self.modelSession.load_state_dict(saved['state_dict'])
             self.modelSession.eval()
         elif self.mode == "onnx":
