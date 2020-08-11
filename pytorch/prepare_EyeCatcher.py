@@ -27,7 +27,7 @@ def findCaptureSessionDirs(path):
     return session_paths
 
 def findCapturesInSession(path):
-    return [os.path.splitext(f)[0] for f in os.listdir(os.path.join(path, "frames") if f.endswith('.jpg')]
+    return [os.path.splitext(f)[0] for f in os.listdir(os.path.join(path, "frames")) if f.endswith('.jpg')]
 
 def loadJsonData(filename):
     with open(filename) as f:
