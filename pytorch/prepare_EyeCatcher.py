@@ -11,7 +11,6 @@ import numpy as np
 import dateutil.parser
 from utility_functions.Utilities import MultiProgressBar
 
-
 # Example path is Surface_Pro_4/someuser/00000
 def findCaptureSessionDirs(path):
     session_paths = []
@@ -27,19 +26,12 @@ def findCaptureSessionDirs(path):
 
     return session_paths
 
-
 def findCapturesInSession(path):
-    files = [os.path.splitext(f)[0] for f in os.listdir(os.path.join(path, "frames")) if f.endswith('.json') and not f == "session.json"]
-
-    return files
-
+    return [os.path.splitext(f)[0] for f in os.listdir(os.path.join(path, "frames") if f.endswith('.jpg')]
 
 def loadJsonData(filename):
     with open(filename) as f:
-        data = json.load(f)
-
-    return data
-
+        return json.load(f)
 
 def getScreenOrientation(capture_data):
     orientation = 0
@@ -82,14 +74,6 @@ def getScreenOrientation(capture_data):
 
     return orientation
 
-
-def getCaptureTimeString(capture_data):
-    sessiontime = dateutil.parser.parse(capture_data["SessionTimestamp"])
-    currenttime = dateutil.parser.parse(capture_data["Timestamp"])
-    timedelta = sessiontime - currenttime
-    return str(timedelta.total_seconds())
-
-
 def parse_arguments():
     parser = argparse.ArgumentParser(description='iTracker-pytorch-PrepareDataset.')
     parser.add_argument('--data_path',
@@ -101,7 +85,6 @@ def parse_arguments():
     args = parser.parse_args()
 
     return args
-
 
 def main():
     args = parse_arguments()
@@ -128,7 +111,6 @@ def main():
         captures = sorted(findCapturesInSession(os.path.join(data_directory, directory)), key=str)
         total_captures = len(captures)
 
-        deviceMetrics_data = loadJsonData(os.path.join(data_directory, directory, "deviceMetrics.json"))
         info_data = loadJsonData(os.path.join(data_directory, directory, "info.json"))
         screen_data = loadJsonData(os.path.join(data_directory, directory, "screen.json"))
 
@@ -270,7 +252,6 @@ def main():
                 dotinfo["Confidence"].append(confidence)
                 dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
 
-                # Convert image from PNG to JPG
                 frame_name = str(f"{capture_idx:05d}.jpg")
                 frames.append(frame_name)
 
@@ -296,6 +277,5 @@ def main():
             json.dump(faceInfoDict["LeftEye"], write_file)
         with open(os.path.join(output_path, 'dlibRightEye.json'), "w") as write_file:
             json.dump(faceInfoDict["RightEye"], write_file)
-
 
 main()
