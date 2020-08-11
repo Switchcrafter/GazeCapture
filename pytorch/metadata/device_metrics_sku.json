@@ -38,7 +38,7 @@
     "heightScreenInCm": 17.05,
     "ppi": 216,
     "VideoCaptureName": "Microsoft Camera Front"
-  }
+  },
   "Surface_Pro_1796": {
     "xCameraToScreenDisplacementInCm": 13.0,
     "yCameraToScreenDisplacementInCm": 0.6,

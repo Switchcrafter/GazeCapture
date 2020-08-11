@@ -79,9 +79,6 @@ def parse_arguments():
     parser.add_argument('--data_path',
                         help="Path to captured files.",
                         default=None)
-    parser.add_argument('--output_path',
-                        default=None,
-                        help="Where to write the output.")
     args = parser.parse_args()
 
     return args
@@ -90,14 +87,9 @@ def main():
     args = parse_arguments()
 
     data_directory = args.data_path
-    output_directory = args.output_path
 
     if data_directory is None:
         os.error("Error: must specify --data_path, like /data/EyeCapture/200407")
-        return
-
-    if output_directory is None:
-        os.error("Error: must specify --output_path")
         return
 
     directories = sorted(findCaptureSessionDirs(data_directory))
@@ -133,8 +125,7 @@ def main():
             "Time": []
         }
 
-        output_path = os.path.join(output_directory, f"{directory_idx:05d}")
-        output_frame_path = os.path.join(output_path, "frames")
+        output_path = os.path.join(data_directory, directory)
 
         faceInfoDict = newFaceInfoDict()
 
@@ -172,12 +163,8 @@ def main():
             "Orientation": []
         }
 
-        if not os.path.exists(output_directory):
-            os.mkdir(output_directory)
         if not os.path.exists(output_path):
             os.mkdir(output_path)
-        if not os.path.exists(output_frame_path):
-            os.mkdir(output_frame_path)
 
         screen_orientation = getScreenOrientation(screen_data)
 
@@ -254,8 +241,6 @@ def main():
 
                 frame_name = str(f"{capture_idx:05d}.jpg")
                 frames.append(frame_name)
-
-                shutil.copyfile(capture_jpg_path, os.path.join(output_frame_path, frame_name))
             else:
                 print(f"Error processing capture {capture}")
 
