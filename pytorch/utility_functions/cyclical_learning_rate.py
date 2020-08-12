@@ -24,17 +24,13 @@ def shape_function(shape_type, step_size):
         # for a given iteration, determines which cycle it belongs to
         # note that a cycle is 2x steps in the triangular waveform
         cycle = lambda it: math.floor(1 + it / (2 * step_size))
-
         shape = lambda it: max(0, (1 - abs(it / step_size - 2 * cycle(it) + 1)))
-
     return shape
 
 
 # Based on https://www.jeremyjordan.me/nn-learning-rate/
 def cyclical_lr(batch_count, shape, decay, min_lr=3e-4, max_lr=3e-3):
     epoch = lambda it: math.floor(it / batch_count)
-
     # Lambda function to calculate the LR
     lr_lambda = lambda it: min_lr + (max_lr - min_lr) * shape(it) * decay(epoch(it))
-
     return lr_lambda

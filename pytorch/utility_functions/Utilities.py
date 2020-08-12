@@ -325,7 +325,6 @@ class MultiProgressBar(Bar):
         end = '\r' if complete < total else '\n'
         print(self.label + self.left + code + self.right + time_info, end=end)
    
-
 def centered_text(infoString, marker='-', length=40):
     marker = marker * length
     index = (len(marker) - len(infoString)) // 2
@@ -334,8 +333,9 @@ def centered_text(infoString, marker='-', length=40):
 
 class Visualizations(object):
     """Plots to Visdom"""
-    def __init__(self, env_name='main', active=False, server="http://deepthoughts", port=8097):
+    def __init__(self, env_name='main', active=False, server="http://deepthoughts", port=8097, device_id=0):
         self.active = active
+        self.device_id = device_id
         if self.active:
             try:
                 self.viz = visdom.Visdom(server=server, port=port)
@@ -353,14 +353,15 @@ class Visualizations(object):
         self.closed_windows = []
 
     def getColor(self, split_name):
+        base_color = self.device_id * 10
         if split_name == "train" or split_name == "train_history" :
-            return np.array([[0, 0, 255],]) # Blue
+            return np.array([[base_color, base_color, 255],]) # Blue
         elif split_name == "val" or split_name == "val_history" :
-            return np.array([[255, 0, 0],]) # Red
+            return np.array([[255, base_color, base_color],]) # Red
         elif split_name == "test" or split_name == "test_history":
-            return np.array([[0, 255, 0],]) # Green
+            return np.array([[base_color, 255, base_color],]) # Green
         else:
-            return np.array([[0, 0, 0],]) # Black
+            return np.array([[base_color, base_color, base_color],]) # Black
 
     def getStyle(self, style='solid'):
         if style == "dash":
@@ -446,3 +447,13 @@ def getPublishedPort():
     #     print(c.attrs['NetworkSettings']['Ports']['8097/tcp'][0]['HostPort'])
     # print(container.attrs['NetworkSettings']['IPAddress'])
     return container.attrs['NetworkSettings']['Ports']['8097/tcp'][0]['HostPort']
+
+def mergeDataShards(data):
+    data_merge = {}
+    for i in range(len(data)):
+        for key, value in data[i].items():
+            if type(data_merge.get(key)) == type(None):
+                data_merge[key] = value
+            else:
+                data_merge[key] = torch.cat((data_merge[key], value), 0) 
+    return data_merge

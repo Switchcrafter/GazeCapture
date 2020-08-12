@@ -157,6 +157,7 @@ def getDirList(path, regexString):
     return sorted(folders)
 
 # used by prepareEyeCatcherTask
+# input path is to the folder containing data from various devices e.g. /data/Source/EyeCapture/200407/
 def getCaptureSessionDirList(path):
     session_paths = []
     devices = os.listdir(path)
@@ -886,11 +887,29 @@ def splitInfoTask(directory, directory_idx, progressbar):
 def syncTask(src):
     HOME = os.environ['HOME']
     USER = os.environ['USER']
-    dst = f"{USER}@deepthoughts:/nfs/deepstore/Reference/{USER}"
+    HOST = os.uname()[1]
+    dst = f"{USER}@{HOST}:/nfs/deepstore/Reference/{USER}"
     cmd = f"rsync -e 'ssh -i ~/.ssh/{USER}_deepthink_rsa' -rlptz --exclude=.git --exclude=.vscode {src} {dst}/"
     p = subprocess.Popen(cmd, shell=True)
     return
 
+def checkpointInfoTask(filepath):
+    if not os.path.isfile(filepath):
+        return None
+    saved = torch.load(filepath)
+
+    if saved:
+        epoch = saved.get('epoch')
+        # for backward compatibility
+        val_rms_errors = saved.get('RMSErrors', saved.get('val_RMSErrors')) 
+        test_rms_errors = saved.get('test_RMSErrors')
+        train_rms_errors = saved.get('train_RMSErrors')
+        best_rms_error = saved.get('best_RMSError')
+        best_rms_errors = saved.get('best_RMSErrors')
+        learning_rates = saved.get('learning_rates')
+        print('\'RMS_Errors\': {0},'.format(val_rms_errors))
+        print('\'Best_RMS_Errors\': {0}'.format(best_rms_errors))
+    return 
 
 # all tasks are handled here
 if __name__ == '__main__':
@@ -1027,6 +1046,10 @@ if __name__ == '__main__':
         dataLoader = ListLoader
     elif args.task == "syncTask":
         taskFunction = syncTask
+        taskData = args.input
+        dataLoader = None
+    elif args.task == "checkpointInfoTask":
+        taskFunction = checkpointInfoTask
         taskData = args.input
         dataLoader = None
 

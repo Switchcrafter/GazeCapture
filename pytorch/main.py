@@ -16,8 +16,10 @@ import torch.utils.data
 from utility_functions import argument_parser
 from utility_functions import checkpoint_manager
 from utility_functions import cyclical_learning_rate
+from utility_functions.Criterion import MultiCriterion
 from ITrackerData import load_all_data
 from ITrackerModel import ITrackerModel
+from ModelZoo import DeepEyeModel
 from utility_functions.Utilities import AverageMeter, ProgressBar, SamplingBar, Visualizations, resize, set_print_policy, getPublishedPort
 
 try:
@@ -65,7 +67,7 @@ def main():
         os.makedirs(args.output_path, exist_ok=True)
 
     val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model = initialize_model(args)
-
+    
     print('epoch = %d' % epoch)
 
     totalstart_time = datetime.now()
@@ -76,13 +78,15 @@ def main():
                              args.workers,
                              args.batch_size,
                              args.verbose,
+                             args.local_rank,
                              args.color_space,
                              args.data_loader,
-                             not args.disable_boost)
+                             not args.disable_boost,
+                             args.mode)
 
-    criterion, optimizer, scheduler = initialize_hyper_parameters(args, datasets, model)
+    criterion, optimizer, scheduler = initialize_hyper_parameters(args, epoch, datasets, model)
 
-    if args.mode == 'Train':
+    if args.phase == 'Train':
         # resize variables to epochs size
         resize(learning_rates, args.epochs)
         resize(best_RMSErrors, args.epochs)
@@ -123,9 +127,15 @@ def main():
                 
         # now start training from last best epoch
         for epoch in range(epoch, args.epochs + 1):
+            # TODO: Free up PyTorch Reserved Memory
+            # if torch.cuda.memory_reserved():
+            #     print(torch.cuda.memory_summary())
+            #     torch.cuda.clear_memory_allocated()
+            #     torch.cuda.empty_cache()
+
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, args.epochs))
             start_time = datetime.now()
-            learning_rates[epoch - 1] = scheduler.get_lr()
+            learning_rates[epoch - 1] = scheduler.get_lr()[0]
 
             args.vis.reset()
             # train for one epoch
@@ -172,8 +182,8 @@ def main():
                                                 args.dataset_limit,
                                                 args.verbose,
                                                 args)
-                
-
+            
+            
             # remember best RMSError and save checkpoint
             is_best = val_RMSError < best_RMSError
             best_RMSError = min(val_RMSError, best_RMSError)
@@ -183,7 +193,7 @@ def main():
             train_RMSErrors[epoch - 1] = train_RMSError
             test_RMSErrors[epoch - 1] = test_RMSError
             
-            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, scheduler.get_lr())
+            args.vis.plotAll('LearningRate', 'lr', "LearningRate (Overall)", epoch, learning_rates[epoch - 1])
             args.vis.plotAll('BestRMSError', 'val', "Best RMSError (Overall)", epoch, best_RMSError)
             args.vis.plotAll('RMSError', 'train', "RMSError (Overall)", epoch, train_RMSError)
             args.vis.plotAll('RMSError', 'val', "RMSError (Overall)", epoch, val_RMSError)
@@ -224,7 +234,7 @@ def main():
             print('\'RMS_Errors\': {0},'.format(val_RMSErrors))
             print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
             print('')
-    elif args.mode == 'Test':
+    elif args.phase == 'Test':
         # Quick test
         start_time = datetime.now()
         test_MSELoss, test_RMSError = evaluate(datasets['test'],
@@ -240,7 +250,7 @@ def main():
         print('')
         print('Testing MSELoss: %.5f, RMSError: %.5f' % (test_MSELoss, test_RMSError))
         print('Testing Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-    elif args.mode == 'Validate':
+    elif args.phase == 'Validate':
         start_time = datetime.now()
         val_MSELoss, val_RMSError = evaluate(datasets['val'],
                                                model,
@@ -255,7 +265,7 @@ def main():
         print('')  # print blank line after loading data
         print('Validation MSELoss: %.5f, RMSError: %.5f' % (val_MSELoss, val_RMSError))
         print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
-    elif args.mode == 'ExportONNX':
+    elif args.phase == 'ExportONNX':
         # export the model for use in other frameworks
         export_onnx_model(model, args.device, args.verbose)
 
@@ -265,12 +275,11 @@ def main():
 def initialize_visualization(args):
     args.port = None
     port = 8097
-    server = ""
+    server = "http://localhost"
     if args.visdom == "":
         active = False
     elif args.visdom == "auto":
         active = True
-        server = "http://localhost"
         # Visdom Server: start the visdom server on a separate process so it doesn't block current process
         try:
             FNULL = open(os.devnull, 'w')
@@ -290,7 +299,7 @@ def initialize_visualization(args):
 
     # Visdom Client
     # Initialize the visualization environment open => http://localhost:8097
-    args.vis = Visualizations(args.name, active, server, port)
+    args.vis = Visualizations(args.name, active, server, port, args.local_rank[0])
     args.vis.resetAll()
 
 def initialize_model(args):
@@ -302,14 +311,22 @@ def initialize_model(args):
         print('')
 
     # Retrieve model
-    model = ITrackerModel(args.color_space, args.model_type).to(device=args.device)
+    if args.model_type == "deepEyeNet":
+        model = DeepEyeModel().to(device=args.device)
+    else:
+        model = ITrackerModel(args.color_space, args.model_type).to(device=args.device)
+    # print(model)
+
     # GPU optimizations and modes
+    # Enable Heuristics: cuDNN will apply heuristics before training to figure 
+    # out the most performant algorithm for the model architecture and input. 
+    # This is especially helpful, if input shapes don't change during training.
     cudnn.benchmark = True
     if args.using_cuda:
         if args.mode == 'dp':
             print('Using DataParallel Backend')
             if not args.disable_sync:
-                from sync_batchnorm import convert_model
+                from utility_functions.sync_batchnorm import convert_model
                 # Convert batchNorm layers into synchronized batchNorm
                 model = convert_model(model)
             model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=args.device)
@@ -317,7 +334,7 @@ def initialize_model(args):
             # Single-Process Multiple-GPU: You'll observe all gpus running a single process (processes with same PID)
             print('Using DistributedDataParallel Backend - Single-Process Multi-GPU')
             torch.distributed.init_process_group(backend="nccl")
-            model = torch.nn.parallel.DistributedDataParallel(model)
+            model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)
         elif args.mode == 'ddp2':
             # Multi-Process Single-GPU : You'll observe multiple gpus running different processes (different PIDs)
             # OMP_NUM_THREADS = nb_cpu_threads / nproc_per_node
@@ -325,8 +342,9 @@ def initialize_model(args):
             if not args.disable_sync:
                 # Convert batchNorm layers into synchronized batchNorm
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=args.local_rank,
-                                                              output_device=args.local_rank[0])
+            model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True,
+                                                            device_ids=args.local_rank,
+                                                            output_device=args.local_rank[0])
             ###### code after this place runs in their own process #####
             set_print_policy(args.master, torch.distributed.get_rank())
             print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
@@ -340,34 +358,49 @@ def initialize_model(args):
                                                                                                                  model)
     return val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model
 
-
-def initialize_hyper_parameters(args, datasets, model):
+def initialize_hyper_parameters(args, epoch, datasets, model):
     criterion = nn.MSELoss(reduction='mean').to(device=args.device)
     # for multi criteria experiments use criteria and weights as list below
-    # criteria = [nn.MSELoss]
-    # weights = [1.0]
+    # criteria = [nn.MSELoss, nn.L1Loss]
+    # weights = [0.5, 0.5]
     # criterion = MultiCriterion(criteria, weights, reduction='mean').to(device=args.device)
     if args.optimizer =="adam":
-        optimizer = torch.optim.Adam(model.parameters(), args.start_lr,
+        optimizer = torch.optim.Adam(model.parameters(), args.max_lr,
                                     weight_decay=WEIGHT_DECAY)
     else:
-        optimizer = torch.optim.SGD(model.parameters(), args.start_lr,
+        optimizer = torch.optim.SGD(model.parameters(), args.max_lr,
                                     momentum=MOMENTUM,
                                     weight_decay=WEIGHT_DECAY)
+    # Keep it ready for warm start
+    optimizer.param_groups[0]['initial_lr'] = args.max_lr
 
-    batch_count = math.ceil(datasets['train'].size / args.batch_size)
-
+    # lr_scheduler overrides the lr in optimizer completely and controls it 
+    if args.dataset_limit > 0:
+        batch_count = args.dataset_limit
+    else:
+        batch_count = math.ceil(datasets['train'].size / args.batch_size)
     step_size = args.epochs_per_step * batch_count
-    clr = cyclical_learning_rate.cyclical_lr(batch_count,
-                                             shape=cyclical_learning_rate.shape_function(args.shape_type,
-                                                                                         step_size),
-                                             decay=cyclical_learning_rate.decay_function(args.decay_type,
-                                                                                         args.epochs_per_step),
-                                             min_lr=args.end_lr / args.lr_factor,
-                                             max_lr=args.end_lr)
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr])
-    return criterion, optimizer, scheduler
+    num_batches_completed = (epoch-1) * batch_count
 
+    decay = cyclical_learning_rate.decay_function(args.decay_type, 
+                args.epochs_per_step)
+    if args.clr == "custom":
+        # Custom implementation
+        shape = cyclical_learning_rate.shape_function(args.shape_type, step_size)
+        clr = cyclical_learning_rate.cyclical_lr(batch_count, shape=shape, 
+                decay=decay, min_lr=args.base_lr, max_lr=args.max_lr)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [clr], 
+                        last_epoch = num_batches_completed)
+    else:
+        # Pytorch's in-built method
+        # mode (str) – One of {triangular, triangular2, exp_range}
+        cycle_momentum = True if args.optimizer == 'sgd' else False
+        scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, args.base_lr, 
+                        args.max_lr, mode='triangular', scale_mode='cycle', 
+                        scale_fn=decay, step_size_up=step_size, 
+                        cycle_momentum=cycle_momentum, 
+                        last_epoch=num_batches_completed)
+    return criterion, optimizer, scheduler
 
 # Fast Gradient Sign Attack (FGSA)
 def adversarial_attack(image, data_grad, epsilon=0.1):
@@ -380,13 +413,11 @@ def adversarial_attack(image, data_grad, epsilon=0.1):
     # Return the perturbed image
     return perturbed_image
 
-
 def euclidean_batch_error(output, target):
     """ For a batch of output and target returns corresponding batch of euclidean errors
     """
     # Batch Euclidean Distance sqrt(dx^2 + dy^2)
     return torch.sqrt(torch.sum(torch.pow(output - target, 2), 1))
-
 
 def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, device, dataset_limit=None, verbose=False,
           args=None):
@@ -424,29 +455,26 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
             if not verbose:
                 args.sampling_bar.display(args.multinomial_weights)
         else:  # dali modes
-            # todo: HSM support for DALI
+            # TODO: HSM support for DALI
             loader = dataset.loader
     else:
         loader = dataset.loader
 
-    lrs = []
-
     # load data samples and train
-    # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(loader):
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "cpu":
-            (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) = data
+            (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) = data
         else:  # dali modes
-            if args.data_loader == "dali_gpu_all":
-                # TODO test with dp mode
-                batch_data = data[int(args.local_rank[0])]
-            else:  # dali_gpu, dali_cpu
-                batch_data = data[0]
-            row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"], \
+            batch_data = data[0]
+            # batch_data = data
+            row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"], \
                                                                           batch_data["imEyeL"], batch_data["imEyeR"], \
-                                                                          batch_data["faceGrid"], \
+                                                                          batch_data["imFaceGrid"], \
                                                                           batch_data["gaze"], batch_data["frame"], \
                                                                           batch_data["indices"]
+        # # XXX: sharding debug code
+        # rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
+        # print(rank, torch.cuda.current_device(), indices.data.cpu().numpy()[0][0], len(indices), row.data.cpu().numpy()[0][0], len(row)) 
 
         batchNum = i + 1
         actual_batch_size = imFace.size(0)
@@ -457,17 +485,17 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
         imFace = imFace.to(device=device)
         imEyeL = imEyeL.to(device=device)
         imEyeR = imEyeR.to(device=device)
-        faceGrid = faceGrid.to(device=device)
+        imFaceGrid = imFaceGrid.to(device=device)
         gaze = gaze.to(device=device)
 
         imFace = torch.autograd.Variable(imFace, requires_grad=True)
         imEyeL = torch.autograd.Variable(imEyeL, requires_grad=True)
         imEyeR = torch.autograd.Variable(imEyeR, requires_grad=True)
-        faceGrid = torch.autograd.Variable(faceGrid, requires_grad=True)
+        imFaceGrid = torch.autograd.Variable(imFaceGrid, requires_grad=True)
         gaze = torch.autograd.Variable(gaze, requires_grad=False)
 
         # compute output
-        output = model(imFace, imEyeL, imEyeR, faceGrid)
+        output = model(imFace, imEyeL, imEyeR, imFaceGrid)
 
         loss = criterion(output, gaze)
         error = euclidean_batch_error(output, gaze)
@@ -496,16 +524,16 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
             imFace_grad = imFace.grad.data
             imEyeL_grad = imEyeL.grad.data
             imEyeR_grad = imEyeR.grad.data
-            faceGrid_grad = faceGrid.grad.data
+            imFaceGrid_grad = imFaceGrid.grad.data
 
             # Generate perturbed input for Adversarial Attack
             perturbed_imFace = adversarial_attack(imFace, imFace_grad)
             perturbed_imEyeL = adversarial_attack(imEyeL, imEyeL_grad)
             perturbed_imEyeR = adversarial_attack(imEyeR, imEyeR_grad)
-            perturbed_faceGrid = adversarial_attack(faceGrid, faceGrid_grad)
+            perturbed_imFaceGrid = adversarial_attack(imFaceGrid, imFaceGrid_grad)
 
             # Regenerate output for the perturbed input
-            output_adv = model(perturbed_imFace, perturbed_imEyeL, perturbed_imEyeR, perturbed_faceGrid)
+            output_adv = model(perturbed_imFace, perturbed_imEyeL, perturbed_imEyeR, perturbed_imFaceGrid)
             loss_adv = criterion(output_adv, gaze)
 
             # concatenate both real and adversarial loss functions
@@ -521,8 +549,8 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
 
         # Update LR
         scheduler.step()
-        lr_step = optimizer.state_dict()["param_groups"][0]["lr"]
-        lrs.append(lr_step)
+        # lr_step = optimizer.state_dict()["param_groups"][0]["lr"]
+        # lrs.append(lr_step)
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -548,8 +576,6 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
 
         if dataset_limit and dataset_limit <= batchNum:
             break
-
-    # print('lrs={}'.format(lrs))
 
     return MSELosses.avg, RMSErrors.avg
 
@@ -579,21 +605,17 @@ def evaluate(dataset,
 
     results = []
 
-    # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(dataset.loader):
+    # for i, (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) in enumerate(dataset.loader):
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "cpu":
-            (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) = data
+            (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) = data
         else:  # dali modes
-            if args.data_loader == "dali_gpu_all":
-                # TODO test with dp mode
-                batch_data = data[int(args.local_rank[0])]
-            else:  # dali_gpu, #dali_cpu
-                batch_data = data[0]
-            row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices = batch_data["row"], \
+            batch_data = data[0]
+            row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices = batch_data["row"], \
                                                                           batch_data["imFace"], \
                                                                           batch_data["imEyeL"], \
                                                                           batch_data["imEyeR"], \
-                                                                          batch_data["faceGrid"], \
+                                                                          batch_data["imFaceGrid"], \
                                                                           batch_data["gaze"], \
                                                                           batch_data["frame"], \
                                                                           batch_data["indices"]
@@ -607,12 +629,12 @@ def evaluate(dataset,
         imFace = imFace.to(device=device)
         imEyeL = imEyeL.to(device=device)
         imEyeR = imEyeR.to(device=device)
-        faceGrid = faceGrid.to(device=device)
+        imFaceGrid = imFaceGrid.to(device=device)
         gaze = gaze.to(device=device)
 
         # compute output
         with torch.no_grad():
-            output = model(imFace, imEyeL, imEyeR, faceGrid)
+            output = model(imFace, imEyeL, imEyeR, imFaceGrid)
 
         # Combine the tensor results together into a collated list so that we have the gazePoint and gazePrediction
         # for each frame
@@ -675,11 +697,12 @@ def export_onnx_model(model, device, verbose):
     imFace = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
     imEyeL = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
     imEyeR = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
-    faceGrid = torch.zeros((batch_size, face_grid_size)).to(device=device).float()
+    imFaceGrid = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
+    ## faceGrid = torch.zeros((batch_size, face_grid_size)).to(device=device).float()
 
-    dummy_in = (imFace, imEyeL, imEyeR, faceGrid)
+    dummy_in = (imFace, imEyeL, imEyeR, imFaceGrid)
 
-    in_names = ["face", "eyesLeft", "eyesRight", "faceGrid"]
+    in_names = ["face", "eyesLeft", "eyesRight", "imFaceGrid"]
     out_names = ["data"]
 
     try:

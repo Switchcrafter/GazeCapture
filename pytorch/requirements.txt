@@ -1,12 +1,8 @@
-dlib
-visdom
-numpy>=1.17.0
-Pillow>=6.1.0
-scipy>=1.3.0
-six>=1.12.0
-torch>=1.1.0
-torchvision>=0.3.0
+torch 
+torchvision
+scipy
 jsonpatch
+visdom
 torchtoolbox
 matplotlib
 imutils
@@ -14,5 +10,8 @@ scikit-image
 --extra-index-url https://developer.download.nvidia.com/compute/redist/ nvidia-dali-cuda100
 opencv-python
 cmake
+dlib
+imutils
+scikit-image
 onnxruntime
-pandas
+docker
