@@ -34,7 +34,7 @@ class InferenceEngine:
             # self.modelSession = ITrackerModel(self.color_space, self.model_type).to(device='cpu')
             # saved = torch.load('best_checkpoint.pth.tar', map_location='cpu')
             self.modelSession = DeepEyeModel().to(device='cpu')
-            saved = torch.load('utility_functions/checkpoints/demo_0.85/best_checkpoint.pth.tar', map_location='cpu')
+            saved = torch.load('utility_functions/demo_models/demo_0.85/best_checkpoint.pth.tar', map_location='cpu')
             self.modelSession.load_state_dict(saved['state_dict'])
             self.modelSession.eval()
         elif self.mode == "onnx":
