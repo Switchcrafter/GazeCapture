@@ -36,12 +36,8 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='iTracker-pytorch-PrepareDataset.')
-    parser.add_argument('--dataset_path', help="Path to extracted files. It should have folders called '%%05d' in it.",
+    parser.add_argument('--dataset_path', help="Path to data directories.",
                         default=None)
-    parser.add_argument('--dlib_path', default=None,
-                        help="Path to dlib processed json files.")
-    parser.add_argument('--output_path', default=None,
-                        help="Where to write the output. Can be the same as dataset_path if you wish (=default).")
     parser.add_argument('--ignore_reference', default=False, action='store_true',
                         help="Set to true when parsing non-MIT data. Will ignore all reference metadata")
     parser.add_argument('--use_reference_split', default=False, action='store_true',
@@ -54,9 +50,6 @@ def parse_arguments():
 def main():
     args = parse_arguments()
 
-    if args.output_path is None:
-        args.output_path = args.dataset_path
-
     if args.dataset_path is None or not os.path.isdir(args.dataset_path):
         raise RuntimeError('No such dataset folder %s!' % args.dataset_path)
 
@@ -65,12 +58,17 @@ def main():
         reference_data_split = readJson('./reference_data_split.json')
         args.ignore_reference = True
 
-    preparePath(args.output_path)
-
     # list recordings
-    recordings = os.listdir(args.dataset_path)
-    recordings = np.array(recordings, np.object)
-    recordings = recordings[[os.path.isdir(os.path.join(args.dataset_path, r)) for r in recordings]]
+    # TODO: Modify to do a recursive search, finding any subdirectory which contains a file "dotInfo.json"
+    #   Store the recording directory path for later use
+    recordingDirs = []
+    for (root, dirs, files) in os.walk(args.dataset_path):
+        if (os.path.isfile(os.path.join(root, "dotInfo.json"))):
+            recordingDirs.append(root)
+
+    # recordings = os.listdir(args.dataset_path)
+    recordings = np.array(recordingDirs, np.object)
+    recordings = recordings[[os.path.isdir(r) for r in recordings]]
     recordings.sort()
 
     # Output structure
@@ -90,60 +88,50 @@ def main():
     multi_progress_bar = MultiProgressBar(max_value=total_recordings, boundary=True)
 
     for recording_idx, recording in enumerate(recordings):
-        recDir = os.path.join(args.dataset_path, recording)
-        recDirOut = os.path.join(args.output_path, recording)
 
-        if args.dlib_path is None:
-            # Read JSONs
-            appleFace = readJson(os.path.join(recDir, 'appleFace.json'))
-            if appleFace is None:
-                continue
-            appleLeftEye = readJson(os.path.join(recDir, 'appleLeftEye.json'))
-            if appleLeftEye is None:
-                continue
-            appleRightEye = readJson(os.path.join(recDir, 'appleRightEye.json'))
-            if appleRightEye is None:
-                continue
-        else:
-            dlibDir = os.path.join(args.dlib_path, recording)
+        print("Processing %s" % recording)
 
-            # Read JSONs
-            appleFace = readJson(os.path.join(dlibDir, 'dlibFace.json'))
-            if appleFace is None:
-                continue
-            appleLeftEye = readJson(os.path.join(dlibDir, 'dlibLeftEye.json'))
-            if appleLeftEye is None:
-                continue
-            appleRightEye = readJson(os.path.join(dlibDir, 'dlibRightEye.json'))
-            if appleRightEye is None:
-                continue
-        dotInfo = readJson(os.path.join(recDir, 'dotInfo.json'))
+        appleFace = readJson(os.path.join(recording, 'dlibFace.json'))
+        if appleFace is None:
+            logError('Skipping: Could not read dlibFace for recording %s!' % recording)
+            continue
+        appleLeftEye = readJson(os.path.join(recording, 'dlibLeftEye.json'))
+        if appleLeftEye is None:
+            logError('Skipping: Could not read dlibLeftEye for recording %s!' % recording)
+            continue
+        appleRightEye = readJson(os.path.join(recording, 'dlibRightEye.json'))
+        if appleRightEye is None:
+            logError('Skipping: Could not read dlibRightEye for recording %s!' % recording)
+            continue
+        dotInfo = readJson(os.path.join(recording, 'dotInfo.json'))
         if dotInfo is None:
+            logError('Skipping: Could not read dotInfo for recording %s!' % recording)
             continue
-        faceGrid = readJson(os.path.join(recDir, 'faceGrid.json'))
+        faceGrid = readJson(os.path.join(recording, 'faceGrid.json'))
         if faceGrid is None:
+            logError('Skipping: Could not read faceGrid for recording %s!' % recording)
             continue
-        frames = readJson(os.path.join(recDir, 'frames.json'))
+        frames = readJson(os.path.join(recording, 'frames.json'))
         if frames is None:
+            logError('Skipping: Could not read frames for recording %s!' % recording)
             continue
-        info = readJson(os.path.join(recDir, 'info.json'))
+        info = readJson(os.path.join(recording, 'info.json'))
         if info is None:
+            logError('Skipping: Could not read info for recording %s!' % recording)
             continue
-        # screen = readJson(os.path.join(recDir, 'screen.json'))
-        # if screen is None:
-        #     continue
 
-        facePath = preparePath(os.path.join(recDirOut, 'appleFace'))
-        leftEyePath = preparePath(os.path.join(recDirOut, 'appleLeftEye'))
-        rightEyePath = preparePath(os.path.join(recDirOut, 'appleRightEye'))
+        facePath = preparePath(os.path.join(recording, 'appleFace'))
+        leftEyePath = preparePath(os.path.join(recording, 'appleLeftEye'))
+        rightEyePath = preparePath(os.path.join(recording, 'appleRightEye'))
 
         # Preprocess
         allValid = np.logical_and(np.logical_and(appleFace['IsValid'], appleLeftEye['IsValid']),
                                   np.logical_and(appleRightEye['IsValid'], faceGrid['IsValid']))
         if not np.any(allValid):
+            logError('Skipping: Invalid face or eyes for recording %s!' % recording)
             continue
 
-        frames = np.array([int(re.match('(\d{5})\.jpg$', x).group(1)) for x in frames])
+        frames = np.array([re.match('(.+)\.jpg$', x).group(1) for x in frames])
 
         bboxFromJson = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H']), axis=1).astype(int)
         faceBbox = bboxFromJson(appleFace) + [-1, -1, 1, 1]  # for compatibility with matlab code
@@ -158,19 +146,18 @@ def main():
         multi_progress_bar.addSubProcess(index=recording_idx, max_value=total_frames)
 
         for frame_idx, frame in enumerate(frames):
-            # Can we use it?
-            if not allValid[frame_idx]:
-                continue
 
             # Load image
-            imgFile = os.path.join(recDir, 'frames', '%05d.jpg' % frame)
+            imgFile = os.path.join(recording, 'frames', '%s.jpg' % frame)
             if not os.path.isfile(imgFile):
-                logError('Warning: Could not read image file %s!' % imgFile)
+                logError('Warning: Could not find image file %s!' % imgFile)
                 continue
+
             img = Image.open(imgFile)
             if img is None:
-                logError('Warning: Could not read image file %s!' % imgFile)
+                logError('Warning: Could not open image file %s!' % imgFile)
                 continue
+
             img = np.array(img.convert('RGB'))
 
             # Crop images
@@ -179,12 +166,12 @@ def main():
             imEyeR = cropImage(img, rightEyeBbox[frame_idx, :])
 
             # Save images
-            Image.fromarray(imFace).save(os.path.join(facePath, '%05d.jpg' % frame), quality=95)
-            Image.fromarray(imEyeL).save(os.path.join(leftEyePath, '%05d.jpg' % frame), quality=95)
-            Image.fromarray(imEyeR).save(os.path.join(rightEyePath, '%05d.jpg' % frame), quality=95)
+            Image.fromarray(imFace).save(os.path.join(facePath, '%s.jpg' % frame), quality=95)
+            Image.fromarray(imEyeL).save(os.path.join(leftEyePath, '%s.jpg' % frame), quality=95)
+            Image.fromarray(imEyeR).save(os.path.join(rightEyePath, '%s.jpg' % frame), quality=95)
 
             # Collect metadata
-            meta['labelRecNum'] += [int(recording)]
+            meta['labelRecNum'] += [recording]
             meta['frameIndex'] += [frame]
             meta['labelDotXCam'] += [dotInfo['XCam'][frame_idx]]
             meta['labelDotYCam'] += [dotInfo['YCam'][frame_idx]]
@@ -198,8 +185,8 @@ def main():
             multi_progress_bar.update(index=recording_idx, value=frame_idx+1)
 
     # Integrate
-    meta['labelRecNum'] = np.stack(meta['labelRecNum'], axis=0).astype(np.int16)
-    meta['frameIndex'] = np.stack(meta['frameIndex'], axis=0).astype(np.int32)
+    meta['labelRecNum'] = np.stack(meta['labelRecNum'], axis=0)
+    meta['frameIndex'] = np.stack(meta['frameIndex'], axis=0)
     meta['labelDotXCam'] = np.stack(meta['labelDotXCam'], axis=0)
     meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
     meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
@@ -249,7 +236,7 @@ def main():
         meta['labelTest'][validMappingMask] = reference['labelTest'][mToR[validMappingMask]]
 
     # Write out metadata
-    metaFile = os.path.join(args.output_path, 'metadata.mat')
+    metaFile = os.path.join(args.dataset_path, 'metadata.mat')
     print('Writing out the metadata.mat to %s...' % metaFile)
     sio.savemat(metaFile, meta)
 
