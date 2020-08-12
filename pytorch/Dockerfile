@@ -3,24 +3,14 @@ FROM python:3.7
 
 Maintainer MSREnable
 
-RUN pip3 install torch torchvision
-RUN pip3 install scipy
-RUN pip3 install jsonpatch
-RUN pip3 install visdom
-RUN pip3 install torchtoolbox
-RUN pip3 install --extra-index-url https://developer.download.nvidia.com/compute/redist/cuda/10.0 nvidia-dali
-# For local machine try
-# RUN pip3 install --index-url https://developer.download.nvidia.com/compute/redist/cuda/10.0 nvidia-dali
-# Alternatively download a wheel from http://developer.download.nvidia.com/compute/redist/cuda/10.0/nvidia-dali/
-# install as pip3 install <wheel>.whl
-RUN pip3 install matplotlib
-RUN pip3 install opencv-python
-RUN pip3 install cmake
-RUN pip3 install dlib
-RUN pip3 install imutils
-RUN pip3 install scikit-image
-RUN pip3 install onnxruntime
-RUN pip3 install docker
+RUN pip3 install --upgrade pip
+
+# # Install dlib before all other requirements
+# RUN pip3 install cmake
+# RUN pip3 install dlib
+
+COPY ./requirements.txt ./requirements.txt
+RUN pip3 install -r requirements.txt
 
 EXPOSE 8097
 
@@ -34,62 +24,52 @@ ENV NVIDIA_DRIVER_CAPABILITIES all
 # Build the container
 # sudo docker build -t gazepy .
 
-# Command to execute this container (256, Mem 57%, @940/s)
-# sudo docker run --ipc=host --runtime=nvidia --gpus '"device=1,3"' -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --hsm --batch_size 256 --local_rank 1
-# sudo docker run --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --hsm --batch_size 256 --local_rank 1
 
-# DataParallel mode - Unbalanced, first node is masterNode [--local_rank 2 0 1 3] (87%-46% Memory skew, @890/s)
-# sudo docker run --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --hsm --batch_size 256 --mode 'dp' --local_rank 2 0 1 3
+# Example command:
+# sudo docker run -P --runtime=nvidia --ipc=host --gpus all -v /data:/data -v $(pwd):$(pwd) -v /var/run/docker.sock:/var/run/docker.sock -w $(pwd) --rm -it gazepy main.py --local_rank 1 --batch_size 256 --mode 'none' --data_loader 'cpu' --data_path '/data/derived/EyeCapture-rc-prepped/' --visdom "http://deepthoughts" --name "ExperimentTagHere" --base_lr 1E-7 --max_lr 1E-2 --epochs 30 --color_space 'YCbCr'
 
-# DataParallel mode 2 (batchSync) - Unbalanced [--local_rank 2 0 1 3] (93%-46% Memory skew, @870/s)
-# sudo docker run --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --hsm --batch_size 256 --mode 'dp2' --local_rank 2 0 1 3
+# Fixed portion of the command:
+# sudo docker run -P --runtime=nvidia --ipc=host --gpus all -v /data:/data -v $(pwd):$(pwd) -v /var/run/docker.sock:/var/run/docker.sock -w $(pwd) --rm -it gazepy main.py
 
-# Distributed Data Parallel 1 (Single process, multi-gpu) - Unbalanced (256, 95%-49% Memory skew, @870/s)
-# sudo docker run --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=1 main.py --hsm --batch_size 256 --mode 'ddp1'
+# Frequently used tags:
+# --local_rank  : gpu id {0-3}
+# --batch_size  : batch size (e.g. 64, 100, 128, 256) 
+# --mode        : data parellization mode {'none', 'dp', 'ddp1', 'ddp2'} 
+# --data_loader : data loding {'cpu', 'dali_cpu', 'dali_gpu'} 
+# --data_path   : directory path to the data (e.g. '/data/derived/EyeCapture-rc-prepped/')
+# --base_lr     : lower bound on learning rate (e.g. 1E-7) 
+# --max_lr      : upper bound on learning rate (e.g. 1E-2)
+# --reset      : starts from a new untrained model 
 
-# Distributed Data Parallel 2 - (Multi process, single gpu) - Balanced (256, 57%-57% Memory skew, 4@320/s, 3@433/s, 2@660, 1@970)
-# sudo docker run --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --mode 'ddp2' --hsm --batch_size 256
-
-# Selective GPU on DDP
-# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus '"device=1,2,3"' -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=3 main.py --mode 'ddp2' --hsm --batch_size 256
-
-# Visdom visualizations
-# SingleGPU: sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=1 main.py --hsm --batch_size 128
-# MultiGPU: sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --hsm --batch_size 256
-
-
-# B64, W32, xPin: 1@470, 2@312, 3@254, 4@185
-# B128, W32, xPin: 1@726,
-# B256, W32, xPin: 1@740,
+# Optional tags:
+# --color_space : colorspace (e.g. 'RGB, 'YCbCr')
+# --epochs     : maximum number of training epochs (e.g. 30) 
+# --name       : experiment tag (e.g. "Resnet-dlib-rc") 
+# --visdom     : visdom server path (e.g. "http://deepthoughts") 
+# --force_test : run test after train and validation cycles
 
 
-# cpu
-# (all 4 GPUs, ) [POTENTIALLY CRASHES THE GPU 0 WITH Xid 79]
-# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --batch_size 256 --mode 'ddp2' --data_loader 'cpu'
-# cpu: all 4 GPUs, 440 samples/sec
-# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --batch_size 256 --mode 'dp' --local_rank 0 1 2 3 --data_loader 'dali_cpu'
+# [Preffered] Illustration1: cpu dataloader, no parallelization, gpu0
+# sudo docker run -P --runtime=nvidia --ipc=host --gpus all -v /data:/data -v $(pwd):$(pwd) -v /var/run/docker.sock:/var/run/docker.sock -w $(pwd) --rm -it gazepy main.py --local_rank 0 --batch_size 50 --mode 'none' --data_loader 'cpu' --data_path '/data/derived/EyeCapture-rc-prepped/' --name "resnet-dlib-rc" --base_lr 1E-5 --max_lr 1E-2 --epochs 40 --color_space 'YCbCr' --reset
 
 
-# dali_gpu
-# ddp2: (3 GPUs, 4th for data-loading, 3@560=1680 samples/sec)
-# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=3 main.py --batch_size 70 --mode 'ddp2' --data_loader 'dali_gpu'
-# dp: 3 GPUs, 740 samples/sec
-# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --batch_size 128 --mode 'dp' --local_rank 0 1 2 --data_loader 'dali_gpu'
 
-# dali_gpu_all
-# (all 4 GPUs, 4@323=1292 samples/sec)
-# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --batch_size 56 --mode 'ddp2' --data_loader 'dali_gpu_all'
-# dp: Invalid mode
+# Illustration2: cpu dataloader, dp parallelization, gpu0,gpu1,gpu3 where gpu-0 is leader node and gpu1 and gpu3 are followers.
+# copies of the model with the batchsize 40 will be distributed across the three nodes (40 samples each node) automatically by dp implementation
+# sudo docker run -P --runtime=nvidia --ipc=host --gpus all -v /data:/data -v $(pwd):$(pwd) -v /var/run/docker.sock:/var/run/docker.sock -w $(pwd) --rm -it gazepy main.py --mode 'dp' --local_rank 0 1 3 --batch_size 40 --data_loader 'cpu' --data_path '/data/derived/EyeCapture-rc-prepped/' --name "resnet-dlib-rc" --base_lr 1E-5 --max_lr 1E-2 --epochs 30 --color_space 'YCbCr' --reset
 
 
-# dali_cpu
-# ddp2: (all 4 GPUs, 4@550=2200 samples/sec) ** MOST OPTIMAL MODE **
-# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --batch_size 256 --mode 'ddp2' --data_loader 'dali_cpu'
-# dp: (all 4 GPUs, 870 samples/sec)
-# sudo docker run -p 8097:8097 --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -w $(pwd) --rm -it gazepy main.py --batch_size 256 --mode 'dp' --local_rank 0 1 2 3 --data_loader 'dali_cpu'
 
-# iTracker.py
-# sudo docker run --ipc=host --runtime=nvidia --gpus '"device=1"' -v /data:/data -v `pwd`:`pwd` -w `pwd` --rm -it gazepy iTracker.py
+# Illustration3: cpu dataloader, ddp1 parallelization, runs on all available gpus by default
+# sudo docker run -P --runtime=nvidia --ipc=host --gpus all -v /data:/data -v $(pwd):$(pwd) -v /var/run/docker.sock:/var/run/docker.sock -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=1 main.py --mode 'ddp1' --data_loader 'cpu' --batch_size 40 --data_path '/data/derived/EyeCapture-rc-prepped/' --reset
 
-# Port binding through introspection
-# sudo docker run -P --ipc=host --runtime=nvidia --gpus all -v /data:/data -v $(pwd):$(pwd) -v /var/run/docker.sock:/var/run/docker.sock -w $(pwd) --rm -it gazepy  main.py --batch_size 64 --local_rank 2 --mode 'none' --data_loader 'cpu' --data_path '/data/EyeCapture/EyeCaptures-rc-prepped' --visdom --reset --force_test
+# To train on selective GPUs:
+# sudo docker run -P --runtime=nvidia --ipc=host --gpus '"device=1,2,3"' -v /data:/data -v $(pwd):$(pwd) -v /var/run/docker.sock:/var/run/docker.sock -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=1 main.py --mode 'ddp1' --data_loader 'cpu' --batch_size 40 --data_path '/data/derived/EyeCapture-rc-prepped/' --reset
+
+
+
+# Illustration3: dali_cpu dataloader, ddp2 parallelization, world size 4
+# sudo docker run -P --runtime=nvidia --ipc=host --gpus all -v /data:/data -v $(pwd):$(pwd) -v /var/run/docker.sock:/var/run/docker.sock -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=4 main.py --batch_size 40 --mode 'ddp2' --data_loader 'dali_cpu' --data_path '/data/derived/EyeCapture-rc-prepped/' --reset
+
+# To train on selective GPUs:
+# sudo docker run -P --runtime=nvidia --ipc=host --gpus '"device=1,2,3"' -v /data:/data -v $(pwd):$(pwd) -v /var/run/docker.sock:/var/run/docker.sock -w $(pwd) --rm -it gazepy -m torch.distributed.launch --nproc_per_node=3 main.py --batch_size 40 --mode 'ddp2' --data_loader 'dali_cpu' --data_path '/data/derived/EyeCapture-rc-prepped/' --reset

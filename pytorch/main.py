@@ -275,11 +275,11 @@ def main():
 def initialize_visualization(args):
     args.port = None
     port = 8097
+    server = "http://localhost"
     if args.visdom == "":
         active = False
     elif args.visdom == "auto":
         active = True
-        server = "http://localhost"
         # Visdom Server: start the visdom server on a separate process so it doesn't block current process
         try:
             FNULL = open(os.devnull, 'w')

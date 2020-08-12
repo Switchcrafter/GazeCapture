@@ -39,7 +39,7 @@ def parse_commandline_arguments():
                         help="verbose mode - print details every batch")
     #---------- Distributed Training and Speedup ------------
     parser.add_argument('--data_loader', default='cpu', 
-                        help='cpu, dali_cpu, dali_gpu, dali_gpu_all')
+                        help='cpu, dali_cpu, dali_gpu')
     parser.add_argument('--mode', default='none',
                         help='Parallelization mode: [none], dp, ddp1, ddp2')
     parser.add_argument('--local_rank', nargs='+', 
@@ -96,7 +96,7 @@ def parse_commandline_arguments():
         "DDP1: -m torch.distributed.launch --nproc_per_node=1 --mode 'ddp1' \n" +
         "DDP2: -m torch.distributed.launch --nproc_per_node=4 --mode 'ddp2' \n")
         print("###################################################################")
-    args.master = args.local_rank[0] if args.master < 0 else args.master
+    args.master = 0 if args.mode == 'ddp2' else args.local_rank[0]
     args.batch_size = args.batch_size * torch.cuda.device_count() if args.mode == 'ddp2' else args.batch_size
     if not args.disable_cuda and torch.cuda.is_available() and len(args.local_rank) > 0:
         args.using_cuda = True

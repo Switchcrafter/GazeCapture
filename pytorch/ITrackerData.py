@@ -9,7 +9,6 @@ from random import shuffle
 # CPU data loader
 from PIL import Image
 import torchvision.transforms as transforms
-from utility_functions.face_utilities import hogImage
 from utility_functions.Utilities import centered_text
 
 try:
@@ -61,8 +60,7 @@ class ExternalSourcePipeline(Pipeline):
     def __init__(self, data, batch_size, image_size, split, silent, num_threads, device_id, data_loader, color_space, shuffle=False):
         super(ExternalSourcePipeline, self).__init__(batch_size,
                                                      num_threads,
-                                                     device_id,
-                                                     seed=-1)
+                                                     device_id)
 
         self.split = split
         self.color_space = color_space
@@ -267,19 +265,6 @@ class ITrackerData(object):
             im = Image.open(path).convert(self.color_space)
         except OSError:
             raise RuntimeError('Could not read image: ' + path)
-        return im
-
-    def get_hog_descriptor(self, im):
-        # im = Image.fromarray(hogImage(im), im.mode)
-        # hog is failing below (20,20) so this should fix
-        if im.size[0] < 20:
-            im = transforms.functional.resize(im, (20,20), interpolation=2)
-        try:
-            hog = hogImage(im)
-            im = Image.fromarray(hog, im.mode)
-        except:
-            # print(im.size)
-            pass
         return im
 
     def __getitem__(self, shard_index):

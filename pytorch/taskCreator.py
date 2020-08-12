@@ -157,6 +157,7 @@ def getDirList(path, regexString):
     return sorted(folders)
 
 # used by prepareEyeCatcherTask
+# input path is to the folder containing data from various devices e.g. /data/Source/EyeCapture/200407/
 def getCaptureSessionDirList(path):
     session_paths = []
     devices = os.listdir(path)
