@@ -4,8 +4,10 @@ scipy
 jsonpatch
 visdom
 torchtoolbox
---extra-index-url https://developer.download.nvidia.com/compute/redist/cuda/10.0 nvidia-dali
 matplotlib
+imutils
+scikit-image
+--extra-index-url https://developer.download.nvidia.com/compute/redist/ nvidia-dali-cuda100
 opencv-python
 cmake
 dlib
