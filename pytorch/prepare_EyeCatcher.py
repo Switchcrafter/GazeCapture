@@ -11,13 +11,14 @@ import numpy as np
 import dateutil.parser
 from utility_functions.Utilities import MultiProgressBar
 
-
 # Example path is Surface_Pro_4/someuser/00000
 def findCaptureSessionDirs(path):
     session_paths = []
     devices = os.listdir(path)
-
+    
     for device in devices:
+        if not os.path.isdir(os.path.join(path, device)):
+            continue
         users = os.listdir(os.path.join(path, device))
         for user in users:
             sessions = sorted(os.listdir(os.path.join(path, device, user)), key=str)
@@ -27,94 +28,29 @@ def findCaptureSessionDirs(path):
 
     return session_paths
 
-
 def findCapturesInSession(path):
-    files = [os.path.splitext(f)[0] for f in os.listdir(os.path.join(path, "frames")) if f.endswith('.json') and not f == "session.json"]
-
-    return files
-
+    return [os.path.splitext(f)[0] for f in os.listdir(os.path.join(path, "frames")) if f.endswith('.jpg')]
 
 def loadJsonData(filename):
     with open(filename) as f:
-        data = json.load(f)
-
-    return data
-
-
-def getScreenOrientation(capture_data):
-    orientation = 0
-
-    # Camera Offset and Screen Orientation compensation
-    # if capture_data['NativeOrientation'] == "Landscape":
-    if capture_data['Orientation'] == "Landscape":
-        # Camera above screen
-        # - Landscape on Surface devices
-        orientation = 1
-    elif capture_data['Orientation'] == "LandscapeFlipped":
-        # Camera below screen
-        # - Landscape inverted on Surface devices
-        orientation = 2
-    elif capture_data['Orientation'] == "PortraitFlipped":
-        # Camera left of screen
-        # - Portrait with camera on left on Surface devices
-        orientation = 3
-    elif capture_data['Orientation'] == "Portrait":
-        # Camera right of screen
-        # - Portrait with camera on right on Surface devices
-        orientation = 4
-    # if capture_data['NativeOrientation'] == "Portrait":
-    #     if capture_data['CurrentOrientation'] == "Portrait":
-    #         # Camera above screen
-    #         # - Portrait on iOS devices
-    #         orientation = 1
-    #     elif capture_data['CurrentOrientation'] == "PortraitFlipped":
-    #         # Camera below screen
-    #         # - Portrait Inverted on iOS devices
-    #         orientation = 2
-    #     elif capture_data['CurrentOrientation'] == "Landscape":
-    #         # Camera left of screen
-    #         # - Landscape home button on right on iOS devices
-    #         orientation = 3
-    #     elif capture_data['CurrentOrientation'] == "LandscapeFlipped":
-    #         # Camera right of screen
-    #         # - Landscape home button on left on iOS devices
-    #         orientation = 4
-
-    return orientation
-
-
-def getCaptureTimeString(capture_data):
-    sessiontime = dateutil.parser.parse(capture_data["SessionTimestamp"])
-    currenttime = dateutil.parser.parse(capture_data["Timestamp"])
-    timedelta = sessiontime - currenttime
-    return str(timedelta.total_seconds())
-
+        return json.load(f)
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='iTracker-pytorch-PrepareDataset.')
     parser.add_argument('--data_path',
                         help="Path to captured files.",
                         default=None)
-    parser.add_argument('--output_path',
-                        default=None,
-                        help="Where to write the output.")
     args = parser.parse_args()
 
     return args
-
 
 def main():
     args = parse_arguments()
 
     data_directory = args.data_path
-    output_directory = args.output_path
 
     if data_directory is None:
         os.error("Error: must specify --data_path, like /data/EyeCapture/200407")
-        return
-
-    if output_directory is None:
-        os.error("Error: must specify --output_path")
         return
 
     directories = sorted(findCaptureSessionDirs(data_directory))
@@ -128,7 +64,6 @@ def main():
         captures = sorted(findCapturesInSession(os.path.join(data_directory, directory)), key=str)
         total_captures = len(captures)
 
-        deviceMetrics_data = loadJsonData(os.path.join(data_directory, directory, "deviceMetrics.json"))
         info_data = loadJsonData(os.path.join(data_directory, directory, "info.json"))
         screen_data = loadJsonData(os.path.join(data_directory, directory, "screen.json"))
 
@@ -151,8 +86,7 @@ def main():
             "Time": []
         }
 
-        output_path = os.path.join(output_directory, f"{directory_idx:05d}")
-        output_frame_path = os.path.join(output_path, "frames")
+        output_path = os.path.join(data_directory, directory)
 
         faceInfoDict = newFaceInfoDict()
 
@@ -190,14 +124,8 @@ def main():
             "Orientation": []
         }
 
-        if not os.path.exists(output_directory):
-            os.mkdir(output_directory)
         if not os.path.exists(output_path):
             os.mkdir(output_path)
-        if not os.path.exists(output_frame_path):
-            os.mkdir(output_frame_path)
-
-        screen_orientation = getScreenOrientation(screen_data)
 
         multi_progress_bar.addSubProcess(index=directory_idx, max_value=total_captures)
 
@@ -238,9 +166,9 @@ def main():
                 info["NumEyeDetections"] = info["NumEyeDetections"] + 1
 
                 # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
-                screen["H"].append(screen_data['H'])
-                screen["W"].append(screen_data['W'])
-                screen["Orientation"].append(screen_orientation)
+                screen["H"].append(screen_data['H'][capture_idx])
+                screen["W"].append(screen_data['W'][capture_idx])
+                screen["Orientation"].append(screen_data['Orientation'][capture_idx])
 
                 # dotinfo.json - { "DotNum": [ 0, 0, ... ],
                 #                  "XPts": [ 160, 160, ... ],
@@ -254,15 +182,15 @@ def main():
                 # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
                 x_raw = capture_data["XRaw"]
                 y_raw = capture_data["YRaw"]
-                x_cam, y_cam = screen2cam(x_raw,  # xScreenInPoints
-                                          y_raw,  # yScreenInPoints
-                                          screen_orientation,  # orientation,
-                                          screen_data["W"],  # widthScreenInPoints
-                                          screen_data["H"],  # heightScreenInPoints
-                                          deviceName=info_data["DeviceName"])
+                x_cam, y_cam = screen2cam(x_raw,
+                                          y_raw,
+                                          screen_data['Orientation'][capture_idx],
+                                          screen_data["W"][capture_idx],
+                                          screen_data["H"][capture_idx],
+                                          info_data["DeviceName"])
                 confidence = capture_data["Confidence"]
 
-                dotinfo["DotNum"].append(0)  # TODO replace with dot number as needed
+                dotinfo["DotNum"].append(capture_idx)
                 dotinfo["XPts"].append(x_raw)
                 dotinfo["YPts"].append(y_raw)
                 dotinfo["XCam"].append(x_cam)
@@ -270,11 +198,8 @@ def main():
                 dotinfo["Confidence"].append(confidence)
                 dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
 
-                # Convert image from PNG to JPG
-                frame_name = str(f"{capture_idx:05d}.jpg")
+                frame_name = str(f"{capture}.jpg")
                 frames.append(frame_name)
-
-                shutil.copyfile(capture_jpg_path, os.path.join(output_frame_path, frame_name))
             else:
                 print(f"Error processing capture {capture}")
 
@@ -296,6 +221,5 @@ def main():
             json.dump(faceInfoDict["LeftEye"], write_file)
         with open(os.path.join(output_path, 'dlibRightEye.json'), "w") as write_file:
             json.dump(faceInfoDict["RightEye"], write_file)
-
 
 main()

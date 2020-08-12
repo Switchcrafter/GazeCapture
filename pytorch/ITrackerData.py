@@ -1,8 +1,8 @@
+import torch
 import os
 import os.path
 import scipy.io as sio
 import numpy as np
-import torch
 import math
 from random import shuffle
 
@@ -273,16 +273,16 @@ class ITrackerData(object):
         
         rowIndex = self.indices[index]
         imFacePath = os.path.join(self.dataPath,
-                                  '%05d/appleFace/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                  '%s/appleFace/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                self.metadata['frameIndex'][rowIndex]))
         imEyeLPath = os.path.join(self.dataPath,
-                                  '%05d/appleLeftEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                  '%s/appleLeftEye/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                   self.metadata['frameIndex'][rowIndex]))
         imEyeRPath = os.path.join(self.dataPath,
-                                  '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                  '%s/appleRightEye/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                    self.metadata['frameIndex'][rowIndex]))
         imFaceGridPath = os.path.join(self.dataPath,
-                                  '%05d/faceGrid/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                  '%s/faceGrid/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                    self.metadata['frameIndex'][rowIndex]))
         # Note: Converted from double (float64) to float (float32) as pipeline output is float in MSE calculation
         gaze = np.array([self.metadata['labelDotXCam'][rowIndex], self.metadata['labelDotYCam'][rowIndex]], np.float32)

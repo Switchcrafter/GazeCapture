@@ -8,10 +8,11 @@ matplotlib
 imutils
 scikit-image
 --extra-index-url https://developer.download.nvidia.com/compute/redist/ nvidia-dali-cuda100
-opencv-python
+opencv-python-headless
 cmake
 dlib
 imutils
 scikit-image
 onnxruntime
 docker
+pandas
