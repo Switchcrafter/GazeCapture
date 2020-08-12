@@ -265,6 +265,7 @@ def main():
 def initialize_visualization(args):
     args.port = None
     port = 8097
+    server = ""
     if args.visdom == "":
         active = False
     elif args.visdom == "auto":

@@ -11,7 +11,7 @@ torchtoolbox
 matplotlib
 imutils
 scikit-image
-nvidia-dali
+--extra-index-url https://developer.download.nvidia.com/compute/redist/ nvidia-dali-cuda100
 opencv-python
 cmake
 onnxruntime
