@@ -22,7 +22,7 @@ def parse_commandline_arguments():
     parser.add_argument('--color_space', default='YCbCr', 
                         help='Image color space - RGB, YCbCr, L')
     parser.add_argument('--model_type', default="resNet", 
-                        help="resNet, mobileNet")
+                        help="resNet, mobileNet, deepEyeNet")
     #---------- Testing & Debugging ------------
     parser.add_argument('--force_test', action='store_true', default=False,
                         help='Force test every epoch during training')

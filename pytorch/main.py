@@ -311,8 +311,10 @@ def initialize_model(args):
         print('')
 
     # Retrieve model
-    # model = ITrackerModel(args.color_space, args.model_type).to(device=args.device)
-    model = DeepEyeModel().to(device=args.device)
+    if args.model_type == "deepEyeNet":
+        model = DeepEyeModel().to(device=args.device)
+    else:
+        model = ITrackerModel(args.color_space, args.model_type).to(device=args.device)
     # print(model)
 
     # GPU optimizations and modes
