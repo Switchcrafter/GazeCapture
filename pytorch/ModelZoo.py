@@ -206,14 +206,15 @@ def DCB(in_planes, out_planes, kernel_size=1, stride=1, padding=0, groups=1, dro
     return dcb
 
 # for every ResNet Layer - first conv doubles the channels and halves the size
-def make_layer(block, in_planes, planes, num_blocks, stride=1, downsample=None):
+# this function controls the dropout values in the entire network
+def make_layer(block, in_planes, planes, num_blocks, stride=1, downsample=None, dropout=0.1):
     if stride != 1 or in_planes != planes * block.expansion:
         downsample = nn.Sequential(
             nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride, bias=False),
             nn.BatchNorm2d(planes * block.expansion),
         )
     layers = []
-    layers.append(block(in_planes, planes, stride, downsample))
+    layers.append(block(in_planes, planes, stride, downsample, dropout))
     for _ in range(1, num_blocks):
         layers.append(block(planes, planes))
     return nn.Sequential(*layers)

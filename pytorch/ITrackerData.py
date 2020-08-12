@@ -4,7 +4,7 @@ import os.path
 import scipy.io as sio
 import numpy as np
 import math
-from random import shuffle
+from random import random, shuffle
 
 # CPU data loader
 from PIL import Image
@@ -255,6 +255,8 @@ class ITrackerData(object):
         if self.data_loader == 'cpu':
             self.normalize_image = normalize_image_transform(image_size=self.imSize, jitter=jitter, split=split, color_space=self.color_space)
             self.resize_transform = resize_image_transform(image_size=self.imSize)
+            self.mirror_transform = transforms.RandomHorizontalFlip(p=1.0)
+            self.mirrorCoordinates = np.array([-1.0, 1.0])
             
 
     def __len__(self):
@@ -272,18 +274,32 @@ class ITrackerData(object):
         index = self.shard_id * self.__len__() + shard_index
         
         rowIndex = self.indices[index]
+        # imFacePath = os.path.join(self.dataPath,
+        #                           '%s/appleFace/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
+        #                                                        self.metadata['frameIndex'][rowIndex]))
+        # imEyeLPath = os.path.join(self.dataPath,
+        #                           '%s/appleLeftEye/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
+        #                                                           self.metadata['frameIndex'][rowIndex]))
+        # imEyeRPath = os.path.join(self.dataPath,
+        #                           '%s/appleRightEye/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
+        #                                                            self.metadata['frameIndex'][rowIndex]))
+        # imFaceGridPath = os.path.join(self.dataPath,
+        #                           '%s/faceGrid/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
+        #                                                            self.metadata['frameIndex'][rowIndex]))
+        # XXX for temporary experiments
         imFacePath = os.path.join(self.dataPath,
-                                  '%s/appleFace/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                  '%05d/appleFace/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                self.metadata['frameIndex'][rowIndex]))
         imEyeLPath = os.path.join(self.dataPath,
-                                  '%s/appleLeftEye/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                  '%05d/appleLeftEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                   self.metadata['frameIndex'][rowIndex]))
         imEyeRPath = os.path.join(self.dataPath,
-                                  '%s/appleRightEye/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                  '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                    self.metadata['frameIndex'][rowIndex]))
         imFaceGridPath = os.path.join(self.dataPath,
-                                  '%s/faceGrid/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                  '%05d/faceGrid/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                    self.metadata['frameIndex'][rowIndex]))
+
         # Note: Converted from double (float64) to float (float32) as pipeline output is float in MSE calculation
         gaze = np.array([self.metadata['labelDotXCam'][rowIndex], self.metadata['labelDotYCam'][rowIndex]], np.float32)
         frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]])
@@ -298,6 +314,15 @@ class ITrackerData(object):
             imEyeR = self.loadImage(imEyeRPath)
             imfaceGrid = self.loadImage(imFaceGridPath)
 
+            # XXX: Experimental
+            # mirror data with 50% probablity
+            if random() > 0:
+                imFace = self.mirror_transform(imFace)
+                imEyeR, imEyeL = self.mirror_transform(imEyeL), self.mirror_transform(imEyeR)
+                imfaceGrid = self.mirror_transform(imfaceGrid)
+                gaze = self.mirrorCoordinates * gaze
+
+            # Apply other augmentations
             imFace = self.normalize_image(imFace)
             imEyeL = self.normalize_image(imEyeL)
             imEyeR = self.normalize_image(imEyeR)
