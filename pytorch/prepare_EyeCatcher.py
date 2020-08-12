@@ -15,8 +15,10 @@ from utility_functions.Utilities import MultiProgressBar
 def findCaptureSessionDirs(path):
     session_paths = []
     devices = os.listdir(path)
-
+    
     for device in devices:
+        if not os.path.isdir(os.path.join(path, device)):
+            continue
         users = os.listdir(os.path.join(path, device))
         for user in users:
             sessions = sorted(os.listdir(os.path.join(path, device, user)), key=str)
@@ -32,47 +34,6 @@ def findCapturesInSession(path):
 def loadJsonData(filename):
     with open(filename) as f:
         return json.load(f)
-
-def getScreenOrientation(capture_data):
-    orientation = 0
-
-    # Camera Offset and Screen Orientation compensation
-    # if capture_data['NativeOrientation'] == "Landscape":
-    if capture_data['Orientation'] == "Landscape":
-        # Camera above screen
-        # - Landscape on Surface devices
-        orientation = 1
-    elif capture_data['Orientation'] == "LandscapeFlipped":
-        # Camera below screen
-        # - Landscape inverted on Surface devices
-        orientation = 2
-    elif capture_data['Orientation'] == "PortraitFlipped":
-        # Camera left of screen
-        # - Portrait with camera on left on Surface devices
-        orientation = 3
-    elif capture_data['Orientation'] == "Portrait":
-        # Camera right of screen
-        # - Portrait with camera on right on Surface devices
-        orientation = 4
-    # if capture_data['NativeOrientation'] == "Portrait":
-    #     if capture_data['CurrentOrientation'] == "Portrait":
-    #         # Camera above screen
-    #         # - Portrait on iOS devices
-    #         orientation = 1
-    #     elif capture_data['CurrentOrientation'] == "PortraitFlipped":
-    #         # Camera below screen
-    #         # - Portrait Inverted on iOS devices
-    #         orientation = 2
-    #     elif capture_data['CurrentOrientation'] == "Landscape":
-    #         # Camera left of screen
-    #         # - Landscape home button on right on iOS devices
-    #         orientation = 3
-    #     elif capture_data['CurrentOrientation'] == "LandscapeFlipped":
-    #         # Camera right of screen
-    #         # - Landscape home button on left on iOS devices
-    #         orientation = 4
-
-    return orientation
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='iTracker-pytorch-PrepareDataset.')
@@ -166,8 +127,6 @@ def main():
         if not os.path.exists(output_path):
             os.mkdir(output_path)
 
-        screen_orientation = getScreenOrientation(screen_data)
-
         multi_progress_bar.addSubProcess(index=directory_idx, max_value=total_captures)
 
         for capture_idx, capture in enumerate(captures):
@@ -207,9 +166,9 @@ def main():
                 info["NumEyeDetections"] = info["NumEyeDetections"] + 1
 
                 # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
-                screen["H"].append(screen_data['H'])
-                screen["W"].append(screen_data['W'])
-                screen["Orientation"].append(screen_orientation)
+                screen["H"].append(screen_data['H'][capture_idx])
+                screen["W"].append(screen_data['W'][capture_idx])
+                screen["Orientation"].append(screen_data['Orientation'][capture_idx])
 
                 # dotinfo.json - { "DotNum": [ 0, 0, ... ],
                 #                  "XPts": [ 160, 160, ... ],
@@ -223,15 +182,15 @@ def main():
                 # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
                 x_raw = capture_data["XRaw"]
                 y_raw = capture_data["YRaw"]
-                x_cam, y_cam = screen2cam(x_raw,  # xScreenInPoints
-                                          y_raw,  # yScreenInPoints
-                                          screen_orientation,  # orientation,
-                                          screen_data["W"],  # widthScreenInPoints
-                                          screen_data["H"],  # heightScreenInPoints
-                                          deviceName=info_data["DeviceName"])
+                x_cam, y_cam = screen2cam(x_raw,
+                                          y_raw,
+                                          screen_data['Orientation'][capture_idx],
+                                          screen_data["W"][capture_idx],
+                                          screen_data["H"][capture_idx],
+                                          info_data["DeviceName"])
                 confidence = capture_data["Confidence"]
 
-                dotinfo["DotNum"].append(0)  # TODO replace with dot number as needed
+                dotinfo["DotNum"].append(capture_idx)
                 dotinfo["XPts"].append(x_raw)
                 dotinfo["YPts"].append(y_raw)
                 dotinfo["XCam"].append(x_cam)
@@ -239,7 +198,7 @@ def main():
                 dotinfo["Confidence"].append(confidence)
                 dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
 
-                frame_name = str(f"{capture_idx:05d}.jpg")
+                frame_name = str(f"{capture}.jpg")
                 frames.append(frame_name)
             else:
                 print(f"Error processing capture {capture}")

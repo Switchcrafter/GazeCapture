@@ -267,6 +267,7 @@ def initialize_visualization(args):
     port = 8097
     if args.visdom == "":
         active = False
+        server = ""
     elif args.visdom == "auto":
         active = True
         server = "http://localhost"

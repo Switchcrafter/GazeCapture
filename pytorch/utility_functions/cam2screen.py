@@ -73,7 +73,7 @@ def cam2screen(xDisplacementFromCameraInCm,
     else:
         xScreenInPoints = 0
         yScreenInPoints = 0
-        print("Unexpected orientation: {orientation}")
+        print(f"Unexpected orientation: {orientation}")
 
     return xScreenInPoints, yScreenInPoints
 
@@ -148,7 +148,7 @@ def screen2cam(xScreenInPoints,
     else:
         xDisplacementFromCameraInCm = 0
         yDisplacementFromCameraInCm = 0
-        print("Unexpected orientation: {orientation}")
+        print(f"Unexpected orientation: {orientation}")
 
     return xDisplacementFromCameraInCm, yDisplacementFromCameraInCm
 
