@@ -403,7 +403,31 @@ class Visualizations(object):
             else:
                 self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.split_plots[var_name], name=split_name,
                 update = 'append', opts=dict(linecolor=self.getColor(split_name)))
+    
+    # def reset(self):
+    #     if self.active:
+    #         for var_name in self.split_plots:
+    #             self.closed_windows.append(var_name)
 
+    # def plot(self, var_name, split_name, title_name, x, y, visible=True):
+    #     if self.active and visible:
+    #         if var_name in self.closed_windows:
+    #             self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.split_plots[var_name], name=split_name,
+    #             update = 'replace', opts=dict(title=title_name, linecolor=self.getColor(split_name)))
+    #             self.closed_windows.remove(var_name)
+
+    #         if var_name not in self.split_plots:
+    #             self.split_plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
+    #                 legend=[split_name],
+    #                 title=title_name,
+    #                 linecolor=self.getColor(split_name),
+    #                 xlabel='Samples',
+    #                 ylabel=var_name
+    #             ))
+    #         else:   
+    #             self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.split_plots[var_name], name=split_name,
+    #             update = 'append', opts=dict(title=title_name, linecolor=self.getColor(split_name)))
+    
     def plotAll(self, var_name, split_name, title_name, x, y, style='solid', visible=True):
         if self.active and visible:
             ytype = 'log' if split_name == "lr" else 'linear'
@@ -422,7 +446,42 @@ class Visualizations(object):
             else:
                 self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.epoch_plots[var_name], name=split_name,
                 update = 'append', opts=dict(linecolor=self.getColor(split_name), dash=self.getStyle(style)))
-
+    
+    def plotGazePoints(self, var_name, split_name, title_name, gaze, visible=True):
+        if self.active and visible:
+            if var_name not in self.split_plots:
+                self.split_plots[var_name] = self.viz.scatter(
+                                            X=gaze,
+                                            opts=dict(
+                                                legend=[split_name],
+                                                title='gazePoint',
+                                                markersize=5,
+                                                markercolor=self.getColor(split_name),
+                                                markerborderwidth=0,
+                                                xlabel='X',
+                                                ylabel='Y'
+                                            ),
+                                        )
+            else:
+                self.viz.scatter(X=gaze, env=self.env, win=self.split_plots[var_name], 
+                                name=split_name, update = 'append', 
+                                opts=dict(
+                                    legend=[split_name],
+                                    title='gazePoint',
+                                    markersize=5,
+                                    markercolor=self.getColor(split_name),
+                                    markerborderwidth=0,
+                                    xlabel='X',
+                                    ylabel='Y'
+                                ),
+                            )
+    
+    def plotImages(self, var_name, split_name, title_name, imgs, visible=True):
+        if self.active and visible:
+            if var_name not in self.epoch_plots:
+                self.epoch_plots[var_name] = self.viz.images(imgs, opts=dict(caption=title_name))
+            else:
+                self.viz.images(imgs, opts=dict(caption=title_name), env=self.env, win=self.epoch_plots[var_name])
 
 def resize(arr, new_size, filling=None):
     if new_size > len(arr):

@@ -475,6 +475,9 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
         # # XXX: sharding debug code
         # rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
         # print(rank, torch.cuda.current_device(), indices.data.cpu().numpy()[0][0], len(indices), row.data.cpu().numpy()[0][0], len(row)) 
+        # print(gaze)
+        args.vis.plotGazePoints("GazePoints", dataset.split, "GazePoints", gaze, visible=args.debug)
+        args.vis.plotImages("imEyeR-imFace-imEyeL", dataset.split, "imEyeR-imFace-imEyeL", torch.cat((imEyeR[:1], imFace[:1], imEyeL[:1]),0), visible=args.debug)
 
         batchNum = i + 1
         actual_batch_size = imFace.size(0)
@@ -619,6 +622,9 @@ def evaluate(dataset,
                                                                           batch_data["gaze"], \
                                                                           batch_data["frame"], \
                                                                           batch_data["indices"]
+
+        args.vis.plotGazePoints("GazePoints", dataset.split, "GazePoints", gaze, visible=args.debug)
+        args.vis.plotImages("imEyeR-imFace-imEyeL", dataset.split, "imEyeR-imFace-imEyeL", torch.cat((imEyeR[:1], imFace[:1], imEyeL[:1]),0), visible=args.debug)
 
         batchNum = i + 1
         actual_batch_size = imFace.size(0)

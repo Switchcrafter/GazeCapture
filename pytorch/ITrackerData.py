@@ -223,6 +223,7 @@ class ITrackerData(object):
         self.color_space = color_space
         self.data_loader = data_loader
         self.index = 0
+        self.split = split
 
         # ======= Sharding configuration variables  ========
         if num_shards > 0:
@@ -236,24 +237,24 @@ class ITrackerData(object):
             raise ValueError(f"shard_id should be between 0 and %d i.e. 0 <= shard_id < num_shards."%(num_shards))
         # ====================================================
 
-        if split == 'test':
+        if self.split == 'test':
             mask = self.metadata['labelTest']
-        elif split == 'val':
+        elif self.split == 'val':
             mask = self.metadata['labelVal']
-        elif split == 'train':
+        elif self.split == 'train':
             mask = self.metadata['labelTrain']
-        elif split == 'all':
+        elif self.split == 'all':
             mask = np.ones[len(self.metadata)]
         else:
-            raise Exception('split should be test, val or train. The value of split was: {}'.format(split))
+            raise Exception('split should be test, val or train. The value of split was: {}'.format(self.split))
 
         self.indices = np.argwhere(mask)[:, 0]
 
         if not silent:
-            print('Loaded iTracker dataset split "%s" with %d records.' % (split, len(self.indices)))
+            print('Loaded iTracker dataset split "%s" with %d records.' % (self.split, len(self.indices)))
 
         if self.data_loader == 'cpu':
-            self.normalize_image = normalize_image_transform(image_size=self.imSize, jitter=jitter, split=split, color_space=self.color_space)
+            self.normalize_image = normalize_image_transform(image_size=self.imSize, jitter=jitter, split=self.split, color_space=self.color_space)
             self.resize_transform = resize_image_transform(image_size=self.imSize)
             self.mirror_transform = transforms.RandomHorizontalFlip(p=1.0)
             self.mirrorCoordinates = np.array([-1.0, 1.0])
@@ -274,6 +275,7 @@ class ITrackerData(object):
         index = self.shard_id * self.__len__() + shard_index
         
         rowIndex = self.indices[index]
+        # TODO: Enable this for new format data
         # imFacePath = os.path.join(self.dataPath,
         #                           '%s/appleFace/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
         #                                                        self.metadata['frameIndex'][rowIndex]))
@@ -286,7 +288,8 @@ class ITrackerData(object):
         # imFaceGridPath = os.path.join(self.dataPath,
         #                           '%s/faceGrid/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
         #                                                            self.metadata['frameIndex'][rowIndex]))
-        # XXX for temporary experiments
+        
+        # XXX Experimental: for old format data
         imFacePath = os.path.join(self.dataPath,
                                   '%05d/appleFace/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
                                                                self.metadata['frameIndex'][rowIndex]))
@@ -314,15 +317,16 @@ class ITrackerData(object):
             imEyeR = self.loadImage(imEyeRPath)
             imfaceGrid = self.loadImage(imFaceGridPath)
 
-            # XXX: Experimental
+            # Data Augmentation: Mirroring
             # mirror data with 50% probablity
-            if random() > 0:
-                imFace = self.mirror_transform(imFace)
-                imEyeR, imEyeL = self.mirror_transform(imEyeL), self.mirror_transform(imEyeR)
-                imfaceGrid = self.mirror_transform(imfaceGrid)
+            if self.split == 'train' and random() >= 0.5:
+                imFace = transforms.functional.hflip(imFace)
+                imEyeR, imEyeL = transforms.functional.hflip(imEyeL), transforms.functional.hflip(imEyeR)
+                imfaceGrid = transforms.functional.hflip(imfaceGrid)
                 gaze = self.mirrorCoordinates * gaze
-
-            # Apply other augmentations
+            
+            # Data Augmentation: Random Crop, Color Jitter
+            # faceGrid mustn't have these augmentations
             imFace = self.normalize_image(imFace)
             imEyeL = self.normalize_image(imEyeL)
             imEyeR = self.normalize_image(imEyeR)

@@ -49,6 +49,9 @@ ENV NVIDIA_DRIVER_CAPABILITIES all
 # --force_test : run test after train and validation cycles
 
 
+# Illustration0: cpu dataloader, no parallelization, gpu0
+# python3 main.py --local_rank 0 --batch_size 50 --mode 'none' --data_loader 'cpu' --data_path '/data/derived/EyeCapture-rc-prepped/' --name "resnet-dlib-rc" --base_lr 1E-5 --max_lr 1E-2 --epochs 40 --color_space 'YCbCr' --reset
+
 # [Preffered] Illustration1: cpu dataloader, no parallelization, gpu0
 # sudo docker run -P --runtime=nvidia --ipc=host --gpus all -v /data:/data -v $(pwd):$(pwd) -v /var/run/docker.sock:/var/run/docker.sock -w $(pwd) --rm -it gazepy main.py --local_rank 0 --batch_size 50 --mode 'none' --data_loader 'cpu' --data_path '/data/derived/EyeCapture-rc-prepped/' --name "resnet-dlib-rc" --base_lr 1E-5 --max_lr 1E-2 --epochs 40 --color_space 'YCbCr' --reset
 

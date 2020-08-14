@@ -37,6 +37,8 @@ def parse_commandline_arguments():
                         help='Disable CUDA')
     parser.add_argument('--verbose', action='store_true', default=False,
                         help="verbose mode - print details every batch")
+    parser.add_argument('--debug', action='store_true', default=False,
+                        help='enable debug mode with more details')
     #---------- Distributed Training and Speedup ------------
     parser.add_argument('--data_loader', default='cpu', 
                         help='cpu, dali_cpu, dali_gpu')
