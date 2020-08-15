@@ -477,7 +477,7 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
         # print(rank, torch.cuda.current_device(), indices.data.cpu().numpy()[0][0], len(indices), row.data.cpu().numpy()[0][0], len(row)) 
         # print(gaze)
         args.vis.plotGazePoints("GazePoints", dataset.split, "GazePoints", gaze, visible=args.debug)
-        args.vis.plotImages("imEyeR-imFace-imEyeL", dataset.split, "imEyeR-imFace-imEyeL", torch.cat((imEyeR[:1], imFace[:1], imEyeL[:1]),0), visible=args.debug)
+        args.vis.plotImages("imEyeR-imFace-imEyeL-imFaceGrid", dataset.split, "imEyeR-imFace-imEyeL-imFaceGrid", torch.cat((imEyeR[:1], imFace[:1], imEyeL[:1], imFaceGrid[:1]),0), visible=args.debug)
 
         batchNum = i + 1
         actual_batch_size = imFace.size(0)

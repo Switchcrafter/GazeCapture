@@ -376,6 +376,9 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
 
 # Equivalent: generate_faces
 def ROIDetectionTask(directory, directory_idx, progressbar):
+    if args.apple:
+        return
+
     recording_path = os.path.join(args.input, directory)
     output_path = os.path.join(args.output, directory)
     # Read information for valid frames
@@ -418,7 +421,6 @@ def ROIDetectionTask(directory, directory_idx, progressbar):
 def ROIExtractionTask(directory, directory_idx, progressbar):
 
     recDir = os.path.join(args.input, directory)
-    dlibDir = os.path.join(args.metapath, directory)
     recDirOut = os.path.join(args.output, directory)
 
     # Output structure
@@ -433,10 +435,17 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         'labelTest': []
     }
 
-    # Read metadata JSONs from metapath
-    appleFace = json_read(os.path.join(dlibDir, 'dlibFace.json'))
-    appleLeftEye = json_read(os.path.join(dlibDir, 'dlibLeftEye.json'))
-    appleRightEye = json_read(os.path.join(dlibDir, 'dlibRightEye.json'))
+    if args.apple:
+        # Read metadata JSONs from recDir
+        appleFace = json_read(os.path.join(recDir, 'appleFace.json'))
+        appleLeftEye = json_read(os.path.join(recDir, 'appleLeftEye.json'))
+        appleRightEye = json_read(os.path.join(recDir, 'appleRightEye.json'))
+    else: # use Dlib crops generated from ROIDetection phase
+        # Read metadata JSONs from metapath
+        dlibDir = os.path.join(args.metapath, directory)
+        appleFace = json_read(os.path.join(dlibDir, 'dlibFace.json'))
+        appleLeftEye = json_read(os.path.join(dlibDir, 'dlibLeftEye.json'))
+        appleRightEye = json_read(os.path.join(dlibDir, 'dlibRightEye.json'))
 
     # Read input JSONs from inputpath
     dotInfo = json_read(os.path.join(recDir, 'dotInfo.json'))
@@ -556,6 +565,7 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
             meta['labelTest'] += [split == "test"]
 
     return meta
+
 
 # Single process Tasks
 def compareTask(meta):
@@ -920,6 +930,7 @@ if __name__ == '__main__':
     parser.add_argument('--metapath', help="metadata path", default="./gc-data-meta/")
     parser.add_argument('--task', help="task name: copyTask, ROIDetectionTask, ROIExtractionTask", default="")
     parser.add_argument('--rc', action='store_true', help="apply rotation correction", default=False)
+    parser.add_argument('--apple', action='store_true', help="apply original apple face crops", default=False)
     parser.add_argument('--mirror', action='store_true', help="apply data mirroring", default=False)
     parser.add_argument('--portraitOnly', action='store_true', help="use portrait data only", default=False)
     parser.add_argument('--source_compare', action='store_true', help="compare against source", default=False)
