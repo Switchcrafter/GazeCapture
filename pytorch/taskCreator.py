@@ -447,17 +447,18 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         appleLeftEye = json_read(os.path.join(dlibDir, 'dlibLeftEye.json'))
         appleRightEye = json_read(os.path.join(dlibDir, 'dlibRightEye.json'))
 
+    # prepape output paths
+    facePath = preparePath(os.path.join(recDirOut, 'appleFace'))
+    leftEyePath = preparePath(os.path.join(recDirOut, 'appleLeftEye'))
+    rightEyePath = preparePath(os.path.join(recDirOut, 'appleRightEye'))
+
+    # directory, frame, dotInfo, faceGridBbox, info
     # Read input JSONs from inputpath
     dotInfo = json_read(os.path.join(recDir, 'dotInfo.json'))
     faceGrid = json_read(os.path.join(recDir, 'faceGrid.json'))
     frames = json_read(os.path.join(recDir, 'frames.json'))
     info = json_read(os.path.join(recDir, 'info.json'))
     screen = json_read(os.path.join(recDir, 'screen.json'))
-
-    # prepape output paths
-    facePath = preparePath(os.path.join(recDirOut, 'appleFace'))
-    leftEyePath = preparePath(os.path.join(recDirOut, 'appleLeftEye'))
-    rightEyePath = preparePath(os.path.join(recDirOut, 'appleRightEye'))
 
     # Preprocess
     allValid = np.logical_and(np.logical_and(appleFace['IsValid'], appleLeftEye['IsValid']),
@@ -539,30 +540,30 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         meta['labelVal'] += [split == "val"]
         meta['labelTest'] += [split == "test"]
 
-        # Data Mirroring
-        if args.mirror:
-            imFace_mirror = cv2.flip(imFace, 1)
-            imEyeL_mirror = cv2.flip(imEyeL, 1)
-            imEyeR_mirror = cv2.flip(imEyeR, 1)
-            PILImage.fromarray(imFace_mirror).save(os.path.join(facePath, '%05d_mirror.jpg' % frame), quality=95)
-            PILImage.fromarray(imEyeL_mirror).save(os.path.join(leftEyePath, '%05d_mirror.jpg' % frame), quality=95)
-            PILImage.fromarray(imEyeR_mirror).save(os.path.join(rightEyePath, '%05d_mirror.jpg' % frame), quality=95)
-            if args.rc:
-                imFaceGrid_mirror = cv2.flip(imFaceGrid, 1)
-                PILImage.fromarray(imFaceGrid_mirror).save(os.path.join(faceGridPath, '%05d_mirror.jpg' % frame), quality=95)
+        # # Data Mirroring
+        # if args.mirror:
+        #     imFace_mirror = cv2.flip(imFace, 1)
+        #     imEyeL_mirror = cv2.flip(imEyeL, 1)
+        #     imEyeR_mirror = cv2.flip(imEyeR, 1)
+        #     PILImage.fromarray(imFace_mirror).save(os.path.join(facePath, '%05d_mirror.jpg' % frame), quality=95)
+        #     PILImage.fromarray(imEyeL_mirror).save(os.path.join(leftEyePath, '%05d_mirror.jpg' % frame), quality=95)
+        #     PILImage.fromarray(imEyeR_mirror).save(os.path.join(rightEyePath, '%05d_mirror.jpg' % frame), quality=95)
+        #     if args.rc:
+        #         imFaceGrid_mirror = cv2.flip(imFaceGrid, 1)
+        #         PILImage.fromarray(imFaceGrid_mirror).save(os.path.join(faceGridPath, '%05d_mirror.jpg' % frame), quality=95)
 
-            (XFactor, YFactor) = (-1.0, 1.0) if screen['Orientation'][j] <= 2 else (1.0, -1.0)
-            # mirror faceGridBbox
-            f = [24-faceGridBbox[j, 0]-faceGridBbox[j, 2], faceGridBbox[j, 1], faceGridBbox[j, 2], faceGridBbox[j, 3]]
-            # Mirror metadata - Assuming Camera is on the top center
-            meta['labelRecNum'] += [int(directory)]
-            meta['frameIndex'] += [frame]
-            meta['labelDotXCam'] += [XFactor * dotInfo['XCam'][j]]
-            meta['labelDotYCam'] += [YFactor * dotInfo['YCam'][j]]
-            meta['labelFaceGrid'] += [f]
-            meta['labelTrain'] += [split == "train"]
-            meta['labelVal'] += [split == "val"]
-            meta['labelTest'] += [split == "test"]
+        #     (XFactor, YFactor) = (-1.0, 1.0) if screen['Orientation'][j] <= 2 else (1.0, -1.0)
+        #     # mirror faceGridBbox
+        #     f = [24-faceGridBbox[j, 0]-faceGridBbox[j, 2], faceGridBbox[j, 1], faceGridBbox[j, 2], faceGridBbox[j, 3]]
+        #     # Mirror metadata - Assuming Camera is on the top center
+        #     meta['labelRecNum'] += [int(directory)]
+        #     meta['frameIndex'] += [frame]
+        #     meta['labelDotXCam'] += [XFactor * dotInfo['XCam'][j]]
+        #     meta['labelDotYCam'] += [YFactor * dotInfo['YCam'][j]]
+        #     meta['labelFaceGrid'] += [f]
+        #     meta['labelTrain'] += [split == "train"]
+        #     meta['labelVal'] += [split == "val"]
+        #     meta['labelTest'] += [split == "test"]
 
     return meta
 
