@@ -47,6 +47,24 @@ BASE_LR = 0.001
 MOMENTUM = 0.9
 WEIGHT_DECAY = 1e-4
 
+
+def preparePath(path, clear=False):
+    if not os.path.isdir(path):
+        try:
+            os.makedirs(path, 0o777)
+        except FileExistsError:
+            pass
+    if clear:
+        files = os.listdir(path)
+        for f in files:
+            fPath = os.path.join(path, f)
+            if os.path.isdir(fPath):
+                shutil.rmtree(fPath)
+            else:
+                os.remove(fPath)
+
+    return path
+
 def main():
     args, doLoad, doTest, doValidate, dataPath, checkpointsPath, \
     exportONNX, saveCheckpoints, using_cuda, workers, epochs, \
@@ -55,7 +73,8 @@ def main():
     if using_cuda and torch.cuda.device_count() > 0:
          # Change batch_size in commandLine args if out of cuda memory
         if args.deviceId < 0:
-            batch_size = torch.cuda.device_count() * args.batch_size
+            # batch_size = torch.cuda.device_count() * args.batch_size
+            batch_size = args.batch_size
         else:
             batch_size = args.batch_size
     else:
@@ -73,8 +92,8 @@ def main():
 
     # Retrieve model
     model = ITrackerModel().to(device=device)
-    if using_cuda and args.deviceId < 0:
-        model = torch.nn.DataParallel(model).to(device=device)
+    # if using_cuda and args.deviceId < 0:
+    #     model = torch.nn.DataParallel(model).to(device=device)
 
     image_size = (224, 224)
     cudnn.benchmark = False
@@ -418,6 +437,7 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
             break
 
     resultsFileName = os.path.join(checkpointsPath, 'results.json')
+    preparePath(checkpointsPath)
     with open(resultsFileName, 'w+') as outfile:
         json.dump(results, outfile)
 
