@@ -54,7 +54,8 @@ def main():
 
     if using_cuda and torch.cuda.device_count() > 0:
         # Change batch_size in commandLine args if out of cuda memory
-        batch_size = torch.cuda.device_count() * args.batch_size
+        # batch_size = torch.cuda.device_count() * args.batch_size
+        batch_size = args.batch_size
     else:
         batch_size = 1
 
@@ -70,8 +71,8 @@ def main():
 
     # Retrieve model
     model = ITrackerModel().to(device=device)
-    if using_cuda:
-        model = torch.nn.DataParallel(model).to(device=device)
+    # if using_cuda:
+    #     model = torch.nn.DataParallel(model).to(device=device)
 
     image_size = (224, 224)
     cudnn.benchmark = False
