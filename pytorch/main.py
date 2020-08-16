@@ -47,6 +47,23 @@ BASE_LR = 0.001
 MOMENTUM = 0.9
 WEIGHT_DECAY = 1e-4
 
+def preparePath(path, clear=False):
+    if not os.path.isdir(path):
+        try:
+            os.makedirs(path, 0o777)
+        except FileExistsError:
+            pass
+    if clear:
+        files = os.listdir(path)
+        for f in files:
+            fPath = os.path.join(path, f)
+            if os.path.isdir(fPath):
+                shutil.rmtree(fPath)
+            else:
+                os.remove(fPath)
+
+    return path
+
 def main():
     args, doLoad, doTest, doValidate, dataPath, checkpointsPath, \
     exportONNX, saveCheckpoints, using_cuda, workers, epochs, \
@@ -426,6 +443,7 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
             break
 
     resultsFileName = os.path.join(checkpointsPath, 'results.json')
+    preparePath(checkpointsPath)
     with open(resultsFileName, 'w+') as outfile:
         json.dump(results, outfile)
 
