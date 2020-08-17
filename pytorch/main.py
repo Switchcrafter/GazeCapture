@@ -163,9 +163,11 @@ def main():
     #     criterion = nn.MSELoss(reduction='sum').to(device=device)
     criterion = nn.MSELoss(reduction='mean').to(device=device)
 
-    optimizer = torch.optim.SGD(model.parameters(), lr,
-                                momentum=MOMENTUM,
-                                weight_decay=WEIGHT_DECAY)
+    # optimizer = torch.optim.SGD(model.parameters(), lr,
+    #                             momentum=MOMENTUM,
+    #                             weight_decay=WEIGHT_DECAY)
+    optimizer = torch.optim.Adam(model.parameters(), lr,
+                                    weight_decay=WEIGHT_DECAY)
 
     if doTest:
         # Quick test
