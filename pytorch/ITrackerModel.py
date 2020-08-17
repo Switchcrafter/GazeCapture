@@ -7,7 +7,7 @@ from torchvision import models
 
 '''
 Pytorch model for the iTracker.
-Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018. 
+Author: Petr Kellnhofer ( pkel_lnho (at) gmai_l.com // remove underscores and spaces), 2018.
 Website: http://gazecapture.csail.mit.edu/
 
 Cite:
@@ -32,9 +32,9 @@ class ItrackerImageModel(nn.Module):
         self.model = models.resnet18(pretrained=True)
         self.conv = nn.Sequential(*list(self.model.children())[:-2])
 
-        # Freeze the parameters
-        for param in self.conv.parameters():
-            param.requires_grad = False
+        # # Freeze the parameters
+        # for param in self.conv.parameters():
+        #     param.requires_grad = False
 
     def forward(self, x):
         x = self.conv(x)
@@ -62,7 +62,7 @@ class FaceImageModel(nn.Module):
             nn.ReLU(inplace=True),
             # 64
         )
-        
+
     def forward(self, x):
         # 3C x 224H x 224W
         x = self.conv(x)
