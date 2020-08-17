@@ -154,19 +154,26 @@ def main():
         # export the model for use in other frameworks
         export_onnx_model(model, device, verbose)
     else:  # Train
+        learning_rates = [0] * epochs
+        best_RMSErrors = [0] * epochs
+        RMSErrors = [0] * epochs
+
         # first make a learning_rate correction suitable for epoch from saved checkpoint
         # epoch will be non-zero if a checkpoint was loaded
         for epoch in range(1, epoch):
             if verbose:
                 print('Epoch %05d of %05d - adjust learning rate only' % (epoch, epochs))
                 start_time = datetime.now()
-            adjust_learning_rate(optimizer, epoch)
+            lr = adjust_learning_rate(optimizer, epoch)
+
+            learning_rates[epoch - 1] = lr
+
             if verbose:
                 time_elapsed = datetime.now() - start_time
                 print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
 
         if args.hsm:
-            args.multinomial_weights = torch.ones(datasets['train']['size'], dtype=torch.double)
+            args.multinomial_weights = torch.ones(datasets['train'].size, dtype=torch.double)
             if not verbose:
                 args.sampling_bar = SamplingBar('HSM')
 
@@ -174,7 +181,9 @@ def main():
         for epoch in range(epoch, epochs + 1):
             print('Epoch %05d of %05d - adjust, train, validate' % (epoch, epochs))
             start_time = datetime.now()
-            adjust_learning_rate(optimizer, epoch)
+            lr = adjust_learning_rate(optimizer, epoch)
+
+            learning_rates[epoch - 1] = lr
 
             # train for one epoch
             print('\nEpoch:{} [device:{}, lr:{}, best_RMSError:{:2.4f}, hsm:{}, adv:{}]'.format(epoch, device, lr, best_RMSError, args.hsm, args.adv))
@@ -187,6 +196,9 @@ def main():
             is_best = eval_RMSError < best_RMSError
             best_RMSError = min(eval_RMSError, best_RMSError)
 
+            best_RMSErrors[epoch - 1] = best_RMSError
+            RMSErrors[epoch - 1] = eval_RMSError
+
             time_elapsed = datetime.now() - start_time
 
             if run:
@@ -195,18 +207,30 @@ def main():
                 run.log('best MSELoss', best_RMSError)
                 run.log('epoch time', time_elapsed)
 
-            save_checkpoint({
-                'epoch': epoch,
-                'state_dict': model.state_dict(),
-                'best_RMSError': best_RMSError,
-            },
+            save_checkpoint(
+                {
+                    'epoch': epoch,
+                    'state_dict': model.state_dict(),
+                    'best_RMSError': best_RMSError,
+                    'is_best': is_best,
+                    'train_MSELoss': train_MSELoss,
+                    'train_RMSError': train_RMSError,
+                    'eval_MSELoss': eval_MSELoss,
+                    'eval_RMSError': eval_RMSError,
+                    'lr': lr,
+                    'time_elapsed': time_elapsed,
+                },
                 is_best,
                 checkpointsPath,
                 saveCheckpoints)
 
             print('')
-            print('Epoch %05d with RMSError %.5f' % (epoch, best_RMSError))
+            print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
             print('Epoch Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
+            print('')
+            print('\'RMS_Errors\': {0},'.format(RMSErrors))
+            print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
+            print('')
 
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
@@ -584,6 +608,7 @@ def adjust_learning_rate(optimizer, epoch):
     lr = BASE_LR * (0.1 ** (epoch // 30))
     for param_group in optimizer.state_dict()['param_groups']:
         param_group['lr'] = lr
+    return lr
 
 
 def str2bool(v):
