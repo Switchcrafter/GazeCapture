@@ -719,7 +719,7 @@ def parse_commandline_arguments():
     parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
     parser.add_argument('--hsm_cycle', type=int, default=8)
     parser.add_argument('--adv', type=str2bool, nargs='?', const=True, default=False, help="Enables Adversarial Attack")
-    parser.add_argument('--color_space', default='YCbCr', help='Image color space - RGB, YCbCr, HSV, LAB')
+    parser.add_argument('--color_space', default='RGB', help='Image color space - RGB, YCbCr, HSV, LAB')
     parser.add_argument('--decay_type',
                         default='none',
                         help='none, step, exp, time')
