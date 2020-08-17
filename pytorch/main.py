@@ -53,6 +53,22 @@ IMAGE_SIZE = (IMAGE_WIDTH, IMAGE_HEIGHT)
 GRID_SIZE = 25
 FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
 
+def preparePath(path, clear=False):
+    if not os.path.isdir(path):
+        try:
+            os.makedirs(path, 0o777)
+        except FileExistsError:
+            pass
+    if clear:
+        files = os.listdir(path)
+        for f in files:
+            fPath = os.path.join(path, f)
+            if os.path.isdir(fPath):
+                shutil.rmtree(fPath)
+            else:
+                os.remove(fPath)
+
+    return path
 
 def main():
     args, doLoad, doTest, doValidate, dataPath, checkpointsPath, \
@@ -65,7 +81,8 @@ def main():
 
     if using_cuda and torch.cuda.device_count() > 0:
         # Change batch_size in commandLine args if out of cuda memory
-        batch_size = len(args.local_rank) * args.batch_size
+        # batch_size = len(args.local_rank) * args.batch_size
+        batch_size = args.batch_size
     else:
         batch_size = 1
 
@@ -99,13 +116,15 @@ def main():
             # Single-Process Multi-GPU
             torch.distributed.init_process_group(backend="nccl")
             model = torch.nn.DistributedDataParallel(model)
-        else:
+        elif args.mode == 'ddp2':
             print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
             # Multi-Process Single-GPU
             # args.world_size = os.environ.get('WORLD_SIZE') or 1
             # torch.distributed.init_process_group(backend='nccl', world_size=args.world_size, init_method='env://')
             torch.distributed.init_process_group(backend='nccl')
             model = torch.nn.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank[0])
+        else:
+            print('No Parallelization')
 
     epoch = 1
     RMSErrors = None
@@ -504,6 +523,7 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
             break
 
     resultsFileName = os.path.join(checkpointsPath, 'results.json')
+    preparePath(checkpointsPath)
     with open(resultsFileName, 'w+') as outfile:
         json.dump(results, outfile)
 
@@ -657,7 +677,7 @@ def parse_commandline_arguments():
                         help="verbose mode - print details every batch")
     # Experimental options
     parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--mode', help="Multi-GPU mode: dp, ddp1, [ddp2]", default='ddp2')
+    parser.add_argument('--mode', help="Multi-GPU mode: dp, ddp1, ddp2, [none]", default='none')
     parser.add_argument('--name', help="Provide a name to the experiment", default='main')
     parser.add_argument('--local_rank', help="", nargs='+', default=[0])
     parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
