@@ -53,13 +53,11 @@ def normalize_image_transform(image_size, split, jitter):
             transforms.RandomCrop(image_size),
             transforms.Resize(image_size),
             transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])  # Well known ImageNet values
         ])
     else:
         normalize_image = transforms.Compose([
             transforms.Resize(image_size),
             transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])  # Well known ImageNet values
         ])
 
     return normalize_image
