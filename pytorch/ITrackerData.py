@@ -10,7 +10,7 @@ from random import shuffle
 # CPU data loader
 from PIL import Image
 import torchvision.transforms as transforms
-from utility_functions.face_utilities import hogImage
+# from utility_functions.face_utilities import hogImage
 
 from utility_functions.Utilities import centered_text
 
@@ -250,18 +250,18 @@ class ITrackerData(object):
             raise RuntimeError('Could not read image: ' + path)
         return im
 
-    def get_hog_descriptor(self, im):
-        # im = Image.fromarray(hogImage(im), im.mode)
-        # hog is failing below (20,20) so this should fix
-        if im.size[0] < 20:
-            im = transforms.functional.resize(im, (20,20), interpolation=2)
-        try:
-            hog = hogImage(im)
-            im = Image.fromarray(hog, im.mode)
-        except:
-            # print(im.size)
-            pass
-        return im
+    # def get_hog_descriptor(self, im):
+    #     # im = Image.fromarray(hogImage(im), im.mode)
+    #     # hog is failing below (20,20) so this should fix
+    #     if im.size[0] < 20:
+    #         im = transforms.functional.resize(im, (20,20), interpolation=2)
+    #     try:
+    #         hog = hogImage(im)
+    #         im = Image.fromarray(hog, im.mode)
+    #     except:
+    #         # print(im.size)
+    #         pass
+    #     return im
 
     # merge two
     def __getitem__(self, index):
