@@ -5,7 +5,7 @@ import os.path
 import scipy.io as sio
 import numpy as np
 
-from random import shuffle
+from random import shuffle, random
 
 # CPU data loader
 from PIL import Image
@@ -219,6 +219,7 @@ class ITrackerData(object):
         self.gridSize = gridSize
         self.color_space = color_space
         self.data_loader = data_loader
+        self.split = split
 
         if split == 'test':
             mask = self.metadata['labelTest']
