@@ -239,6 +239,7 @@ class ITrackerData(object):
         if self.data_loader == 'cpu':
             self.normalize_image = normalize_image_transform(image_size=self.imSize, jitter=jitter, split=split, color_space=self.color_space)
             self.resize_transform = resize_image_transform(image_size=self.imSize)
+            self.mirrorCoordinates = np.array([-1.0, 1.0])
 
     def __len__(self):
         return len(self.indices)
@@ -249,19 +250,6 @@ class ITrackerData(object):
         except OSError:
             raise RuntimeError('Could not read image: ' + path)
         return im
-
-    # def get_hog_descriptor(self, im):
-    #     # im = Image.fromarray(hogImage(im), im.mode)
-    #     # hog is failing below (20,20) so this should fix
-    #     if im.size[0] < 20:
-    #         im = transforms.functional.resize(im, (20,20), interpolation=2)
-    #     try:
-    #         hog = hogImage(im)
-    #         im = Image.fromarray(hog, im.mode)
-    #     except:
-    #         # print(im.size)
-    #         pass
-    #     return im
 
     # merge two
     def __getitem__(self, index):
@@ -291,10 +279,13 @@ class ITrackerData(object):
             imEyeR = self.loadImage(imEyeRPath)
             imfaceGrid = self.loadImage(imfaceGridPath)
 
-            # for hog experiments
-            # imFace = self.get_hog_descriptor(imFace)
-            # imEyeL = self.get_hog_descriptor(imEyeL)
-            # imEyeR = self.get_hog_descriptor(imEyeR)
+            # Data Augmentation: Mirroring
+            # mirror data with 50% probablity
+            if self.split == 'train' and random() >= 0.5:
+                imFace = transforms.functional.hflip(imFace)
+                imEyeR, imEyeL = transforms.functional.hflip(imEyeL), transforms.functional.hflip(imEyeR)
+                imfaceGrid = transforms.functional.hflip(imfaceGrid)
+                gaze = self.mirrorCoordinates * gaze
 
             imFace = self.normalize_image(imFace)
             imEyeL = self.normalize_image(imEyeL)
