@@ -96,7 +96,9 @@ def main():
 
     epoch = 1
     if doLoad:
-        saved = load_checkpoint(checkpointsPath, device)
+        # Load last checkpoint if training otherwise load best checkpoint for evaluation
+        filename = 'checkpoint.pth.tar' if args.mode == 'Train' else 'best_checkpoint.pth.tar'
+        saved = load_checkpoint(args.output_path, args.device, filename)
         if saved:
             epoch = saved['epoch']
             # backward compatible to old saved states
