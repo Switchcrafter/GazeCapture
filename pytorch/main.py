@@ -125,7 +125,9 @@ def main():
     best_RMSErrors = []
     learning_rates = []
     if doLoad:
-        saved = load_checkpoint(checkpointsPath, device)
+        # Load last checkpoint if training otherwise load best checkpoint for evaluation
+        filename = 'checkpoint.pth.tar' if args.mode == 'Train' else 'best_checkpoint.pth.tar'
+        saved = load_checkpoint(args.output_path, args.device, filename)
         if saved:
             epoch = saved.get('epoch', epoch)
             best_RMSError = saved.get('best_RMSError', best_RMSError)
