@@ -301,8 +301,14 @@ class MultiProgressBar(Bar):
             self.update(index, 0)
 
     def update(self, index, value):
+        try:
+            self.update1(index, value)
+        except ZeroDivisionError:
+            pass
+
+    def update1(self, index, value):
         self.processValue[index] = value
-        remaining = [max - val for max, val in zip(self.processMax, self.processValue ) if max != 0 ]
+        remaining = [max - val for max, val in zip(self.processMax, self.processValue) if max != 0 ]
         completedProcesses = self.countEmptyTask + remaining.count(0)
 
         # display

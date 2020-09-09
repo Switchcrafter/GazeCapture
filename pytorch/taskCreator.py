@@ -419,7 +419,7 @@ def ROIDetectionTask(directory, directory_idx, progressbar):
 
 # Equivalent: prepareDataset_dlib
 def ROIExtractionTask(directory, directory_idx, progressbar):
-
+    
     recDir = os.path.join(args.input, directory)
     recDirOut = os.path.join(args.output, directory)
 
