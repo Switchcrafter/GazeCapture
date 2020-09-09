@@ -93,29 +93,36 @@ def main():
 
     # GPU optimizations and modes
     cudnn.benchmark = True
-    if using_cuda and len(args.local_rank) > 1:
+    if using_cuda:
         if args.mode == 'dp':
             print('Using DataParallel Backend')
-            model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=device)
+            if not args.disable_sync:
+                from utility_functions.sync_batchnorm import convert_model
+                # Convert batchNorm layers into synchronized batchNorm
+                model = convert_model(model)
+            model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=args.device)
         elif args.mode == 'ddp1':
+            # Single-Process Multiple-GPU: You'll observe all gpus running a single process (processes with same PID)
             print('Using DistributedDataParallel Backend - Single-Process Multi-GPU')
-            # Single-Process Multi-GPU
             torch.distributed.init_process_group(backend="nccl")
-            model = torch.nn.DistributedDataParallel(model)
+            model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)
         elif args.mode == 'ddp2':
-            print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
-            # Multi-Process Single-GPU
-            # args.world_size = os.environ.get('WORLD_SIZE') or 1
-            # torch.distributed.init_process_group(backend='nccl', world_size=args.world_size, init_method='env://')
+            # Multi-Process Single-GPU : You'll observe multiple gpus running different processes (different PIDs)
+            # OMP_NUM_THREADS = nb_cpu_threads / nproc_per_node
             torch.distributed.init_process_group(backend='nccl')
-            model = torch.nn.DistributedDataParallel(model, device_ids=args.local_rank, output_device=args.local_rank[0])
+            if not args.disable_sync:
+                # Convert batchNorm layers into synchronized batchNorm
+                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+            model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True,
+                                                            device_ids=args.local_rank,
+                                                            output_device=args.local_rank[0])
+            ###### code after this place runs in their own process #####
+            set_print_policy(args.master, torch.distributed.get_rank())
+            print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
         else:
-            from sync_batchnorm import convert_model, patch_replication_callback, DataParallelWithCallback
-            # Convert batchNorm layers into synchronized batchNorm
-            model = convert_model(model)
-            # model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=device)
-            # patch_replication_callback(model)  # monkey-patching
-            model = DataParallelWithCallback(model, device_ids=args.local_rank).to(device=device)
+            print("No Parallelization")
+    else:
+        print("Cuda disabled")
 
     eval_RMSError = math.inf
     best_RMSError = math.inf
@@ -681,7 +688,7 @@ def parse_commandline_arguments():
                         help="verbose mode - print details every batch")
     # Experimental options
     parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--mode', help="Multi-GPU mode: dp, ddp1, [ddp2], ddp3", default='ddp2')
+    parser.add_argument('--mode', help="Multi-GPU mode: none, dp, ddp1, ddp2", default='none')
     parser.add_argument('--name', help="Provide a name to the experiment", default='main')
     parser.add_argument('--local_rank', help="", nargs='+', default=[0])
     parser.add_argument('--hsm', type=str2bool, nargs='?', const=True, default=False, help="")
