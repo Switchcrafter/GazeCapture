@@ -11,11 +11,17 @@ from random import shuffle
 from PIL import Image
 import torchvision.transforms as transforms
 
-# GPU data loader
-from nvidia.dali.pipeline import Pipeline
-import nvidia.dali.ops as ops
-import nvidia.dali.types as types
-from nvidia.dali.plugin.pytorch import DALIGenericIterator
+try:
+    # GPU data loader
+    from nvidia.dali.pipeline import Pipeline
+    import nvidia.dali.ops as ops
+    import nvidia.dali.types as types
+    from nvidia.dali.plugin.pytorch import DALIGenericIterator
+except ImportError:
+    # If running on a non-CUDA system, stub out Pipeline to prevent code crash
+    class Pipeline:
+        def __init__(self, *args):
+            return
 
 from Utilities import centeredText
 
