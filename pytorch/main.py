@@ -126,7 +126,7 @@ def main():
     learning_rates = []
     if doLoad:
         # Load last checkpoint if training otherwise load best checkpoint for evaluation
-        filename = 'checkpoint.pth.tar' if args.mode == 'Train' else 'best_checkpoint.pth.tar'
+        filename = 'best_checkpoint.pth.tar' if args.validate == True or args.test == True else 'checkpoint.pth.tar'
         saved = load_checkpoint(args.output_path, args.device, filename)
         if saved:
             epoch = saved.get('epoch', epoch)
