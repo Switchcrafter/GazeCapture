@@ -778,16 +778,31 @@ def dataStatsTask(filepath):
         print(filepath + " doesn't exists.")
         return
     data = sio.loadmat(filepath, struct_as_record=False)
-    trainSize = data['labelTrain'].flatten().tolist().count(1)
-    validSize = data['labelVal'].flatten().tolist().count(1)
-    testSize = data['labelTest'].flatten().tolist().count(1)
-    total = trainSize + validSize + testSize
-    total2 = len(data['labelTrain'].flatten().tolist())
-    print('{:11s}: {:8d} {:6.2f}%'.format('totalSize', total, 100*total/total))
-    print('{:11s}: {:8d} {:6.2f}%'.format('trainSize', trainSize, 100*trainSize/total))
-    print('{:11s}: {:8d} {:6.2f}%'.format('validSize', validSize, 100*validSize/total))
-    print('{:11s}: {:8d} {:6.2f}%'.format('testSize', testSize, 100*testSize/total))
-    print('{:11s}: {:8d} {:6.2f}%'.format('total2Size', total2, 100*total2/total))
+    
+    recordNumbers = data['labelRecNum'].flatten()
+    trainIdx = data['labelTrain'].flatten() > 0
+    validIdx = data['labelVal'].flatten() > 0
+    testIdx = data['labelTest'].flatten() > 0
+
+    trainRecords = recordNumbers[trainIdx]
+    validRecords = recordNumbers[validIdx]
+    testRecords = recordNumbers[testIdx]
+
+    trainSize, trainUsers = len(trainRecords), len(np.unique(trainRecords))
+    validSize, validUsers = len(validRecords), len(np.unique(validRecords))
+    testSize, testUsers = len(testRecords), len(np.unique(testRecords))
+
+    # trainSize = data['labelTrain'].flatten().tolist().count(1)
+    # validSize = data['labelVal'].flatten().tolist().count(1)
+    # testSize = data['labelTest'].flatten().tolist().count(1)
+    totalSize = trainSize + validSize + testSize
+    totalUsers = trainUsers + validUsers + testUsers
+    # total2 = len(data['labelTrain'].flatten().tolist())
+    print('{:11s}: {:8d} {:6.2f}% {:8d}'.format('totalSize', totalSize, 100*totalSize/totalSize, totalUsers))
+    print('{:11s}: {:8d} {:6.2f}% {:8d}'.format('trainSize', trainSize, 100*trainSize/totalSize, trainUsers))
+    print('{:11s}: {:8d} {:6.2f}% {:8d}'.format('validSize', validSize, 100*validSize/totalSize, validUsers))
+    print('{:11s}: {:8d} {:6.2f}% {:8d}'.format('testSize', testSize, 100*testSize/totalSize, testUsers))
+    # print('{:11s}: {:8d} {:6.2f}%'.format('total2Size', total2, 100*total2/totalSize))
 
 def countFilesTaskSerial(filepath):
     count = 0
