@@ -104,12 +104,28 @@ def main():
         if saved:
             epoch = saved['epoch']
             # backward compatible to old saved states
-            best_MSELoss = saved['best_MSELoss'] if 'best_MSELoss' in saved.keys() else saved['best_prec1']
-            print(
-                'Loading checkpoint : [Epoch: %d | MSELoss: %.5f].' % (
-                    epoch,
-                    best_MSELoss)
-            )
+            # best_MSELoss = saved['best_MSELoss'] if 'best_MSELoss' in saved.keys() else saved['best_prec1']
+            # print(
+            #     'Loading checkpoint : [Epoch: %d | MSELoss: %.5f].' % (
+            #         epoch,
+            #         best_MSELoss)
+            # )
+            if 'best_RMSError' in saved.keys():
+                best_RMSError = saved['best_RMSError']
+                print(
+                    'Loading checkpoint : [Epoch: %d | best_RMSError: %.5f].' % (
+                        epoch,
+                        best_RMSError)
+                )
+            elif 'best_MSELoss' in saved.keys():
+                best_MSELoss = saved['best_MSELoss']
+                print(
+                    'Loading checkpoint : [Epoch: %d | MSELoss: %.5f].' % (
+                        epoch,
+                        best_MSELoss)
+                )
+
+            
 
             try:
                 state = saved['state_dict']
