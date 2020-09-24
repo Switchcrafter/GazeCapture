@@ -711,6 +711,9 @@ def plotErrorHeatmapTask(results_path):
     plt.xlabel('X (cm)')
     plt.ylabel('Y (cm)')
     plt.title('Heatmap of Error')
+    plt.grid(True)
+    plt.xlim((-30,30))
+    plt.ylim((-30,30))
     plt.show()
 
 def plotGazePointHeatmapTask(results_path):
@@ -743,6 +746,10 @@ def plotGazePointHeatmapTask(results_path):
     #cb.set_label('Count')
     plt.xlabel('X (cm)')
     plt.ylabel('Y (cm)')
+    plt.title('Heatmap of GazePoints')
+    plt.grid(True)
+    plt.xlim((-30,30))
+    plt.ylim((-30,30))
     plt.show()
 
 def plotErrorHistogramTask(results_path):
@@ -875,6 +882,7 @@ def countValidTask(directory, directory_idx, bar):
             
     return directory, len(frames), count1, count2
 
+# e.g. --input /data/tmp/gc-dlib-rc-meta
 def plotRotationHistogramTask(directory, directory_idx, bar):
     faceData = json_read(os.path.join(args.input, directory, "dlibFace.json"))
     Theta = faceData["Theta"]
@@ -952,6 +960,7 @@ if __name__ == '__main__':
     parser.add_argument('--source_compare', action='store_true', help="compare against source", default=False)
     parser.add_argument('--reference', default="", help="reference .mat path")
     parser.add_argument('--ext', help="", nargs='+', default=[".jpg", ".jpeg", ".JPG", ".JPEG"])
+    parser.add_argument('--label', default="", help="e.g. GazeCapture, GazeCapture")
     args = parser.parse_args()
 
     if args.task == "":
@@ -1014,15 +1023,15 @@ if __name__ == '__main__':
         dataLoader = None
         taskFunction = plotErrorTask
     elif args.task == "plotErrorHeatmapTask":
-        taskData = "best_results.json"
+        taskData = os.path.join(args.input, "best_results.json") 
         dataLoader = None
         taskFunction = plotErrorHeatmapTask
     elif args.task == "plotGazePointHeatmapTask":
-        taskData = "best_results.json"
+        taskData = os.path.join(args.input, "best_results.json") 
         dataLoader = None
         taskFunction = plotGazePointHeatmapTask
     elif args.task == "plotErrorHistogramTask":
-        taskData = "best_results.json"
+        taskData = os.path.join(args.input, "best_results.json") 
         dataLoader = None
         taskFunction = plotErrorHistogramTask
     elif args.task == "plotRotationHistogramTask":
@@ -1036,7 +1045,7 @@ if __name__ == '__main__':
         taskFunction = modelStatsTask
     ######### Data Parsing Tasks #########
     elif args.task == "parseResultsTask":
-        taskData = "best_results.json"
+        taskData = os.path.join(args.input, "best_results.json") 
         dataLoader = None
         taskFunction = parseResultsTask
     ######### Demo Tasks #########
@@ -1144,7 +1153,7 @@ if __name__ == '__main__':
         plt.xlabel('Theta (degrees)')
         plt.ylabel('Probability Density')
         plt.title('Histogram of Rotation')
-        plt.savefig('process_results/MIT_plotRotationHistogram.png')
+        # plt.savefig('process_results/MIT_plotRotationHistogram.png')
         plt.show()
 
         

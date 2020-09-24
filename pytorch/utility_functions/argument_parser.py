@@ -30,6 +30,8 @@ def parse_commandline_arguments():
                         help='Just test and terminate.')
     parser.add_argument('--validate', action='store_true', default=False,
                         help='Just validate and terminate.')
+    parser.add_argument('--info', action='store_true', default=False,
+                        help='Just print info and terminate.')
     parser.add_argument('--dataset_limit', type=int, default=0, 
                         help='Limits the dataset size, useful for debugging')
     parser.add_argument('--exportONNX', action='store_true', default=False)
@@ -125,6 +127,8 @@ def parse_commandline_arguments():
         args.phase = 'Validate'
     elif args.exportONNX:
         args.phase = 'ExportONNX'
+    elif args.info:
+        args.phase = 'Info'
 
     if args.verbose:
         print('Number of arguments:', len(sys.argv), 'arguments.')

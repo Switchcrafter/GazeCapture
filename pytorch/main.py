@@ -68,6 +68,15 @@ def main():
 
     val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates, model = initialize_model(args)
     
+    if args.phase == 'Info':
+        print('')
+        print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
+        print('')
+        print('\"RMS_Errors\": {0},'.format(val_RMSErrors))
+        print('\"Best_RMS_Errors\": {0}'.format(best_RMSErrors))
+        print('')
+        return
+
     print('epoch = %d' % epoch)
 
     totalstart_time = datetime.now()
@@ -303,55 +312,58 @@ def initialize_visualization(args):
     args.vis.resetAll()
 
 def initialize_model(args):
-    if args.verbose:
-        print('')
-        if args.using_cuda:
-            print('Using cuda devices:', args.local_rank)
-            # print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
-        print('')
+    if not args.info:
+        if args.verbose:
+            print('')
+            if args.using_cuda:
+                print('Using cuda devices:', args.local_rank)
+                # print('CUDA DEVICE_COUNT {0}'.format(torch.cuda.device_count()))
+            print('')
 
-    # Retrieve model
-    if args.model_type == "deepEyeNet":
-        model = DeepEyeModel().to(device=args.device)
-    else:
-        model = ITrackerModel(args.color_space, args.model_type).to(device=args.device)
-    # print(model)
-
-    # GPU optimizations and modes
-    # Enable Heuristics: cuDNN will apply heuristics before training to figure 
-    # out the most performant algorithm for the model architecture and input. 
-    # This is especially helpful, if input shapes don't change during training.
-    cudnn.benchmark = True
-    if args.using_cuda:
-        if args.mode == 'dp':
-            print('Using DataParallel Backend')
-            if not args.disable_sync:
-                from utility_functions.sync_batchnorm import convert_model
-                # Convert batchNorm layers into synchronized batchNorm
-                model = convert_model(model)
-            model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=args.device)
-        elif args.mode == 'ddp1':
-            # Single-Process Multiple-GPU: You'll observe all gpus running a single process (processes with same PID)
-            print('Using DistributedDataParallel Backend - Single-Process Multi-GPU')
-            torch.distributed.init_process_group(backend="nccl")
-            model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)
-        elif args.mode == 'ddp2':
-            # Multi-Process Single-GPU : You'll observe multiple gpus running different processes (different PIDs)
-            # OMP_NUM_THREADS = nb_cpu_threads / nproc_per_node
-            torch.distributed.init_process_group(backend='nccl')
-            if not args.disable_sync:
-                # Convert batchNorm layers into synchronized batchNorm
-                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-            model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True,
-                                                            device_ids=args.local_rank,
-                                                            output_device=args.local_rank[0])
-            ###### code after this place runs in their own process #####
-            set_print_policy(args.master, torch.distributed.get_rank())
-            print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
+        # Retrieve model
+        if args.model_type == "deepEyeNet":
+            model = DeepEyeModel().to(device=args.device)
         else:
-            print("No Parallelization")
+            model = ITrackerModel(args.color_space, args.model_type).to(device=args.device)
+        # print(model)
+
+        # GPU optimizations and modes
+        # Enable Heuristics: cuDNN will apply heuristics before training to figure 
+        # out the most performant algorithm for the model architecture and input. 
+        # This is especially helpful, if input shapes don't change during training.
+        cudnn.benchmark = True
+        if args.using_cuda:
+            if args.mode == 'dp':
+                print('Using DataParallel Backend')
+                if not args.disable_sync:
+                    from utility_functions.sync_batchnorm import convert_model
+                    # Convert batchNorm layers into synchronized batchNorm
+                    model = convert_model(model)
+                model = torch.nn.DataParallel(model, device_ids=args.local_rank).to(device=args.device)
+            elif args.mode == 'ddp1':
+                # Single-Process Multiple-GPU: You'll observe all gpus running a single process (processes with same PID)
+                print('Using DistributedDataParallel Backend - Single-Process Multi-GPU')
+                torch.distributed.init_process_group(backend="nccl")
+                model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)
+            elif args.mode == 'ddp2':
+                # Multi-Process Single-GPU : You'll observe multiple gpus running different processes (different PIDs)
+                # OMP_NUM_THREADS = nb_cpu_threads / nproc_per_node
+                torch.distributed.init_process_group(backend='nccl')
+                if not args.disable_sync:
+                    # Convert batchNorm layers into synchronized batchNorm
+                    model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+                model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True,
+                                                                device_ids=args.local_rank,
+                                                                output_device=args.local_rank[0])
+                ###### code after this place runs in their own process #####
+                set_print_policy(args.master, torch.distributed.get_rank())
+                print('Using DistributedDataParallel Backend - Multi-Process Single-GPU')
+            else:
+                print("No Parallelization")
+        else:
+            print("Cuda disabled")
     else:
-        print("Cuda disabled")
+        model = None
     
     # use new model or load existing 
     val_RMSErrors, test_RMSErrors, train_RMSErrors, best_RMSErrors, best_RMSError, epoch, learning_rates = checkpoint_manager.extract_checkpoint_data(args,

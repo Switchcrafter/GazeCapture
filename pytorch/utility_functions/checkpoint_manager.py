@@ -18,7 +18,7 @@ def extract_checkpoint_data(args, model):
 
     if not args.reset:
         # Load last checkpoint if training otherwise load best checkpoint for evaluation
-        filename = 'checkpoint.pth.tar' if args.mode == 'Train' else 'best_checkpoint.pth.tar'
+        filename = 'checkpoint.pth.tar' if args.phase == 'Train' or args.phase == 'Info' else 'best_checkpoint.pth.tar'
         saved = load_checkpoint(args.output_path, args.device, filename)
         if saved:
             epoch = saved.get('epoch', epoch)
@@ -35,18 +35,19 @@ def extract_checkpoint_data(args, model):
                     best_rms_error)
             )
 
-            # We should start training on the epoch after the last full epoch
-            epoch = epoch + 1
-
-            try:
-                state = saved['state_dict']
-                model.load_state_dict(state)
-            except RuntimeError:
-                # The most likely cause of a failure to load is that there is a leading "module." from training. This is
-                # normal for models trained with DataParallel. If not using DataParallel, then the "module." needs to be
-                # removed.
-                state = remove_module_from_state(saved)
-                model.load_state_dict(state)
+            # don't load model for the info-only task
+            if not args.info:
+                # We should start training on the epoch after the last full epoch
+                epoch = epoch + 1
+                try:
+                    state = saved['state_dict']
+                    model.load_state_dict(state)
+                except RuntimeError:
+                    # The most likely cause of a failure to load is that there is a leading "module." from training. This is
+                    # normal for models trained with DataParallel. If not using DataParallel, then the "module." needs to be
+                    # removed.
+                    state = remove_module_from_state(saved)
+                    model.load_state_dict(state)
         else:
             print('Warning: Could not read checkpoint!')
 
