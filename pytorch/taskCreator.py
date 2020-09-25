@@ -104,7 +104,8 @@ def RC_cropImage(img, bbox):
     return crop_rect(img, bbox)
 
 def marker(num):
-    markerList = ['','.','^','s','+','D','o','p','P','X','$f$']
+    # markerList = ['','.','^','s','+','D','o','p','P','X','$f$','$1$']
+    markerList = ['','D','s','.','+','^','o','p','P','X']
     return markerList[num%len(markerList)]
 
 def getScreenOrientation(capture_data):
@@ -640,7 +641,7 @@ def compareTask(meta):
         if totalMatch:
             print('The new metadata.mat is an exact match to the reference from GitHub (including ordering)')
 
-def plotErrorTask(All_RMS_Errors):
+def plotErrorTask_old(All_RMS_Errors):
     # Make a data frame
     rms_object = {'x': range(1, 31)}
     for key in All_RMS_Errors.keys():
@@ -664,7 +665,7 @@ def plotErrorTask(All_RMS_Errors):
         ax1.plot(df_rms['x'], df_rms[column], marker=marker(num), color=palette(num), linewidth=2, alpha=0.9, label=column)
 
     # Add titles
-    ax1.set_title("RMS Errors by Epoch", loc='left', fontsize=12, fontweight=0, color='red')
+    ax1.set_title("RMS Errors by Epoch", loc='left', fontsize=10, fontweight=0, color='red')
     ax1.set_xlabel("Epoch")
     ax1.set_ylabel("RMS Error")
 
@@ -683,14 +684,222 @@ def plotErrorTask(All_RMS_Errors):
         ax2.plot(df_best_rms['x'], df_best_rms[column], marker=marker(num), color=palette(num), linewidth=2, alpha=0.9, label=column)
 
     # Add titles
-    ax2.set_title("Best RMS Errors by Epoch", loc='left', fontsize=12, fontweight=0, color='red')
+    ax2.set_title("Best RMS Errors by Epoch", loc='left', fontsize=10, fontweight=0, color='red')
     ax2.set_xlabel("Epoch")
     ax2.set_ylabel("RMS Error")
 
+    # # sets the overall window title
+    # fig.canvas.set_window_title('Window Title')
+    # sets the title of the  whole figure
+    # fig.suptitle("Error Curves - GazeCapture", fontsize=12)
+    fig.suptitle("Error Curves - GazeCapture*")
+
     # Add legend
-    # plt.legend(loc=2, ncol=2)
-    plt.legend(bbox_to_anchor=(0.6, 1), loc='upper left', borderaxespad=0.)
+    # plt.legend(bbox_to_anchor=(0.28, 1), loc=2, ncol=2)
+    plt.legend(bbox_to_anchor=(0.61, 1), loc='upper left', borderaxespad=0.)
     plt.show()
+
+
+def plotErrorTask(All_RMS_Errors):
+    # Make a data frame
+    rms_object = {'x': range(1, 31)}
+    for key in All_RMS_Errors.keys():
+        if All_RMS_Errors[key]["Plot"]:
+            rms_object[key] = np.array((All_RMS_Errors[key])['RMS_Errors'])
+
+    df_rms = pd.DataFrame(rms_object)
+
+    # style
+    # plt.style.use('seaborn-darkgrid')
+
+    # create a color palette
+    palette = plt.get_cmap('Set1')
+
+    fig = plt.figure()
+    ax1 = fig.add_subplot(1, 1, 1)
+
+    # multiple line plot
+    num = 0
+    for column in df_rms.drop('x', axis=1):
+        num += 1
+        ax1.plot(df_rms['x'], df_rms[column], marker=marker(num), color=palette(num), linewidth=2, alpha=0.9, label=column)
+
+    # Add titles
+    ax1.set_title("RMS Errors by Epoch", loc='left', fontsize=10, fontweight=0, color='red')
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("RMS Error")
+    ax1.grid(True)
+    plt.subplots_adjust(left=0.05, bottom=0.05, right=0.99, top=0.98, wspace=None, hspace=None)
+
+    fig = plt.figure()
+    ax2 = fig.add_subplot(1, 1, 1)
+    best_rms_object = {'x': range(1, 31)}
+    for key in All_RMS_Errors.keys():
+        if All_RMS_Errors[key]["Plot"]:
+            best_rms_object[key] = np.array((All_RMS_Errors[key])['Best_RMS_Errors'])
+
+    # Make a data frame
+    df_best_rms = pd.DataFrame(best_rms_object)
+
+    # multiple line plot
+    num = 0
+    for column in df_best_rms.drop('x', axis=1):
+        num += 1
+        ax2.plot(df_best_rms['x'], df_best_rms[column], marker=marker(num), color=palette(num), linewidth=2, alpha=0.9, label=column)
+
+    # Add titles
+    ax2.set_title("Best RMS Errors by Epoch", loc='left', fontsize=10, fontweight=0, color='red')
+    ax2.set_xlabel("Epoch")
+    ax2.set_ylabel("RMS Error")
+    ax2.grid(True)
+
+    # # sets the overall window title
+    # fig.canvas.set_window_title('Window Title')
+    # sets the title of the  whole figure
+    # fig.suptitle("Error Curves - GazeCapture", fontsize=12)
+    # fig.suptitle("Error Curves - GazeCapture*")
+
+    # Add legend
+    # plt.legend(bbox_to_anchor=(0.28, 1), loc=2, ncol=2)
+    plt.subplots_adjust(left=0.05, bottom=0.05, right=0.99, top=0.98, wspace=None, hspace=None)
+    plt.legend(bbox_to_anchor=(0.67, 0.99), loc='upper left', borderaxespad=0.0, prop={'size': 14})
+    plt.show()
+
+def plotErrorTask1(All_RMS_Errors):
+    All_RMS_Errors1 = json_read("metadata/gc1_milestones_rms_errors.json")
+    All_RMS_Errors2 = json_read("metadata/gc2_milestones_rms_errors.json")
+    # Make a data frame
+    rms_object1 = {'x': range(1, 31)}
+    for key in All_RMS_Errors1.keys():
+        if All_RMS_Errors1[key]["Plot"]:
+            rms_object1[key] = np.array((All_RMS_Errors1[key])['RMS_Errors'])
+    # Make a data frame
+    df_rms1 = pd.DataFrame(rms_object1)
+
+    best_rms_object1 = {'x': range(1, 31)}
+    for key in All_RMS_Errors1.keys():
+        if All_RMS_Errors1[key]["Plot"]:
+            best_rms_object1[key] = np.array((All_RMS_Errors1[key])['Best_RMS_Errors'])
+    # Make a data frame
+    df_best_rms1 = pd.DataFrame(best_rms_object1)
+
+    # Make a data frame
+    rms_object2 = {'x': range(1, 31)}
+    for key in All_RMS_Errors2.keys():
+        if All_RMS_Errors2[key]["Plot"]:
+            rms_object2[key] = np.array((All_RMS_Errors2[key])['RMS_Errors'])
+    # Make a data frame
+    df_rms2 = pd.DataFrame(rms_object2)
+
+    best_rms_object2 = {'x': range(1, 31)}
+    for key in All_RMS_Errors2.keys():
+        if All_RMS_Errors2[key]["Plot"]:
+            best_rms_object2[key] = np.array((All_RMS_Errors2[key])['Best_RMS_Errors'])
+    # Make a data frame
+    df_best_rms2 = pd.DataFrame(best_rms_object2)
+
+
+
+    ########## Figure Config ##########
+    # style
+    # plt.style.use('seaborn-darkgrid')
+
+    # create a color palette
+    palette = plt.get_cmap('Set1')
+    fig, axes = plt.subplots(2, 2, sharex=True, sharey=True)
+
+    ########## Subplot1 ##########
+    num = 0
+    for column in df_rms1.drop('x', axis=1):
+        num += 1
+        axes[0,0].plot(df_rms1['x'], df_rms1[column], marker=marker(num), color=palette(num), linewidth=1, alpha=0.9, label=column)
+
+    # Add titles
+    axes[0,0].set_title("RMS Errors by Epoch", loc='left', fontsize=10, fontweight=0, color='red')
+    axes[0,0].set_xlabel("Epoch")
+    axes[0,0].set_ylabel("RMS Error")
+    axes[0,0].grid(True)
+    # axes[0,0].xlim((0,30))
+    axes[0,0].set_ylim((1.7,2.5))
+
+    ########## Subplot2 ##########
+    num = 0
+    for column in df_best_rms1.drop('x', axis=1):
+        num += 1
+        axes[0,1].plot(df_best_rms1['x'], df_best_rms1[column], marker=marker(num), color=palette(num), linewidth=1, alpha=0.9, label=column)
+
+    # Add titles
+    axes[0,1].set_title("Best RMS Errors by Epoch", loc='left', fontsize=10, fontweight=0, color='red')
+    axes[0,1].set_xlabel("Epoch")
+    axes[0,1].set_ylabel("RMS Error")
+    axes[0,1].grid(True)
+    axes[0,1].set_ylim((1.7,2.5))
+
+    axes[0,1].legend(bbox_to_anchor=(0.57, 1.0), loc='upper left', borderaxespad=0.0, prop={'size': 8})
+
+    ########## Subplot3 ##########
+    num = 0
+    for column in df_rms2.drop('x', axis=1):
+        num += 1
+        axes[1,0].plot(df_rms2['x'], df_rms2[column], marker=marker(num), color=palette(num), linewidth=1, alpha=0.9, label=column)
+
+    # Add titles
+    # axes[1,0].set_title("RMS Errors by Epoch", loc='left', fontsize=10, fontweight=0, color='red')
+    axes[1,0].set_xlabel("Epoch")
+    axes[1,0].set_ylabel("RMS Error")
+    axes[1,0].grid(True)
+    axes[1,0].set_ylim((1.9,2.9))
+    
+    ########## Subplot4 ##########
+    num = 0
+    for column in df_best_rms2.drop('x', axis=1):
+        num += 1
+        axes[1,1].plot(df_best_rms2['x'], df_best_rms2[column], marker=marker(num), color=palette(num), linewidth=1, alpha=0.9, label=column)
+
+    # Add titles
+    # axes[1,1].set_title("Best RMS Errors by Epoch", loc='left', fontsize=10, fontweight=0, color='red')
+    axes[1,1].set_xlabel("Epoch")
+    axes[1,1].set_ylabel("RMS Error")
+    axes[1,1].grid(True)
+    axes[1,1].set_ylim((1.9,2.9))
+
+    # # sets the overall window title
+    # fig.canvas.set_window_title('Window Title')
+    # sets the title of the  whole figure
+    # fig.suptitle("Error Curves - GazeCapture", fontsize=12)
+    # fig.suptitle("Error Curves - GazeCapture*")
+
+    # Add legend
+    # plt.legend(bbox_to_anchor=(0.28, 1), loc=2, ncol=2)
+    # plt.legend(bbox_to_anchor=(0.55, 1.0), loc='upper left', borderaxespad=0.)
+    plt.subplots_adjust(left=0.07, bottom=0.05, right=0.95, top=0.98, wspace=0.08, hspace=0.06)
+    plt.show()
+
+def plotErrorHeatmapTask(results_path):
+    jsondata = json_read(results_path)
+    x, y, c = [], [], []
+
+    for datapoint in jsondata:
+        x.append(datapoint["gazePoint"][0])
+        y.append(datapoint["gazePoint"][1])
+        c.append(math.sqrt(((datapoint["gazePoint"][0]-datapoint["gazePrediction"][0])**2)+((datapoint["gazePoint"][1]-datapoint["gazePrediction"][1])**2)))
+
+    cm = plt.get_cmap('jet')
+    cNorm = colors.Normalize(vmin=min(c), vmax=max(c))
+    scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
+
+    plt.scatter(x, y, c=scalarMap.to_rgba(c))
+    #plt.colorbar(scalarMap)
+    #cb.set_label('Error (cm)')
+    plt.xlabel('X (cm)')
+    plt.ylabel('Y (cm)')
+    plt.title('Heatmap of Error')
+    plt.grid(True)
+    plt.xlim((-30,30))
+    plt.ylim((-30,30))
+    plt.show()
+
+
 
 def plotErrorHeatmapTask(results_path):
     jsondata = json_read(results_path)
@@ -1016,8 +1225,9 @@ if __name__ == '__main__':
     ######### Data Visualization Tasks #########
     elif args.task == "plotErrorTask":
         # from RMS_errors import All_RMS_Errors
-        script_directory = os.path.dirname(os.path.realpath(__file__))
-        json_path = os.path.join(script_directory, "metadata/all_rms_errors.json")
+        # script_directory = os.path.dirname(os.path.realpath(__file__))
+        # json_path = os.path.join(script_directory, "metadata/all_rms_errors.json")
+        json_path = args.input
         All_RMS_Errors = json_read(json_path)
         taskData = All_RMS_Errors
         dataLoader = None
