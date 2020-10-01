@@ -699,8 +699,7 @@ def plotErrorTask_old(All_RMS_Errors):
     plt.legend(bbox_to_anchor=(0.61, 1), loc='upper left', borderaxespad=0.)
     plt.show()
 
-
-def plotErrorTask(All_RMS_Errors):
+def plotErrorTask_original(All_RMS_Errors):
     # Make a data frame
     rms_object = {'x': range(1, 31)}
     for key in All_RMS_Errors.keys():
@@ -763,6 +762,74 @@ def plotErrorTask(All_RMS_Errors):
     # plt.legend(bbox_to_anchor=(0.28, 1), loc=2, ncol=2)
     plt.subplots_adjust(left=0.05, bottom=0.05, right=0.99, top=0.98, wspace=None, hspace=None)
     plt.legend(bbox_to_anchor=(0.67, 0.99), loc='upper left', borderaxespad=0.0, prop={'size': 14})
+    plt.show()
+
+def plotErrorTask(All_RMS_Errors):
+    # Make a data frame
+    rms_object = {'x': range(1, 31)}
+    for key in All_RMS_Errors.keys():
+        if All_RMS_Errors[key]["Plot"]:
+            rms_object[key] = np.array((All_RMS_Errors[key])['RMS_Errors'])
+
+    df_rms = pd.DataFrame(rms_object)
+
+    # style
+    # plt.style.use('seaborn-darkgrid')
+
+    # create a color palette
+    palette = plt.get_cmap('Set1')
+
+    fig = plt.figure()
+    ax1 = fig.add_subplot(1, 1, 1)
+
+    # multiple line plot
+    num = 0
+    for column in df_rms.drop('x', axis=1):
+        num += 1
+        ax1.plot(df_rms['x'], df_rms[column], marker=marker(num), color=palette(num), linewidth=2, alpha=0.9, label=column)
+
+    # Add titles
+    # ax1.set_title("RMS Errors by Epoch", loc='left', fontsize=10, fontweight=0, color='red')
+    ax1.set_title("RMS Errors by Epoch (GazeCapture)")
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("RMS Error")
+    ax1.grid(True)
+    # plt.subplots_adjust(left=0.05, bottom=0.05, right=0.99, top=0.98, wspace=None, hspace=None)
+
+    fig = plt.figure()
+    ax2 = fig.add_subplot(1, 1, 1)
+    best_rms_object = {'x': range(1, 31)}
+    for key in All_RMS_Errors.keys():
+        if All_RMS_Errors[key]["Plot"]:
+            best_rms_object[key] = np.array((All_RMS_Errors[key])['Best_RMS_Errors'])
+
+    # Make a data frame
+    df_best_rms = pd.DataFrame(best_rms_object)
+
+    # multiple line plot
+    num = 0
+    for column in df_best_rms.drop('x', axis=1):
+        num += 1
+        ax2.plot(df_best_rms['x'], df_best_rms[column], marker=marker(num), color=palette(num), linewidth=2, alpha=0.9, label=column)
+
+    # Add titles
+    # ax2.set_title("Best RMS Errors by Epoch", loc='left', fontsize=10, fontweight=0, color='red')
+    ax2.set_title("Best RMS Errors by Epoch (GazeCapture)")
+    ax2.set_xlabel("Epoch")
+    ax2.set_ylabel("RMS Error")
+    ax2.grid(True)
+
+    # # sets the overall window title
+    # fig.canvas.set_window_title('Window Title')
+    # sets the title of the  whole figure
+    # fig.suptitle("Error Curves - GazeCapture", fontsize=12)
+    # fig.suptitle("Error Curves - GazeCapture*")
+
+    # Add legend
+    # plt.legend(bbox_to_anchor=(0.28, 1), loc=2, ncol=2)
+    # plt.subplots_adjust(left=0.05, bottom=0.05, right=0.99, top=0.98, wspace=None, hspace=None)
+    # plt.legend(bbox_to_anchor=(0.40, 0.99), loc='upper left', borderaxespad=0.0, prop={'size': 14}, ncol=2)
+    plt.legend(bbox_to_anchor=(0.10, 0.98), loc='upper left', borderaxespad=0.0, ncol=2)
     plt.show()
 
 def plotErrorTask1(All_RMS_Errors):
@@ -972,7 +1039,10 @@ def plotErrorHistogramTask(results_path):
     n, bins, patches = plt.hist(x, num_bins, facecolor='blue', alpha=0.5, density=1)
     plt.xlabel('Error (cm)')
     plt.ylabel('Probability')
+    plt.xlim((0, 15))
+    plt.ylim((0, 0.5))
     plt.title('Histogram of Error')
+    plt.grid(True)
     plt.show()
 
 def parseResultsTask(results_path):
@@ -1364,6 +1434,7 @@ if __name__ == '__main__':
         plt.ylabel('Probability Density')
         plt.title('Histogram of Rotation')
         # plt.savefig('process_results/MIT_plotRotationHistogram.png')
+        plt.grid(True)
         plt.show()
 
         
