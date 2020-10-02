@@ -244,6 +244,8 @@ def main():
             print('\'Best_RMS_Errors\': {0}'.format(best_RMSErrors))
             print('')
     elif args.phase == 'Test':
+        # from torchsummary import summary
+        # summary(model, [(3, 224, 224),(3, 224, 224),(3, 224, 224),(3, 224, 224)])
         # Quick test
         start_time = datetime.now()
         test_MSELoss, test_RMSError = evaluate(datasets['test'],

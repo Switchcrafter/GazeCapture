@@ -1041,7 +1041,7 @@ def plotErrorHistogramTask(results_path):
     plt.ylabel('Probability')
     plt.xlim((0, 15))
     plt.ylim((0, 0.5))
-    plt.title('Histogram of Error')
+    plt.title('Histogram of Error (GazeCapture)')
     plt.grid(True)
     plt.show()
 
