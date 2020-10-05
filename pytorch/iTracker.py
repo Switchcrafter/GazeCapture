@@ -11,11 +11,13 @@ from ITrackerData import normalize_image_transform
 from ITrackerModel import ITrackerModel
 from utility_functions.cam2screen import cam2screen
 
-from utility_functions.face_utilities import find_face_dlib,\
-                           landmarksToRects,\
-                           generate_face_eye_images,\
-                           generate_face_grid, \
-                           prepare_image_inputs
+from utility_functions.face_utilities import find_face_dlib, \
+    rc_landmarksToRects, \
+    rc_generate_face_eye_images, \
+    prepare_image_inputs, \
+    grid_generate_face_eye_images,\
+    grid_prepare_image_inputs,\
+    hogImage
 
 import onnxruntime
 
@@ -97,26 +99,27 @@ def main():
                                                  webcam_image)
 
         if isValid:
-            face_rect, left_eye_rect_relative, right_eye_rect_relative, isValid = landmarksToRects(shape_np, isValid)
+            face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
 
         if isValid:
-            face_image, left_eye_image, right_eye_image = generate_face_eye_images(face_rect,
-                                                                                   left_eye_rect_relative,
-                                                                                   right_eye_rect_relative,
-                                                                                   webcam_image)
-
-            face_grid, face_grid_image = generate_face_grid(face_rect, webcam_image.shape[0], webcam_image.shape[1])
-            image_eye_left, image_eye_right, image_face = prepare_image_inputs(face_image,
-                                                                               left_eye_image,
-                                                                               right_eye_image)
-
-            tensor_face, tensor_eye_left, tensor_eye_right, tensor_face_grid = prepare_image_tensors(color_space,
-                                                                                                     image_face,
-                                                                                                     image_eye_left,
-                                                                                                     image_eye_right,
-                                                                                                     face_grid,
-                                                                                                     normalize_image,
-                                                                                                     args.device)
+            face_image, left_eye_image, right_eye_image, face_grid_image = grid_generate_face_eye_images(face_rect,
+                                                                                                        left_eye_rect,
+                                                                                                        right_eye_rect,
+                                                                                                        webcam_image)
+            # print(face_image.shape, face_grid_image.shape)
+            # OpenCV BGR -> PIL RGB conversion
+            image_eye_left, image_eye_right, image_face, image_face_grid = grid_prepare_image_inputs(face_image,
+                                                                                            left_eye_image,
+                                                                                            right_eye_image,
+                                                                                            face_grid_image)
+            # print(face_grid_image.size, face_grid_image.size)
+            # PIL RGB -> PIL YCBCr. Then Convert images into tensors
+            tensor_eye_left, tensor_eye_right, tensor_face, tensor_face_grid = grid_prepare_image_tensors(color_space,
+                                                                            image_face,
+                                                                            image_eye_left,
+                                                                            image_eye_right,
+                                                                            image_face_grid,
+                                                                            normalize_image)
 
             start_time = datetime.now()
             if use_torch:
@@ -191,7 +194,7 @@ def generate_display_data(display,
     input_images = np.concatenate((face_image,
                                    right_eye_image,
                                    left_eye_image,
-                                   face_grid_image.resize((224, 224))),
+                                   face_grid_image),
                                   axis=0)
     display = draw_overlay(display, monitor.width - 324, 0, input_images)
     display = draw_crosshair(display,
@@ -296,6 +299,32 @@ def prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_rig
 
     return tensor_face, tensor_eye_left, tensor_eye_right, tensor_face_grid
 
+def grid_prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_right, image_face_grid, normalize_image):
+    # Convert to the desired color space
+    image_face = image_face.convert(color_space)
+    image_eye_left = image_eye_left.convert(color_space)
+    image_eye_right = image_eye_right.convert(color_space)
+    image_face_grid = image_face_grid.convert(color_space)
+
+    # normalize the image, results in tensors
+    tensor_face = normalize_image(image_face)
+    tensor_eye_left = normalize_image(image_eye_left)
+    tensor_eye_right = normalize_image(image_eye_right)
+    tensor_face_grid = normalize_image(image_face_grid)
+
+    # convert the 3 dimensional array into a 4 dimensional array, making it a batch size of 1
+    tensor_face.unsqueeze_(0)
+    tensor_eye_left.unsqueeze_(0)
+    tensor_eye_right.unsqueeze_(0)
+    tensor_face_grid.unsqueeze_(0)
+
+    # Convert the tensors into
+    tensor_face = torch.autograd.Variable(tensor_face, requires_grad=False)
+    tensor_eye_left = torch.autograd.Variable(tensor_eye_left, requires_grad=False)
+    tensor_eye_right = torch.autograd.Variable(tensor_eye_right, requires_grad=False)
+    tensor_face_grid = torch.autograd.Variable(tensor_face_grid, requires_grad=False)
+
+    return tensor_face, tensor_eye_left, tensor_eye_right, tensor_face_grid
 
 def change_target(target, monitor, device_name):
     (stimulusX, stimulusY) = cam2screen(

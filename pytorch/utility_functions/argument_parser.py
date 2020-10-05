@@ -11,22 +11,22 @@ def parse_commandline_arguments():
                         help='Path to dataset folder containing metadata.mat.',
                         default='/data/gc-data-prepped-rc')
     parser.add_argument('--output_path', help='Path to checkpoint', default='')
-    parser.add_argument('--save_checkpoints', action='store_true', 
-                        default=False, 
+    parser.add_argument('--save_checkpoints', action='store_true',
+                        default=False,
                         help='Save each of the checkpoints during execution.')
     parser.add_argument('--reset', action='store_true', default=False,
                         help='Start from scratch (do not load).')
     parser.add_argument('--epochs', type=int, default=30)
     parser.add_argument('--workers', type=int, default=16)
     parser.add_argument('--batch_size', type=int, default=256)
-    parser.add_argument('--color_space', default='YCbCr', 
+    parser.add_argument('--color_space', default='YCbCr',
                         help='Image color space - RGB, YCbCr, L')
-    parser.add_argument('--model_type', default="resNet", 
+    parser.add_argument('--model_type', default="resNet",
                         help="resNet, mobileNet, deepEyeNet")
     #---------- Testing & Debugging ------------
     parser.add_argument('--force_test', action='store_true', default=False,
                         help='Force test every epoch during training')
-    parser.add_argument('--test', action='store_true', default=False, 
+    parser.add_argument('--test', action='store_true', default=False,
                         help='Just test and terminate.')
     parser.add_argument('--validate', action='store_true', default=False,
                         help='Just validate and terminate.')
@@ -35,45 +35,45 @@ def parse_commandline_arguments():
     parser.add_argument('--dataset_limit', type=int, default=0, 
                         help='Limits the dataset size, useful for debugging')
     parser.add_argument('--exportONNX', action='store_true', default=False)
-    parser.add_argument('--disable-cuda', action='store_true', default=False, 
+    parser.add_argument('--disable-cuda', action='store_true', default=False,
                         help='Disable CUDA')
     parser.add_argument('--verbose', action='store_true', default=False,
                         help="verbose mode - print details every batch")
     parser.add_argument('--debug', action='store_true', default=False,
                         help='enable debug mode with more details')
     #---------- Distributed Training and Speedup ------------
-    parser.add_argument('--data_loader', default='cpu', 
+    parser.add_argument('--data_loader', default='cpu',
                         help='cpu, dali_cpu, dali_gpu')
     parser.add_argument('--mode', default='none',
                         help='Parallelization mode: [none], dp, ddp1, ddp2')
-    parser.add_argument('--local_rank', nargs='+', 
-                        default=list(range(torch.cuda.device_count())), 
+    parser.add_argument('--local_rank', nargs='+',
+                        default=list(range(torch.cuda.device_count())),
                         help='rank of the current node')
     parser.add_argument('--master', type=int, default=-1)
-    parser.add_argument('--disable_sync', action='store_true', default=False, 
+    parser.add_argument('--disable_sync', action='store_true', default=False,
                         help='Disable Sync BN')
-    parser.add_argument('--disable_boost', action='store_true', default=False, 
+    parser.add_argument('--disable_boost', action='store_true', default=False,
                         help='Disable eval boost')
     #---------- Robustness ------------
-    parser.add_argument('--hsm', action='store_true', default=False, 
+    parser.add_argument('--hsm', action='store_true', default=False,
                         help='Enable Hard Sample Mining')
     parser.add_argument('--hsm_cycle', type=int, default=8)
-    parser.add_argument('--adv', action='store_true', default=False, 
+    parser.add_argument('--adv', action='store_true', default=False,
                         help='Enables Adversarial Attack')
     #---------- Learning Rate & Optimizer ------------
     parser.add_argument('--clr', default='pytorch', help='pytorch, custom')
-    parser.add_argument('--decay_type', default='none', 
+    parser.add_argument('--decay_type', default='none',
                         help='none, step_decay, exp_decay, time_decay')
-    parser.add_argument('--shape_type', default='triangular', 
+    parser.add_argument('--shape_type', default='triangular',
                         help='triangular, flat')
     parser.add_argument('--base_lr', type=float, default=5E-4)
     parser.add_argument('--max_lr', type=float, default=3E-3)
     parser.add_argument('--epochs_per_step', type=int, default=4)
     parser.add_argument('--optimizer', default='sgd', help='sgd, adam')
     #---------- Visualization & Explanability ------------
-    parser.add_argument('--visdom', default='', 
+    parser.add_argument('--visdom', default='',
                         help='Visdom URL. e.g. "http://deepthoughts", "auto"')
-    parser.add_argument('--name', default='main', 
+    parser.add_argument('--name', default='main',
                         help='Provide a name to the experiment',)
     args = parser.parse_args()
 
@@ -82,8 +82,8 @@ def parse_commandline_arguments():
     if args.output_path == "":
         args.device_group = "".join([str(device) for device in args.local_rank])
         args.output_path = os.path.join(
-                            os.path.dirname(os.path.realpath(__file__)), 
-                            'checkpoints', 
+                            os.path.dirname(os.path.realpath(__file__)),
+                            'checkpoints',
                             'gpu' + args.device_group)
 
     args.device = None
@@ -92,7 +92,7 @@ def parse_commandline_arguments():
         print("##################################################################")
         print("Running non-parallel mode ['none'] on multi-GPU machine.\n" +
         "Avoid `-m torch.distributed.launch --nproc_per_node=<num devices>`\n" +
-        "that would create multiple parallel runs on different GPUs without\n"+ 
+        "that would create multiple parallel runs on different GPUs without\n"+
         "any synchronization.\n" +
         "Usage: args for parallelization modes."
         "none: --local_rank 0 --mode 'none' \n" +

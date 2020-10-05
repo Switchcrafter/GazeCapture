@@ -419,7 +419,7 @@ def ROIDetectionTask(directory, directory_idx, progressbar):
 
 # Equivalent: prepareDataset_dlib
 def ROIExtractionTask(directory, directory_idx, progressbar):
-    
+
     recDir = os.path.join(args.input, directory)
     recDirOut = os.path.join(args.output, directory)
 
@@ -850,7 +850,7 @@ def countValidTask(directory, directory_idx, bar):
     recording_path = os.path.join(args.input, directory)
     # print(recording_path)
     frames = json_read(os.path.join('/data/gc-data', directory, "frames.json"))
-    
+
     # reference
     faceData1 = json_read(os.path.join("/data/gc-output-dlib", directory, "dlibFace.json"))
     count1 = faceData1["IsValid"].count(1)
@@ -870,7 +870,7 @@ def countValidTask(directory, directory_idx, bar):
             # print(from_file + "-->" + to_file)
             preparePath(os.path.join('/data/gc-data-extra/ref', directory))
             shutil.copy(from_file, to_file)
-        
+
         # more frames in test
         idx = np.argwhere(match < 0).flatten()
         for i in idx:
@@ -879,7 +879,7 @@ def countValidTask(directory, directory_idx, bar):
             # print(from_file + "-->" + to_file)
             preparePath(os.path.join('/data/gc-data-extra/test', directory))
             shutil.copy(from_file, to_file)
-            
+
     return directory, len(frames), count1, count2
 
 # e.g. --input /data/tmp/gc-dlib-rc-meta
@@ -895,7 +895,7 @@ def modelStatsTask(checkpoint_dirpath):
     if saved:
         epoch = saved.get('epoch', None)
         # for backward compatibility
-        val_rms_errors = saved.get('val_RMSErrors', saved.get('RMSErrors', None)) 
+        val_rms_errors = saved.get('val_RMSErrors', saved.get('RMSErrors', None))
         test_rms_errors = saved.get('test_RMSErrors', None)
         train_rms_errors = saved.get('train_RMSErrors', None)
         best_rms_error = saved.get('best_RMSError', None)
@@ -930,12 +930,12 @@ def syncTask(src):
 def checkpointInfoTask(filepath):
     if not os.path.isfile(filepath):
         return None
-    saved = torch.load(filepath)
+    saved = torch.load(filepath, map_location='cuda:0')
 
     if saved:
         epoch = saved.get('epoch')
         # for backward compatibility
-        val_rms_errors = saved.get('RMSErrors', saved.get('val_RMSErrors')) 
+        val_rms_errors = saved.get('RMSErrors', saved.get('val_RMSErrors'))
         test_rms_errors = saved.get('test_RMSErrors')
         train_rms_errors = saved.get('train_RMSErrors')
         best_rms_error = saved.get('best_RMSError')
@@ -943,7 +943,7 @@ def checkpointInfoTask(filepath):
         learning_rates = saved.get('learning_rates')
         print('\'RMS_Errors\': {0},'.format(val_rms_errors))
         print('\'Best_RMS_Errors\': {0}'.format(best_rms_errors))
-    return 
+    return
 
 # all tasks are handled here
 if __name__ == '__main__':
@@ -1135,7 +1135,7 @@ if __name__ == '__main__':
         valid_test = 0
         issues = []
         for item in output:
-            sum += item[1] 
+            sum += item[1]
             valid_ref += item[2]
             valid_test += item[3]
             if item[2] != item[3]:
@@ -1149,15 +1149,15 @@ if __name__ == '__main__':
         num_bins = 60
         # the histogram of the data
         n, bins, patches = plt.hist(x, num_bins, facecolor='blue', alpha=0.5, density=True)
-        plt.axis([-45, 45, None, None]) 
+        plt.axis([-45, 45, None, None])
         plt.xlabel('Theta (degrees)')
         plt.ylabel('Probability Density')
         plt.title('Histogram of Rotation')
         # plt.savefig('process_results/MIT_plotRotationHistogram.png')
         plt.show()
 
-        
-        
+
+
 
 
 
