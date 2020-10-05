@@ -26,15 +26,17 @@ from utility_functions.face_utilities import find_face_dlib, \
 
 
 class InferenceEngine:
-    def __init__(self, mode, color_space):
+    def __init__(self, mode, color_space, model_type):
         self.mode = mode
         self.color_space = color_space
-        self.model_type = 'resNet'
+        self.model_type = model_type
         if self.mode == "torch":
-            # self.modelSession = ITrackerModel(self.color_space, self.model_type).to(device='cpu')
-            # saved = torch.load('best_checkpoint.pth.tar', map_location='cpu')
-            self.modelSession = DeepEyeModel().to(device='cpu')
-            saved = torch.load('utility_functions/demo_models/demo_0.85/best_checkpoint.pth.tar', map_location='cpu')
+            if self.model_type == 'deepEyeNet':
+                self.modelSession = DeepEyeModel().to(device='cpu')
+                saved = torch.load('utility_functions/demo_models/demo_0.85/best_checkpoint.pth.tar', map_location='cpu')
+            else:
+                self.modelSession = ITrackerModel(self.color_space, self.model_type).to(device='cpu')
+                saved = torch.load('utility_functions/demo_models/MSR_0_9171/best_checkpoint.pth.tar', map_location='cpu')
             self.modelSession.load_state_dict(saved['state_dict'])
             self.modelSession.eval()
         elif self.mode == "onnx":
@@ -65,8 +67,6 @@ IMAGE_SIZE = (IMAGE_WIDTH, IMAGE_HEIGHT)
 GRID_SIZE = 25
 FACE_GRID_SIZE = (GRID_SIZE, GRID_SIZE)
 
-DEVICE_NAME = "Alienware 51m"
-
 # targets on the screen
 TARGETS = [(-10., -3.),
            (-10., -6.),
@@ -88,12 +88,15 @@ TARGETS = [(-10., -3.),
 
 # various command-based actions
 
-def live_demo(input=0):
-    color_space = 'YCbCr'
+def live_demo(data):
+    color_space = data['color_space']
+    model_type = data['model_type']
+    device_name = data['device_name']
     mode = 'rc'
+    print('DEVICE NAME : ', device_name)
 
     # initialize inference engine - torch or onnx
-    inferenceEngine = InferenceEngine("torch", color_space)
+    inferenceEngine = InferenceEngine("torch", color_space, model_type)
 
     # get screen monitor and video capture stream
     monitor = get_monitors()[0]
@@ -194,7 +197,7 @@ def live_demo(input=0):
             time_elapsed = datetime.now() - start_time
 
             display = generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image,
-                                            monitor, right_eye_image, time_elapsed, target)
+                                            monitor, right_eye_image, time_elapsed, target, device_name)
 
         # show default or updated display object on the screen
         cv2.imshow("display", display)
@@ -255,7 +258,7 @@ def draw_landmarks2(im, shape_np, anchor_indices):
 
 
 def generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image, monitor,
-                          right_eye_image, time_elapsed, target):
+                          right_eye_image, time_elapsed, target, device_name):
     disp_offset_x, disp_offset_y = 40, 40
     tx, ty = (TARGETS[target])[0], (TARGETS[target])[1]
     # targetX/Y are target coordinates in screen coordinate system
@@ -264,7 +267,7 @@ def generate_display_data(display, face_grid_image, face_image, gaze_prediction_
                                     1,
                                     monitor.width,
                                     monitor.height,
-                                    deviceName=DEVICE_NAME
+                                    deviceName=device_name
                                     )
 
     (predictionX, predictionY) = cam2screen(gaze_prediction_np[0],
@@ -272,7 +275,7 @@ def generate_display_data(display, face_grid_image, face_image, gaze_prediction_
                                             1,
                                             monitor.width,
                                             monitor.height,
-                                            deviceName=DEVICE_NAME
+                                            deviceName=device_name
                                             )
 
     input_images = np.concatenate((face_image,

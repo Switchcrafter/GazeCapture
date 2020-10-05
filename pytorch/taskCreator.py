@@ -785,7 +785,7 @@ def dataStatsTask(filepath):
         print(filepath + " doesn't exists.")
         return
     data = sio.loadmat(filepath, struct_as_record=False)
-    
+
     recordNumbers = data['labelRecNum'].flatten()
     trainIdx = data['labelTrain'].flatten() > 0
     validIdx = data['labelVal'].flatten() > 0
@@ -961,6 +961,9 @@ if __name__ == '__main__':
     parser.add_argument('--reference', default="", help="reference .mat path")
     parser.add_argument('--ext', help="", nargs='+', default=[".jpg", ".jpeg", ".JPG", ".JPEG"])
     parser.add_argument('--label', default="", help="e.g. GazeCapture, GazeCapture")
+    parser.add_argument('--device_name', default="Alienware 51m", help='from device_metrics.json - Alienware 51m, Surface Pro 6, etc.')
+    parser.add_argument('--model_type', default="resNet", help='resNet, deepEyeNet')
+    parser.add_argument('--color_space', default="YCbCr", help='color_space, RGB')
     args = parser.parse_args()
 
     if args.task == "":
@@ -1023,15 +1026,15 @@ if __name__ == '__main__':
         dataLoader = None
         taskFunction = plotErrorTask
     elif args.task == "plotErrorHeatmapTask":
-        taskData = os.path.join(args.input, "best_results.json") 
+        taskData = os.path.join(args.input, "best_results.json")
         dataLoader = None
         taskFunction = plotErrorHeatmapTask
     elif args.task == "plotGazePointHeatmapTask":
-        taskData = os.path.join(args.input, "best_results.json") 
+        taskData = os.path.join(args.input, "best_results.json")
         dataLoader = None
         taskFunction = plotGazePointHeatmapTask
     elif args.task == "plotErrorHistogramTask":
-        taskData = os.path.join(args.input, "best_results.json") 
+        taskData = os.path.join(args.input, "best_results.json")
         dataLoader = None
         taskFunction = plotErrorHistogramTask
     elif args.task == "plotRotationHistogramTask":
@@ -1045,14 +1048,14 @@ if __name__ == '__main__':
         taskFunction = modelStatsTask
     ######### Data Parsing Tasks #########
     elif args.task == "parseResultsTask":
-        taskData = os.path.join(args.input, "best_results.json") 
+        taskData = os.path.join(args.input, "best_results.json")
         dataLoader = None
         taskFunction = parseResultsTask
     ######### Demo Tasks #########
     elif args.task == "demoTask":
         sys.path.append(".")
         from iTrackerGUITool import live_demo
-        taskData = 0
+        taskData = {'model_type': args.model_type, 'color_space': args.color_space, 'device_name': args.device_name}
         dataLoader = None
         taskFunction = live_demo
     ######### Data Statistics Tasks #########
