@@ -67,7 +67,7 @@ def main():
         return
 
     if use_torch:
-        model = initialize_torch(args.torch_model_path, args.device, color_space)
+        model = initialize_torch(args.torch_model_path, args.model_type, args.device, color_space)
     elif use_onnx:
         session = initialize_onnx(args.onnx_model_path, args.device)
 
@@ -232,8 +232,8 @@ def generate_display_data(display,
     return display
 
 
-def initialize_torch(path, device, color_space):
-    model = ITrackerModel(color_space).to(device=device)
+def initialize_torch(path, model_type, device, color_space):
+    model = ITrackerModel(color_space, model_type).to(device=device)
     saved = torch.load(path, map_location=device)
     model.load_state_dict(saved['state_dict'])
     model.eval()
@@ -367,6 +367,9 @@ def parse_arguments():
                         default=None,
                         help='from device_metrics.json - Alienware 51m, Surface Pro 6, etc.')
     parser.add_argument('--device', default='cpu', help='Select either cpu or cuda')
+    parser.add_argument('--model_type',
+                        default="resNet", 
+                        help="resNet, mobileNet, deepEyeNet")
     args = parser.parse_args()
     return args
 

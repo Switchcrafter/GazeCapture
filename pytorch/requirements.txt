@@ -16,3 +16,4 @@ scikit-image
 onnxruntime
 docker
 pandas
+screeninfo
