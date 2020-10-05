@@ -1,0 +1,70 @@
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>62cb41b5-702a-4dff-8382-3ee6d4c218f5</ProjectGuid>
+    <ProjectHome>.</ProjectHome>
+    <StartupFile>iTracker.py</StartupFile>
+    <SearchPath>
+    </SearchPath>
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <Name>GazeCapture</Name>
+    <RootNamespace>GazeCapture</RootNamespace>
+    <IsWindowsApplication>False</IsWindowsApplication>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="azure-setup.py" />
+    <Compile Include="azure-train.py" />
+    <Compile Include="GazeCapture.py" />
+    <Compile Include="iTracker.py" />
+    <Compile Include="ITrackerData.py" />
+    <Compile Include="iTrackerGUITool.py" />
+    <Compile Include="ITrackerModel.py" />
+    <Compile Include="main.py" />
+    <Compile Include="ModelZoo.py" />
+    <Compile Include="prepareDataset.py" />
+    <Compile Include="prepareVisualize.py" />
+    <Compile Include="prepare_EyeCatcher.py" />
+    <Compile Include="taskCreator.py" />
+    <Compile Include="utility_functions\argument_parser.py" />
+    <Compile Include="utility_functions\cam2screen.py" />
+    <Compile Include="utility_functions\checkpoint_manager.py" />
+    <Compile Include="utility_functions\Criterion.py" />
+    <Compile Include="utility_functions\cyclical_learning_rate.py" />
+    <Compile Include="utility_functions\face_utilities.py" />
+    <Compile Include="utility_functions\gradcam\gradcam.py" />
+    <Compile Include="utility_functions\gradcam\utils.py" />
+    <Compile Include="utility_functions\gradcam\__init__.py" />
+    <Compile Include="utility_functions\sync_batchnorm\batchnorm.py" />
+    <Compile Include="utility_functions\sync_batchnorm\batchnorm_reimpl.py" />
+    <Compile Include="utility_functions\sync_batchnorm\comm.py" />
+    <Compile Include="utility_functions\sync_batchnorm\replicate.py" />
+    <Compile Include="utility_functions\sync_batchnorm\unittest.py" />
+    <Compile Include="utility_functions\sync_batchnorm\__init__.py" />
+    <Compile Include="utility_functions\taskManager.py" />
+    <Compile Include="utility_functions\Utilities.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="utility_functions\" />
+    <Folder Include="utility_functions\gradcam\" />
+    <Folder Include="utility_functions\sync_batchnorm\" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+  <!-- Uncomment the CoreCompile target to enable the Build command in
+       Visual Studio and specify your pre- and post-build commands in
+       the BeforeBuild and AfterBuild targets below. -->
+  <!--<Target Name="CoreCompile" />-->
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+</Project>

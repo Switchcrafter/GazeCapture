@@ -1,10 +1,11 @@
 /pytorch/__pycache__/*.pyc
 /pytorch/__pycache__
-/venv*
+*env*/
 /pytorch/checkpoints/
 
 .idea/
 .vscode/
+.vs/
 /.project
 /.pydevproject
 *results*.json
