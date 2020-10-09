@@ -1,6 +1,14 @@
 import argparse
 from datetime import datetime  # for timing
 
+from ctypes import *
+import os
+dll_path = r"dll\EyeGazeIoctlLibrary_x64.dll"
+if not os.path.exists(dll_path):
+    print("Dll Not Found!")
+
+eyeGazeIoctlDll = cdll.LoadLibrary(dll_path) # Need to load dll before torch, because torch seems to break dll loading
+
 import cv2
 import numpy as np
 import torch
@@ -10,6 +18,10 @@ from screeninfo import get_monitors
 from ITrackerData import normalize_image_transform
 from ITrackerModel import ITrackerModel
 from utility_functions.cam2screen import cam2screen
+
+import math
+import time
+import pandas
 
 from utility_functions.face_utilities import find_face_dlib, \
     rc_landmarksToRects, \
@@ -86,6 +98,9 @@ def main():
     screenOffsetX = 0
     screenOffsetY = 100
 
+    if args.gazehid:
+        eyeGazeIoctlDll.InitializeEyeGaze()
+
     while True:
         _, webcam_image = cap.read()
 
@@ -119,7 +134,8 @@ def main():
                                                                             image_eye_left,
                                                                             image_eye_right,
                                                                             image_face_grid,
-                                                                            normalize_image)
+                                                                            normalize_image,
+                                                                            args.device)
 
             start_time = datetime.now()
             if use_torch:
@@ -136,6 +152,21 @@ def main():
                                                         tensor_face_grid)
 
             time_elapsed = datetime.now() - start_time
+
+
+            if args.gazehid:
+                (gazePredictionScreenPixelXFromCamera, gazePredictionScreenPixelYFromCamera) = cam2screen(
+                    gaze_prediction_np[0],
+                    gaze_prediction_np[1],
+                    1,
+                    monitor.width,
+                    monitor.height,
+                    deviceName=device_name
+                    )
+                timestamp = c_int64(pandas.Timestamp.utcnow().to_datetime64())
+
+                print("SendGazeReport[", gazePredictionScreenPixelXFromCamera, ", ", gazePredictionScreenPixelYFromCamera, ", ", timestamp, "]")
+                eyeGazeIoctlDll.SendGazeReportPixel(int(gazePredictionScreenPixelXFromCamera), int(gazePredictionScreenPixelYFromCamera), timestamp)
 
             display = generate_display_data(display,
                                             face_image,
@@ -299,7 +330,7 @@ def prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_rig
 
     return tensor_face, tensor_eye_left, tensor_eye_right, tensor_face_grid
 
-def grid_prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_right, image_face_grid, normalize_image):
+def grid_prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_right, image_face_grid, normalize_image, device):
     # Convert to the desired color space
     image_face = image_face.convert(color_space)
     image_eye_left = image_eye_left.convert(color_space)
@@ -307,10 +338,10 @@ def grid_prepare_image_tensors(color_space, image_face, image_eye_left, image_ey
     image_face_grid = image_face_grid.convert(color_space)
 
     # normalize the image, results in tensors
-    tensor_face = normalize_image(image_face)
-    tensor_eye_left = normalize_image(image_eye_left)
-    tensor_eye_right = normalize_image(image_eye_right)
-    tensor_face_grid = normalize_image(image_face_grid)
+    tensor_face = normalize_image(image_face).to(device)
+    tensor_eye_left = normalize_image(image_eye_left).to(device)
+    tensor_eye_right = normalize_image(image_eye_right).to(device)
+    tensor_face_grid = normalize_image(image_face_grid).to(device)
 
     # convert the 3 dimensional array into a 4 dimensional array, making it a batch size of 1
     tensor_face.unsqueeze_(0)
@@ -399,6 +430,9 @@ def parse_arguments():
     parser.add_argument('--model_type',
                         default="resNet", 
                         help="resNet, mobileNet, deepEyeNet")
+    parser.add_argument('--gazehid', action='store_true',
+                        default=False,
+                        help='Allows gaze data to be sent to gazehid driver.')
     args = parser.parse_args()
     return args
 

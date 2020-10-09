@@ -14,7 +14,7 @@
     <IsWindowsApplication>False</IsWindowsApplication>
     <InterpreterId>MSBuild|env|$(MSBuildProjectFullPath)</InterpreterId>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>--device_name "Alienware 51m" --model_type 'deepEyeNet' --torch_model_path "checkpoints\demo_0.85\best_checkpoint.pth.tar"</CommandLineArguments>
+    <CommandLineArguments>--device_name "Alienware 51m" --model_type 'resnet' --torch_model_path "checkpoints\MSR_0_9171\best_checkpoint.pth.tar" --device cuda</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
