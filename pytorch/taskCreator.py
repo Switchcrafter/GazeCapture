@@ -295,7 +295,7 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
 
             shape_np, isValid = find_face_dlib(capture_image_np)
             info["NumFaceDetections"] = info["NumFaceDetections"] + 1
-            if args.rc:
+            if args.type == "rc":
                 face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
                 faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
                                                                         right_eye_rect, isValid)
@@ -376,7 +376,7 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
 
 # Equivalent: generate_faces
 def ROIDetectionTask(directory, directory_idx, progressbar):
-    if args.apple:
+    if args.type == "circa":
         return
 
     recording_path = os.path.join(args.input, directory)
@@ -395,14 +395,14 @@ def ROIDetectionTask(directory, directory_idx, progressbar):
 
         # ROI detection
         shape_np, isValid = find_face_dlib(image)
-        if args.rc:
+        if args.type == "rc":
             face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
             faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict,
                                                                 face_rect,
                                                                 left_eye_rect,
                                                                 right_eye_rect,
                                                                 isValid)
-        else:
+        elif args.type == "dlib":
             face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
             faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict,
                                                                 face_rect,
@@ -435,12 +435,12 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         'labelTest': []
     }
 
-    if args.apple:
+    if args.type == "circa":
         # Read metadata JSONs from recDir
         appleFace = json_read(os.path.join(recDir, 'appleFace.json'))
         appleLeftEye = json_read(os.path.join(recDir, 'appleLeftEye.json'))
         appleRightEye = json_read(os.path.join(recDir, 'appleRightEye.json'))
-    else: # use Dlib crops generated from ROIDetection phase
+    else: # use Dlib/RC crops generated from ROIDetection phase
         # Read metadata JSONs from metapath
         dlibDir = os.path.join(args.metapath, directory)
         appleFace = json_read(os.path.join(dlibDir, 'dlibFace.json'))
@@ -466,7 +466,7 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
 
     frames = np.array([int(re.match('(\d{5})\.jpg$', x).group(1)) for x in frames])
 
-    if args.rc:
+    if args.type == "rc":
         bboxFromJson = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H'], data['Theta']), axis=1).astype(int)
         # handle original face_grid data separately
         bboxFromJsonFaceGrid = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H']), axis=1).astype(int)
@@ -474,7 +474,7 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         leftEyeBbox = bboxFromJson(appleLeftEye) + [0, -1, 0, 0, 0]
         rightEyeBbox = bboxFromJson(appleRightEye) + [0, -1, 0, 0, 0]
         faceGridBbox = bboxFromJsonFaceGrid(faceGrid)
-    else:
+    else:#circa/dlib
         bboxFromJson = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H']), axis=1).astype(int)
         faceBbox = bboxFromJson(appleFace) + [-1, -1, 1, 1]  # for compatibility with matlab code
         leftEyeBbox = bboxFromJson(appleLeftEye) + [0, -1, 0, 0]
@@ -513,7 +513,7 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         imEyeR = cropImage(img, rightEyeBbox[j, :])
 
         # Rotation Correction FaceGrid
-        if args.rc:
+        if args.type == "rc":
             faceGridPath = preparePath(os.path.join(recDirOut, 'faceGrid'))
             imFaceGrid = generate_grid2(faceBbox[j, :], img)
 
@@ -526,7 +526,7 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         PILImage.fromarray(imFace).save(os.path.join(facePath, '%05d.jpg' % frame), quality=95)
         PILImage.fromarray(imEyeL).save(os.path.join(leftEyePath, '%05d.jpg' % frame), quality=95)
         PILImage.fromarray(imEyeR).save(os.path.join(rightEyePath, '%05d.jpg' % frame), quality=95)
-        if args.rc:
+        if args.type == "rc":
             PILImage.fromarray(imFaceGrid).save(os.path.join(faceGridPath, '%05d.jpg' % frame), quality=95)
 
         # Collect metadata
@@ -539,31 +539,6 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         meta['labelTrain'] += [split == "train"]
         meta['labelVal'] += [split == "val"]
         meta['labelTest'] += [split == "test"]
-
-        # # Data Mirroring
-        # if args.mirror:
-        #     imFace_mirror = cv2.flip(imFace, 1)
-        #     imEyeL_mirror = cv2.flip(imEyeL, 1)
-        #     imEyeR_mirror = cv2.flip(imEyeR, 1)
-        #     PILImage.fromarray(imFace_mirror).save(os.path.join(facePath, '%05d_mirror.jpg' % frame), quality=95)
-        #     PILImage.fromarray(imEyeL_mirror).save(os.path.join(leftEyePath, '%05d_mirror.jpg' % frame), quality=95)
-        #     PILImage.fromarray(imEyeR_mirror).save(os.path.join(rightEyePath, '%05d_mirror.jpg' % frame), quality=95)
-        #     if args.rc:
-        #         imFaceGrid_mirror = cv2.flip(imFaceGrid, 1)
-        #         PILImage.fromarray(imFaceGrid_mirror).save(os.path.join(faceGridPath, '%05d_mirror.jpg' % frame), quality=95)
-
-        #     (XFactor, YFactor) = (-1.0, 1.0) if screen['Orientation'][j] <= 2 else (1.0, -1.0)
-        #     # mirror faceGridBbox
-        #     f = [24-faceGridBbox[j, 0]-faceGridBbox[j, 2], faceGridBbox[j, 1], faceGridBbox[j, 2], faceGridBbox[j, 3]]
-        #     # Mirror metadata - Assuming Camera is on the top center
-        #     meta['labelRecNum'] += [int(directory)]
-        #     meta['frameIndex'] += [frame]
-        #     meta['labelDotXCam'] += [XFactor * dotInfo['XCam'][j]]
-        #     meta['labelDotYCam'] += [YFactor * dotInfo['YCam'][j]]
-        #     meta['labelFaceGrid'] += [f]
-        #     meta['labelTrain'] += [split == "train"]
-        #     meta['labelVal'] += [split == "val"]
-        #     meta['labelTest'] += [split == "test"]
 
     return meta
 
@@ -949,12 +924,11 @@ def checkpointInfoTask(filepath):
 if __name__ == '__main__':
     # Argument parser
     parser = argparse.ArgumentParser(description='iTracker-pytorch-Trainer.')
-    parser.add_argument('--input', help="input directory path", default="./gc-data/")
-    parser.add_argument('--output', help="output directory path", default="./gc-data-meta-rc")
-    parser.add_argument('--metapath', help="metadata path", default="./gc-data-meta/")
     parser.add_argument('--task', help="task name: copyTask, ROIDetectionTask, ROIExtractionTask", default="")
-    parser.add_argument('--rc', action='store_true', help="apply rotation correction", default=False)
-    parser.add_argument('--apple', action='store_true', help="apply original apple face crops", default=False)
+    parser.add_argument('--input', help="input directory path", default="./gc-data/")
+    parser.add_argument('--metapath', help="metadata path", default="./gc-data-meta/")
+    parser.add_argument('--output', help="output directory path", default="./gc-data-meta-rc")
+    parser.add_argument('--type', help="circa, dlib, rc", default="circa")
     parser.add_argument('--mirror', action='store_true', help="apply data mirroring", default=False)
     parser.add_argument('--portraitOnly', action='store_true', help="use portrait data only", default=False)
     parser.add_argument('--source_compare', action='store_true', help="compare against source", default=False)
@@ -1158,17 +1132,3 @@ if __name__ == '__main__':
         plt.title('Histogram of Rotation')
         # plt.savefig('process_results/MIT_plotRotationHistogram.png')
         plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
