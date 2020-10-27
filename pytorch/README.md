@@ -1,5 +1,8 @@
 # Towards Hardware-Agnostic Gaze-Trackers
 
+<img src="https://www.microsoft.com/en-us/research/uploads/prod/2020/10/architecture_iTracker_Enhanced-1024x378.png" alt="Enhanced iTracker Architecture" width="1024" height="378" class="size-large wp-image-701557" /> 
+<p align='center'> Figure 1: Enhanced iTracker Architecture</p>
+
 ## Introduction
 This is the official repository for the code, models and datasets associated with the 2020 ArXiv paper, [“Towards Hardware-Agnostic Gaze-Trackers”](https://arxiv.org/abs/2010.05123).
 
@@ -69,25 +72,27 @@ Destination
 \---metadata.mat
 ```
 
-### Training
+### Using the models
+Please clone this repository. The paper [“Towards Hardware-Agnostic Gaze-Trackers”](https://arxiv.org/abs/2010.05123) lists muliple incremental enhancements in Table 2. Please choose an appropriate branch based upon the Experimental Variant that you want to try. For example, if you want to try Experiment 14, switch to milestones/14 using command `git checkout milestones/14`, go inside the pytorch directory which contains the `main.py` file and use the default settings with appropriate path to the data as listed below-
+
+#### Training
 ```
 python main.py --data_path [D: Destination Path] --reset
 ```
 
-### Validation
+#### Validation
 ```
 python main.py --data_path [D: Destination Path] --validate
 ```
 
-### Testing
+#### Testing
 ```
 python main.py --data_path [D: Destination Path] --test
 ```
 
+#### Dockerization
 
-## Dockerization
-
-Alternatively, you can use the [gazepy docker image]() to run your experiments in a sandbox environment. In this case, please go inside the pytorch directory inside the repo and use the following syntax -
+Alternatively, you can use the [gazepy docker image](https://github.com/users/jatinsha/packages/container/package/gazepy) to run your experiments in a sandbox environment. In this case, use the following syntax -
 
 **sudo docker run -P --runtime=nvidia --ipc=host --gpus all -v /data:/data -v \$(pwd):\$(pwd) -v /var/run/docker.sock:/var/run/docker.sock -w $(pwd) --rm -it gazepy** `main.py --data_path [Source Path] --reset`
 
@@ -100,9 +105,7 @@ Any necessary changes to the dataset will be documented here.
 * **March 2018**: Original code release.
 
 ## Terms
-Usage of this dataset (including all data, models, and code) is subject to the associated license, found in [LICENSE.md](LICENSE.md). The license permits the use of released code, dataset and models for research purposes only.
-
-We also ask that you cite the associated paper if you make use of the GazeCapture dataset; following is the BibTeX entry:
+Usage of the original GazeCapture dataset (including all data, models, and code) is subject to the associated license, found in [LICENSE.md](LICENSE.md). The license permits the use of released code, dataset and models for research purposes only. We also ask that you cite the associated paper if you make use of the GazeCapture dataset; following is the BibTeX entry:
 
 ```
 @inproceedings{cvpr2016_gazecapture,
