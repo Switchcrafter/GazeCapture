@@ -84,10 +84,57 @@ python main.py --data_path [D: Destination Path] --validate
 python main.py --data_path [D: Destination Path] --test
 ```
 
+### Arguments
+```
+Frequently used args:
+--local_rank  : gpu id {0 to max_gpus-1}
+--batch_size  : batch size (e.g. 64, 100, 128, 256)
+--data_path   : directory path to the data (i.e. SourcePath)
+--base_lr     : lower bound on learning rate (e.g. 1E-7)
+--max_lr      : upper bound on learning rate (e.g. 1E-2)
+--reset       : starts from a new untrained model
 
-## Dockerization
+Optional args:
+--color_space : colorspace (e.g. 'RGB, 'YCbCr')
+--epochs     : maximum number of training epochs (e.g. 30)
+--name       : experiment tag (e.g. "resnet-rc")
+--visdom     : visdom server path (e.g. "self", "127.0.0.1")
+--force_test : run test after train and validation cycles
+```
 
-Alternatively, you can use the [gazepy docker image]() to run your experiments in a sandbox environment. In this case, please go inside the pytorch directory inside the repo and use the following syntax -
+## Dependencies & Dockerization
+## Code
+
+Code dependencies are listed in requirements.txt. CUDA 10.0 and Python 3.7+ with following packages (exact version may not be necessary):
+
+* torch (1.6.0)
+* torchvision (0.7.0)
+* scipy (1.5.2)
+* jsonpatch (1.26)
+* visdom (0.1.8.9)
+* torchtoolbox (0.1.5)
+* matplotlib (3.3.2)
+* imutils (0.5.3)
+* scikit-image (0.17.2)
+* nvidia-dali-cuda10.0
+* opencv-python-headless (4.4.0.44)
+* cmake (3.18.2)
+* dlib (19.19.0)
+* onnxruntime (1.5.1)
+* docker (4.3.1)
+* pandas (1.1.3)
+* screeninfo (0.6.5)
+* numpy (1.19.2)
+* pillow (8.0.0)
+* torchfile (0.1.0)
+
+
+If you prefer running the experiments in a sandbox environment, you could use the Dockerfile to build an image and then run experiments in a container. Dockefile uses the dependencies listed in requirements.txt. To build an image please run:
+```
+sudo docker build -t gazepy .
+```
+
+Once the image is built successfully, go inside the pytorch directory and use the following syntax:
 
 **sudo docker run -P --runtime=nvidia --ipc=host --gpus all -v /data:/data -v \$(pwd):\$(pwd) -v /var/run/docker.sock:/var/run/docker.sock -w $(pwd) --rm -it gazepy** `main.py --data_path [Source Path] --reset`
 
@@ -126,17 +173,6 @@ If you use the Enhanced iTracker architecture or any other work presented in the
       url = {https://arxiv.org/abs/2010.05123}
 }
 ```
-
-## Code
-
-Requires CUDA and Python 3.6+ with following packages (exact version may not be necessary):
-
-* numpy (1.15.4)
-* Pillow (5.3.0)
-* torch (0.4.1)
-* torchfile (0.1.0)
-* torchvision (0.2.1)
-* scipy (1.1.0)
 
 
 ## Contact
