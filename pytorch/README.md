@@ -33,12 +33,15 @@ Source
 \--00003
 ...
 ```
+3. Please clone this repository and switch to `milestones/dataPrep` branch.
 
-3. Run ROI Detection Task to generate metadata:
+4. Run ROI Detection Task to generate metadata. ROI Detection Task is only needed when a new landmark detection algorithm is evaluated. Valid DetectionTypes are circa, dlib and rc. For the original circa detection, this step won't perform any action and therefore should be skipped. Syntax:
+
 ```
-python taskCreator.py --task 'ROIDetectionTask' --input <SourcePath> --output <MetadataPath> --type <DetectionType>
+python taskCreator.py --task 'ROIDetectionTask' --input <SourceDirectoryPath> --output <MetadataDirectoryPath> --type <DetectionType>
 ```
-Valid DetectionTypes are circa, dlib and rc. For the circa detection, this step won't perform any action and use the original landmarks, therefore you can skip this step too. The resulting structure should be something like this:
+
+For other DetectionTypes the resulting structure should be something like this:
 ```
 Metadata
 \--00002
@@ -49,9 +52,9 @@ Metadata
 ...
 ```
 
-4. Run ROI Extraction Task to generate processed dataset:
+4. Run ROI Extraction Task to generate processed dataset. This step uses either the landmarks and data-split distribution to prepare training and evaluation dataset. Syntax:
 ```
-python taskCreator.py --task 'ROIExtractionTask' --input <SourcePath> --metapath <MetadataPath> --output <DestinationPath> --type <DetectionType>
+python taskCreator.py --task 'ROIExtractionTask' --input <SourceDirectoryPath> --metapath <MetadataDirectoryPath> --output <DestinationDirectoryPath> --type <DetectionType>
 ```
 Valid DetectionTypes are circa, dlib and rc. For the circa detection, you should skip the metapath field. The resulting structure should be something like this:
 
@@ -70,22 +73,31 @@ Destination
 \---metadata.mat
 ```
 
+To try a new custom distribution, you could create a data distribution json file with `directoryName : SplitName` entries in a dict() object and use the follwing syntax:
+```
+python taskCreator.py --task 'ROIExtractionTask' --input <SourceDirectoryPath> --metapath <MetadataDirectoryPath> --output <DestinationDirectoryPath> --type <DetectionType> --info <DistributionInfoFilePath>
+```
+
+For example, to use GazeCapture* distribution (which utilized a 70-20-10 split ratio) you should use `GazeCaptureStar_distribution_info.json` file.  
+
+
 ### Using the models
-Please clone this repository. The paper [“Towards Hardware-Agnostic Gaze-Trackers”](https://arxiv.org/abs/2010.05123) lists muliple incremental enhancements in Table 2. Please choose an appropriate branch based upon the Experimental Variant that you want to try. For example, if you want to try Experiment 14, switch to milestones/14 using command `git checkout milestones/14`, go inside the pytorch directory which contains the `main.py` file and use the default settings with appropriate path to the data as listed below-
+The paper [“Towards Hardware-Agnostic Gaze-Trackers”](https://arxiv.org/abs/2010.05123) lists muliple incremental enhancements in Table 2. Please choose an appropriate branch based upon the Experimental Variant that you want to try. For example, if you want to try Experiment 14, switch to milestones/14 using command `git checkout milestones/14`, go inside the pytorch directory which contains the `main.py` file and use the default settings with appropriate path to the data as listed below-
 
 #### Training
 ```
-python main.py --data_path <DestinationPath> --reset
+python main.py --data_path <DestinationDirectoryPath> --reset
 ```
+``--reset`` is used to start training from scratch and build a model. If you want to resume training from an existing model checkpoint run the command without it.
 
 #### Validation
 ```
-python main.py --data_path <DestinationPath> --validate
+python main.py --data_path <DestinationDirectoryPath> --validate
 ```
 
 #### Testing
 ```
-python main.py --data_path <DestinationPath> --test
+python main.py --data_path <DestinationDirectoryPath> --test
 ```
 
 #### Arguments

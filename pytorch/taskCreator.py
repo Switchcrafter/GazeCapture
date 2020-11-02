@@ -206,6 +206,21 @@ def copyTask(filepath, jobId, progressbar):
 def resizeTask(filePath, jobId, progressbar):
     pass
 
+
+def CaptureDataDistributionTask(directory, directory_idx, progressbar):
+    recDir = os.path.join(args.input, directory)
+    recDirOut = os.path.join(args.output, directory)
+
+    progressbar.addSubProcess(directory_idx, 1)
+    # Read original distribution info and create a distribution info file
+    info = json_read(os.path.join(recDir, 'info.json'))
+    
+    # Collect metadata
+    meta = [directory, str(info["Dataset"])]
+    progressbar.update(directory_idx, 1)
+
+    return meta
+
 # Equivalent: prepare_EyeCatcher
 def prepareEyeCatcherTask(directory, directory_idx, progressbar):
     captures = sorted(getCaptureSessionFileList(os.path.join(args.input, directory)), key=str)
@@ -457,8 +472,12 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
     dotInfo = json_read(os.path.join(recDir, 'dotInfo.json'))
     faceGrid = json_read(os.path.join(recDir, 'faceGrid.json'))
     frames = json_read(os.path.join(recDir, 'frames.json'))
-    info = json_read(os.path.join(recDir, 'info.json'))
     screen = json_read(os.path.join(recDir, 'screen.json'))
+
+    if args.info != "":
+        info = json_read(args.info)
+    else:
+        info = json_read(os.path.join(recDir, 'info.json'))    
 
     # Preprocess
     allValid = np.logical_and(np.logical_and(appleFace['IsValid'], appleLeftEye['IsValid']),
@@ -535,90 +554,18 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         meta['labelDotXCam'] += [dotInfo['XCam'][j]]
         meta['labelDotYCam'] += [dotInfo['YCam'][j]]
         meta['labelFaceGrid'] += [faceGridBbox[j, :]]
-        split = info["Dataset"]
+        
+        # Use provided target distribution 
+        if args.info != "":
+            split = info[directory]
+        else: # use original distribution
+            split = info["Dataset"] 
+
         meta['labelTrain'] += [split == "train"]
         meta['labelVal'] += [split == "val"]
         meta['labelTest'] += [split == "test"]
 
     return meta
-
-
-# # Single process Tasks
-# def compareTask(meta):
-#     if args.reference != "":
-#         # Write out original metadata
-#         sio.savemat(os.path.join(args.output, 'metadata_original.mat'), meta)
-
-#         # Load reference metadata
-#         print('Will compare to the reference GitHub dataset metadata.mat...')
-#         reference = sio.loadmat(args.reference, struct_as_record=False)
-#         reference['labelRecNum'] = reference['labelRecNum'].flatten()
-#         reference['frameIndex'] = reference['frameIndex'].flatten()
-#         reference['labelDotXCam'] = reference['labelDotXCam'].flatten()
-#         reference['labelDotYCam'] = reference['labelDotYCam'].flatten()
-#         reference['labelTrain'] = reference['labelTrain'].flatten()
-#         reference['labelVal'] = reference['labelVal'].flatten()
-#         reference['labelTest'] = reference['labelTest'].flatten()
-
-#         # Find mapping
-#         mKey = np.array(['%05d_%05d' % (rec, frame) for rec, frame in zip(meta['labelRecNum'], meta['frameIndex'])],
-#                         np.object)
-#         rKey = np.array(
-#             ['%05d_%05d' % (rec, frame) for rec, frame in zip(reference['labelRecNum'], reference['frameIndex'])],
-#             np.object)
-#         mIndex = {k: i for i, k in enumerate(mKey)}
-#         rIndex = {k: i for i, k in enumerate(rKey)}
-#         mToR = np.zeros((len(mKey, )), int) - 1
-#         for i, k in enumerate(mKey):
-#             if k in rIndex:
-#                 mToR[i] = rIndex[k]
-#             else:
-#                 logError('Did not find rec_frame %s from the new dataset in the reference dataset!' % k)
-#         rToM = np.zeros((len(rKey, )), int) - 1
-#         for i, k in enumerate(rKey):
-#             if k in mIndex:
-#                 rToM[i] = mIndex[k]
-#             else:
-#                 logError('Did not find rec_frame %s from the reference dataset in the new dataset!' % k, critical=False)
-#                 # break
-
-#         # Copy split from reference
-#         meta['labelTrain'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
-#         meta['labelVal'] = np.ones((len(meta['labelRecNum'], )), np.bool)  # default choice
-#         meta['labelTest'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
-
-#         validMappingMask = mToR >= 0
-#         meta['labelTrain'][validMappingMask] = reference['labelTrain'][mToR[validMappingMask]]
-#         meta['labelVal'][validMappingMask] = reference['labelVal'][mToR[validMappingMask]]
-#         meta['labelTest'][validMappingMask] = reference['labelTest'][mToR[validMappingMask]]
-
-#     # Write out metadata
-#     metaFile = os.path.join(args.output, 'metadata.mat')
-#     print('Writing out the metadata.mat to %s...' % metaFile)
-#     sio.savemat(metaFile, meta)
-
-#     # Statistics
-#     print('======================\n\tSummary\n======================')
-#     print('Total added %d frames from %d recordings.' % (len(meta['frameIndex']), len(np.unique(meta['labelRecNum']))))
-
-#     if args.reference != "":
-#         nMissing = np.sum(rToM < 0)
-#         nExtra = np.sum(mToR < 0)
-#         totalMatch = len(mKey) == len(rKey) and np.all(np.equal(mKey, rKey))
-#         if nMissing > 0:
-#             print(
-#                 'There are %d frames missing in the new dataset. This may affect the results. Check the log to see which files are missing.' % nMissing)
-#         else:
-#             print('There are no missing files.')
-#         if nExtra > 0:
-#             print(
-#                 'There are %d extra frames in the new dataset. This is generally ok as they were marked for validation split only.' % nExtra)
-#         else:
-#             print('There are no extra files that were not in the reference dataset.')
-#         if totalMatch:
-#             print('The new metadata.mat is an exact match to the reference from GitHub (including ordering)')
-
-
 
 # Single process Tasks
 def compareTask(meta):
@@ -626,18 +573,74 @@ def compareTask(meta):
         # Write out original metadata
         sio.savemat(os.path.join(args.output, 'metadata_original.mat'), meta)
 
-        # Update meta data with Reference
+        # Load reference metadata
+        print('Will compare to the reference GitHub dataset metadata.mat...')
         reference = sio.loadmat(args.reference, struct_as_record=False)
-        print('Updating metadata using reference...')
-        meta['labelRecNum'] = reference['labelRecNum']
-        meta['labelTrain']= reference['labelTrain']
-        meta['labelVal'] = reference['labelVal']
-        meta['labelTest'] = reference['labelTest']
+        reference['labelRecNum'] = reference['labelRecNum'].flatten()
+        reference['frameIndex'] = reference['frameIndex'].flatten()
+        reference['labelDotXCam'] = reference['labelDotXCam'].flatten()
+        reference['labelDotYCam'] = reference['labelDotYCam'].flatten()
+        reference['labelTrain'] = reference['labelTrain'].flatten()
+        reference['labelVal'] = reference['labelVal'].flatten()
+        reference['labelTest'] = reference['labelTest'].flatten()
+
+        # Find mapping
+        mKey = np.array(['%05d_%05d' % (rec, frame) for rec, frame in zip(meta['labelRecNum'], meta['frameIndex'])],
+                        np.object)
+        rKey = np.array(
+            ['%05d_%05d' % (rec, frame) for rec, frame in zip(reference['labelRecNum'], reference['frameIndex'])],
+            np.object)
+        mIndex = {k: i for i, k in enumerate(mKey)}
+        rIndex = {k: i for i, k in enumerate(rKey)}
+        mToR = np.zeros((len(mKey, )), int) - 1
+        for i, k in enumerate(mKey):
+            if k in rIndex:
+                mToR[i] = rIndex[k]
+            else:
+                logError('Did not find rec_frame %s from the new dataset in the reference dataset!' % k)
+        rToM = np.zeros((len(rKey, )), int) - 1
+        for i, k in enumerate(rKey):
+            if k in mIndex:
+                rToM[i] = mIndex[k]
+            else:
+                logError('Did not find rec_frame %s from the reference dataset in the new dataset!' % k, critical=False)
+                # break
+
+        # Copy split from reference
+        meta['labelTrain'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
+        meta['labelVal'] = np.ones((len(meta['labelRecNum'], )), np.bool)  # default choice
+        meta['labelTest'] = np.zeros((len(meta['labelRecNum'], )), np.bool)
+
+        validMappingMask = mToR >= 0
+        meta['labelTrain'][validMappingMask] = reference['labelTrain'][mToR[validMappingMask]]
+        meta['labelVal'][validMappingMask] = reference['labelVal'][mToR[validMappingMask]]
+        meta['labelTest'][validMappingMask] = reference['labelTest'][mToR[validMappingMask]]
 
     # Write out metadata
     metaFile = os.path.join(args.output, 'metadata.mat')
     print('Writing out the metadata.mat to %s...' % metaFile)
     sio.savemat(metaFile, meta)
+
+    # Statistics
+    print('======================\n\tSummary\n======================')
+    print('Total added %d frames from %d recordings.' % (len(meta['frameIndex']), len(np.unique(meta['labelRecNum']))))
+
+    if args.reference != "":
+        nMissing = np.sum(rToM < 0)
+        nExtra = np.sum(mToR < 0)
+        totalMatch = len(mKey) == len(rKey) and np.all(np.equal(mKey, rKey))
+        if nMissing > 0:
+            print(
+                'There are %d frames missing in the new dataset. This may affect the results. Check the log to see which files are missing.' % nMissing)
+        else:
+            print('There are no missing files.')
+        if nExtra > 0:
+            print(
+                'There are %d extra frames in the new dataset. This is generally ok as they were marked for validation split only.' % nExtra)
+        else:
+            print('There are no extra files that were not in the reference dataset.')
+        if totalMatch:
+            print('The new metadata.mat is an exact match to the reference from GitHub (including ordering)')
 
 
 def plotErrorTask(All_RMS_Errors):
@@ -946,7 +949,6 @@ def checkpointInfoTask(filepath):
     return
 
 
-
 # all tasks are handled here
 if __name__ == '__main__':
     # Argument parser
@@ -959,9 +961,10 @@ if __name__ == '__main__':
     parser.add_argument('--mirror', action='store_true', help="apply data mirroring", default=False)
     parser.add_argument('--portraitOnly', action='store_true', help="use portrait data only", default=False)
     parser.add_argument('--source_compare', action='store_true', help="compare against source", default=False)
+    parser.add_argument('--info', default="", help="target data_distribution.json path")
     parser.add_argument('--reference', default="", help="reference .mat path")
     parser.add_argument('--ext', help="", nargs='+', default=[".jpg", ".jpeg", ".JPG", ".JPEG"])
-    parser.add_argument('--label', default="", help="e.g. GazeCapture, GazeCapture")
+    parser.add_argument('--label', default="", help="e.g. GazeCapture, GazeCapture*")
     parser.add_argument('--device_name', default="Alienware 51m", help='from device_metrics.json - Alienware 51m, Surface Pro 6, etc.')
     parser.add_argument('--model_type', default="resNet", help='resNet, deepEyeNet')
     parser.add_argument('--color_space', default="YCbCr", help='color_space, RGB')
@@ -1007,6 +1010,11 @@ if __name__ == '__main__':
     elif args.task == "prepareEyeCatcherTask":
         taskFunction = prepareEyeCatcherTask
         taskData = getCaptureSessionDirList(args.input)
+        dataLoader = ListLoader
+    elif args.task == "CaptureDataDistributionTask":
+        taskFunction = CaptureDataDistributionTask
+        sessionRegex = '([0-9]){5}'
+        taskData = getDirList(args.input, sessionRegex)
         dataLoader = ListLoader
     elif args.task == "ROIDetectionTask":
         taskFunction = ROIDetectionTask
@@ -1097,7 +1105,17 @@ if __name__ == '__main__':
     output = taskManager.job(taskFunction, taskData, dataLoader)
 
     # post-processing after the task has completed
-    if args.task == "ROIExtractionTask":
+    if args.task == "CaptureDataDistributionTask":
+        meta = {}
+        # Combine results from various workers
+        for dir, split in output:
+            meta.update({dir : split})
+        
+        # Write out combined distribution info
+        preparePath(args.output)
+        json_write(os.path.join(args.output, 'distribution_info.json'), meta)
+
+    elif args.task == "ROIExtractionTask":
         # Output structure
         meta = {
             'labelRecNum': [],
@@ -1127,7 +1145,7 @@ if __name__ == '__main__':
         meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
         meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
         # print(meta)
-        compareTask(meta)
+        # compareTask(meta)
     elif args.task == "countFilesTaskParallel":
         # Combine results from various workers
         print(sum(output))
