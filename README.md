@@ -82,22 +82,22 @@ For example, to use GazeCapture* distribution (which utilized a 70-20-10 split r
 
 
 ### Using the models
-The paper [“Towards Hardware-Agnostic Gaze-Trackers”](https://arxiv.org/abs/2010.05123) lists muliple incremental enhancements in Table 2. Please choose an appropriate branch based upon the Experimental Variant that you want to try. For example, if you want to try Experiment 14, switch to milestones/14 using command `git checkout milestones/14`, go inside the pytorch directory which contains the `main.py` file and use the default settings with appropriate path to the data as listed below-
+The paper [“Towards Hardware-Agnostic Gaze-Trackers”](https://arxiv.org/abs/2010.05123) lists muliple incremental enhancements in Table 2. Please choose an appropriate branch based upon the Experimental Variant that you want to try. For example, if you want to try Experiment 14, switch to milestones/14 using command `git checkout milestones/14`, go inside the directory which contains the `main.py` file and use the default settings with appropriate path to the data as listed below-
 
 #### Training
 ```
-python main.py --data_path <DestinationDirectoryPath> --reset
+python main.py --data_path <DestinationDirectoryPath> --local_rank <deviceId> --reset
 ```
 ``--reset`` is used to start training from scratch and build a model. If you want to resume training from an existing model checkpoint run the command without it.
 
 #### Validation
 ```
-python main.py --data_path <DestinationDirectoryPath> --validate
+python main.py --data_path <DestinationDirectoryPath> --local_rank <deviceId> --validate
 ```
 
 #### Testing
 ```
-python main.py --data_path <DestinationDirectoryPath> --test
+python main.py --data_path <DestinationDirectoryPath> --local_rank <deviceId> --test
 ```
 
 #### Arguments
@@ -105,11 +105,11 @@ python main.py --data_path <DestinationDirectoryPath> --test
 Frequently used args:
 --local_rank  : gpu id {0 to max_gpus-1}
 --batch_size  : batch size (e.g. 64, 100, 128, 256)
---data_path   : directory path to the data (i.e. SourcePath)
+--data_path   : directory path to the data (i.e. DestinationPath)
 --base_lr     : lower bound on learning rate (e.g. 1E-7)
 --max_lr      : upper bound on learning rate (e.g. 1E-2)
 --reset       : starts from a new untrained model
---epochs     : maximum number of training epochs (e.g. 30)
+--epochs      : maximum number of training epochs (e.g. 30)
 ```
 
 #### Dockerization
