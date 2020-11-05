@@ -1,25 +1,137 @@
-# Eye Tracking for Everyone Code, Dataset and Models
+# Towards Hardware-Agnostic Gaze-Trackers
+
+<img src="https://www.microsoft.com/en-us/research/uploads/prod/2020/10/architecture_iTracker_Enhanced-1024x378.png" alt="Enhanced iTracker Architecture" width="100%" height="30%" class="size-large wp-image-701557" /> 
+<p align='center'> Figure 1: Enhanced iTracker Architecture</p>
 
 ## Introduction
-This is the README file for the official code, dataset and model release associated with the 2016 CVPR paper, "Eye Tracking for Everyone".
+This is the official repository for the code, models and datasets associated with the 2020 ArXiv paper, [“Towards Hardware-Agnostic Gaze-Trackers”](https://arxiv.org/abs/2010.05123).
 
-The dataset release is broken up into three parts:
+We express our sincere thanks to Krakfa, Khosla, Kellnhofer et al &ndash; authors of the 2016 CVPR paper, ["Eye Tracking for Everyone"](https://people.csail.mit.edu/khosla/papers/cvpr2016_Khosla.pdf) &ndash; who contributed the [iTracker architecture](https://github.com/CSAILVision/GazeCapture) and GazeCapture dataset to the entire research community. Their dataset is by far one of the biggest and most diverse publicly available data for constrained gaze-tracking on portable devices and their work on the iTracker architecture is an inspiration to this work. We reproduced the iTracker network architecture using Python as a baseline to our incremental enhancements and utilized the original GazeCapture dataset along with its restructured variant GazeCapture* for the proposed experiments in the paper. If you are interested in the original iTracker paper and GazeCapture dataset please refer to their paper and project website as mentioned above.
 
-* **Data** (image files and associated metadata)
-* **Models** (Caffe model definitions)
-* **Code** (some essential scripts to make use of the data)
+We propose a series of incremental enhancements over the iTracker architecture to reduce the overall RMSError. We do not employ any calibration or device-specific fine-tuning during evaluation. Data Augmentation is only used during the training phase and not for test phase. As a part of our experiments, we relax the uniform data distribution constraint in the GazeCapture dataset by allowing subjects who did not look at the full set of points for evaluation and explore its impact on performance.
 
-Continue reading for more information on each part.
+## How to use:
+
+### Dataset preparation
+
+1. Download the [GazeCapture](http://gazecapture.csail.mit.edu/download.php) dataset.
+
+2. Extract the files (including the sub-archives) to a folder Source directory. The resulting structure should be something like this:
+```
+Source
+\--00002
+    \--frames
+    \--appleFace.json
+    \--appleLeftEye.json
+    \--appleRightEye.json
+    \--dotInfo.json
+    \--faceGrid.json
+    \--frames.json
+    \--info.json
+    \--motion.json
+    \--screen.json
+\--00003
+...
+```
+3. Please clone this repository and switch to `milestones/dataPrep` branch.
+
+4. Run ROI Detection Task to generate metadata. ROI Detection Task is only needed when a new landmark detection algorithm is evaluated. Valid DetectionTypes are circa, dlib and rc. For the original circa detection, this step won't perform any action and therefore should be skipped. Syntax:
+
+```
+python taskCreator.py --task 'ROIDetectionTask' --input <SourceDirectoryPath> --output <MetadataDirectoryPath> --type <DetectionType>
+```
+
+For other DetectionTypes the resulting structure should be something like this:
+```
+Metadata
+\--00002
+    \--dlibFace.json
+    \--dlibLeftEye.json
+    \--dlibRightEye.json
+\--00003
+...
+```
+
+4. Run ROI Extraction Task to generate processed dataset. This step uses either the landmarks and data-split distribution to prepare training and evaluation dataset. Syntax:
+```
+python taskCreator.py --task 'ROIExtractionTask' --input <SourceDirectoryPath> --metapath <MetadataDirectoryPath> --output <DestinationDirectoryPath> --type <DetectionType>
+```
+Valid DetectionTypes are circa, dlib and rc. For the circa detection, you should skip the metapath field. The resulting structure should be something like this:
+
+```
+Destination
+\---00002
+    \---appleFace
+        \---00000.jpg
+        ...
+    \---appleLeftEye
+        ...
+    \---appleRightEye
+        ...
+\---00003
+...
+\---metadata.mat
+```
+
+To try a new custom distribution, you could create a data distribution json file with `directoryName : SplitName` entries in a dict() object and use the follwing syntax:
+```
+python taskCreator.py --task 'ROIExtractionTask' --input <SourceDirectoryPath> --metapath <MetadataDirectoryPath> --output <DestinationDirectoryPath> --type <DetectionType> --info <DistributionInfoFilePath>
+```
+
+For example, to use GazeCapture* distribution (which utilized a 70-20-10 split ratio) you should use `GazeCaptureStar_distribution_info.json` file.  
+
+
+### Using the models
+The paper [“Towards Hardware-Agnostic Gaze-Trackers”](https://arxiv.org/abs/2010.05123) lists muliple incremental enhancements in Table 2. Please choose an appropriate branch based upon the Experimental Variant that you want to try. For example, if you want to try Experiment 14, switch to milestones/14 using command `git checkout milestones/14`, go inside the pytorch directory which contains the `main.py` file and use the default settings with appropriate path to the data as listed below-
+
+#### Training
+```
+python main.py --data_path <DestinationDirectoryPath> --reset
+```
+``--reset`` is used to start training from scratch and build a model. If you want to resume training from an existing model checkpoint run the command without it.
+
+#### Validation
+```
+python main.py --data_path <DestinationDirectoryPath> --validate
+```
+
+#### Testing
+```
+python main.py --data_path <DestinationDirectoryPath> --test
+```
+
+#### Arguments
+```
+Frequently used args:
+--local_rank  : gpu id {0 to max_gpus-1}
+--batch_size  : batch size (e.g. 64, 100, 128, 256)
+--data_path   : directory path to the data (i.e. SourcePath)
+--base_lr     : lower bound on learning rate (e.g. 1E-7)
+--max_lr      : upper bound on learning rate (e.g. 1E-2)
+--reset       : starts from a new untrained model
+--epochs     : maximum number of training epochs (e.g. 30)
+```
+
+#### Dockerization
+If you prefer running the experiments in a sandbox environment, you could use the Dockerfile to build an image and then run experiments in a container. Code dependencies are listed in requirements.txt and Dockefile uses this file to build an image. To build an image please run:
+```
+sudo docker build -t gazepy .
+```
+
+Once the image is built successfully, go inside the pytorch directory to use the training commands. Alternatively, you can use the [gazepy docker image](https://github.com/users/jatinsha/packages/container/package/gazepy) to run your experiments in a sandbox environment. In this case, use the following syntax -
+
+**sudo docker run -P --runtime=nvidia --ipc=host --gpus all -v /data:/data -v \$(pwd):\$(pwd) -v /var/run/docker.sock:/var/run/docker.sock -w $(pwd) --rm -it gazepy** `main.py --data_path [Source Path] --reset`
+
 
 ## History
 Any necessary changes to the dataset will be documented here.
 
-* **March 2017**: Original code, dataset and models released.
+* **October 2020**: ArXiv announcement of “Towards Hardware-Agnostic Gaze-Trackers” and release of updated instructions.
+* **January 2019**: A dataset preprocessing code for an easier deployment. A conversion to pytorch 0.4.1.
+* **March 2018**: Original code release.
 
-## Usage
-Usage of this dataset (including all data, models, and code) is subject to the associated license, found in [LICENSE.md](LICENSE.md). The license permits the use of released code, dataset and models for research purposes only.
-
-We also ask that you cite the associated paper if you make use of this dataset; following is the BibTeX entry:
+## Terms
+Usage of the original GazeCapture dataset (including all data, models, and code) is subject to the associated license, found in [LICENSE.md](LICENSE.md). The license permits the use of released code, dataset and models for research purposes only. We also ask that you cite the associated paper if you make use of the GazeCapture dataset; following is the BibTeX entry:
 
 ```
 @inproceedings{cvpr2016_gazecapture,
@@ -30,81 +142,21 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 }
 ```
 
-## Data
-The dataset can be downloaded at the [project website](http://gazecapture.csail.mit.edu/download.php). In the dataset, we include data for 1474 unique subjects. Each numbered directory represents a recording session from one of those subjects. Numbers were assigned sequentially, although some numbers are missing for various reasons (e.g., test recordings, duplicate subjects, or incomplete uploads).
+If you use the Enhanced iTracker architecture or any other work presented in the paper [“Towards Hardware-Agnostic Gaze-Trackers”](https://arxiv.org/abs/2010.05123) then please cite the paper following the BibTeX entry:
 
-Inside each directory is a collection of sequentially-numbered images (in the `frames` subdirectory) and JSON files for different pieces of metadata, described below. Many of the variables in the JSON files are arrays, where each element is associated with the frame numbered the same as the index.
+```
+@misc{sharma2020,
+      title={Towards Hardware-Agnostic Gaze-Trackers},
+      author={Jatin Sharma and Jon Campbell and Pete Ansell and Jay Beavers and Christopher O'Dowd},
+      year={2020},
+      eprint={2010.05123},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url = {https://arxiv.org/abs/2010.05123}
+}
+```
 
-In training our iTracker model, we only made use of frames where the subject's device was able to detect both the user's [face](https://developer.apple.com/reference/avfoundation/avcapturemetadataoutputobjectsdelegate) and [eyes](https://developer.apple.com/reference/coreimage/cidetector) using Apple's built-in libraries. Some subjects had *no* frames with face and eye detections at all. There are 2,445,504 total frames and 1,490,959 with complete Apple detections. For this reason, some frames will be "missing" generated data.
-
-The dataset is split into three pieces, by subject (i.e., recording number): training, validation, and test.
-
-Following is a description of each variable:
-
-### appleFace.json, appleLeftEye.json, appleRightEye.json
-These files describe bounding boxes around the detected face and eyes, logged at recording time using Apple libraries. "Left eye" refers to the subject's physical left eye, which appears on the right side of the image.
-
-- `X`, `Y`: Position of the top-left corner of the bounding box (in pixels). In `appleFace.json`, this value is relative to the top-left corner of the full frame; in `appleLeftEye.json` and `appleRightEye.json`, it is relative to the top-left corner of the *face crop*.
-- `W`, `H`: Width and height of the bounding box (in pixels).
-- `IsValid`: Whether or not there was actually a detection. 1 = detection; 0 = no detection.
-
-### dotInfo.json
-- `DotNum`: Sequence number of the dot (starting from 0) being displayed during that frame.
-- `XPts`, `YPts`: Position of the center of the dot (in points; see `screen.json` documentation below for more information on this unit) from the top-left corner of the screen.
-- `XCam`, `YCam`: Position of the center of the dot in our prediction space. The position is measured in centimeters and is relative to the camera center, assuming the camera remains in a fixed position in space across all device orientations. I.e., `YCam` values will be negative for portrait mode frames (`Orientation` == 1) since the screen is below the camera, but values will be positive in upside-down portrait mode (`Orientation` == 2) since the screen is above the camera. See Section 4.1 and Figure 6 for more information.
-- `Time`: Time (in seconds) since the displayed dot first appeared on the screen.
-
-### faceGrid.json
-These values describe the "face grid" input features, which were generated from the Apple face detections. Within a 25 x 25 grid of 0 values, these parameters describe where to draw in a box of 1 values to represent the position and size of the face within the frame.
-
-- `X`, `Y`: Position of the top-left corner of the face box (1-indexed, within a 25 x 25 grid).
-- `W`, `H`: Width and height of the face box.
-- `IsValid`: Whether the data is valid (1) or not (0). This is equivalent to the intersection of the associated `IsValid` arrays in the apple*.json files (since we required samples to have Apple face and eye detections).
-
-### frames.json
-The filenames of the frames in the `frames` directory. This information may also be generated from a sequence number counting from 0 to `TotalFrames` - 1 (see `info.json`).
-
-### info.json
-- `TotalFrames`: The total number of frames for this subject.
-- `NumFaceDetections`: The number of frames in which a face was detected.
-- `NumEyeDetections`: The number of frames in which eyes were detected.
-- `Dataset`: "train," "val," or "test."
-- `DeviceName`: The name of the device used in the recording.
-
-### motion.json
-A stream of motion data (accelerometer, gyroscope, and magnetometer) recorded at 60 Hz, only while frames were being recorded. See Apple's [CMDeviceMotion](https://developer.apple.com/reference/coremotion/cmdevicemotion) class for a description of the values. `DotNum` (counting from 0) and `Time` (in seconds, from the beginning of that dot's recording) are recorded as well.
-
-### screen.json
-- `H`, `W`: Height and width of the active screen area of the app (in points). This allows us to account for the iOS "Display Zoom" feature (which was used by some subjects) as well as larger status bars (e.g., when a Personal Hotspot is enabled) and split screen views (which was not used by any subjects). See [this](https://developer.apple.com/library/content/documentation/2DDrawing/Conceptual/DrawingPrintingiOS/GraphicsDrawingOverview/GraphicsDrawingOverview.html) and [this](https://www.paintcodeapp.com/news/ultimate-guide-to-iphone-resolutions) page for more information on the unit "points."
-- `Orientation`: The orientation of the interface, as described by the enumeration [UIInterfaceOrientation](https://developer.apple.com/reference/uikit/uiinterfaceorientation), where:
-  - 1: portrait
-  - 2: portrait, upside down (iPad only)
-  - 3: landscape, with home button on the right
-  - 4: landscape, with home button on the left
-
-## Models
-In the `models` directory, we provide files compatible with [Caffe](http://caffe.berkeleyvision.org/), the deep learning framework. Following are descriptions of the included files:
-
-- *itracker_train_val.prototxt*: The iTracker architecture. See comments in the file for more information.
-- *itracker_deploy.prototxt*: The iTracker architecture expressed in a format suitable for inference (whereas itracker_train_val.prototxt is used for training).
-- *itracker_solver.prototxt*: The solver configuration describing how to train the model.
-- *mean_images/*: Directory containing 224x224 mean images (in Caffe binaryproto format and MATLAB mat format). These were produced by averaging all training images for each of the left eye, right eye, and face images.
-- *snapshots/itracker_iter_92000.caffemodel*: Model parameters after having trained 92,000 iterations, using the original dataset.
-- *snapshots/itracker25x_iter_92000.caffemodel*: Model parameters after having trained 92,000 iterations, using the 25x augmented dataset.
-
-## Code
-We provide some sample code to help you get started using the dataset. Below is a high-level overview, but see individual files for more documentation. Most files are MATLAB scripts/functions.
-
-- `loadSubject.m`, `loadAllSubjects.m`: Loads metadata from JSON files into MATLAB structs. This requires the [gason MATLAB wrapper](https://github.com/pdollar/coco/tree/master/MatlabAPI) to parse JSON. Note that this struct format is currently only used in a few scripts; others expect same-sized vectors for each piece of metadata and will require some data processing.
-- `generateCrops.m`: This will generate the cropped face and eye images required to train iTracker. You must edit the script path to point to the root of the dataset. New images will be saved in subdirectories under each subject.
-- `cropRepeatingEdge.m`: Crops an image, repeating edges if the cropped area goes outside of the original image bounds. (Face bounding boxes sometimes extend beyond the frame.) We use this script to mimic the behavior of [imageByClampingToExtent](https://developer.apple.com/reference/coreimage/ciimage/1437628-imagebyclampingtoextent), which we used in the GazeCapture app, and to provide something more natural than black pixels when training the network with fixed-size centered face images.
-- `cam2screen.m`, `screen2cam.m`, `cm2pts.m`, `pts2cm.m`: Transformation functions to move between iOS measurements (points), metric measurements (centimeters), and our prediction space. Measurements in the GazeCapture dataset are already included in different formats, but these will be useful for additional processing.
-- `apple_device_data.csv`, `loadAppleDeviceData.m`: The CSV file includes measurements we use to determine the position of the center of the camera relative to the screen. We derived these measurements from Apple's Device Dimensional Drawings in their [Accessory Design Guidelines (PDF)](https://developer.apple.com/accessories/Accessory-Design-Guidelines.pdf). The script can be used to load this CSV into your MATLAB workspace.
-- `faceGridFromParams.m`: Transform the compact, parameterized version of the face grid (included in metadata) into the actual feature representation (flattened binary mask) used in iTracker.
-- `faceGridFromFaceRect.m`: Generate a face grid (either parameterized or the full representation) given a face bounding box within a frame. Parameterized face grids are already included in the metadata, but this is useful if you have new face detections to use.
-
-Please feel free to contact us if you find any issues with these scripts or would like to request any additional code.
 
 ## Contact
 
-Please email any questions or comments to [gazecapture@gmail.com](mailto:gazecapture@gmail.com).
+Please email any questions or comments concerning the paper [“Towards Hardware-Agnostic Gaze-Trackers”](https://arxiv.org/abs/2010.05123) to [the authors](mailto:jatin.sharma@microsoft.com).

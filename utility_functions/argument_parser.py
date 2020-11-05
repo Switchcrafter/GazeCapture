@@ -18,7 +18,7 @@ def parse_commandline_arguments():
                         help='Start from scratch (do not load).')
     parser.add_argument('--epochs', type=int, default=30)
     parser.add_argument('--workers', type=int, default=16)
-    parser.add_argument('--batch_size', type=int, default=256)
+    parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--color_space', default='YCbCr',
                         help='Image color space - RGB, YCbCr, L')
     parser.add_argument('--model_type', default="resNet",
