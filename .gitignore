@@ -1,3 +1,6 @@
-/pytorch/__pycache__/*.pyc
-/pytorch/__pycache__
-/venv/
+*.json
+*.tar
+checkpoints*
+venv*
+.ipynb_checkpoints
+*__pycache__*

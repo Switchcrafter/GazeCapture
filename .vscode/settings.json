@@ -1,6 +1,0 @@
-{
-    "git.ignoreLimitWarning": true,
-    "python.venvPath": "${workspaceFolder}",
-    "python.venvFolders": ["${workspaceFolder}/venv"],
-    "python.pythonPath": "venv/bin/python"
-}
