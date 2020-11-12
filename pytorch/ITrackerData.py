@@ -121,16 +121,12 @@ class ITrackerData(data.Dataset):
     def __getitem__(self, real_index):
         index = self.indices[real_index]
 
-        imFacePath = os.path.join(self.dataPath,
-                                  '%05d/appleFace/%05d.jpg' % (self.metadata['labelRecNum'][index],
-                                                               self.metadata['frameIndex'][index]))
-        imEyeLPath = os.path.join(self.dataPath,
-                                  '%05d/appleLeftEye/%05d.jpg' % (self.metadata['labelRecNum'][index],
-                                                                  self.metadata['frameIndex'][index]))
-        imEyeRPath = os.path.join(self.dataPath,
-                                  '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][index],
-                                                                   self.metadata['frameIndex'][index]))
-
+        imFacePath = os.path.join('%s/appleFace/%s.jpg' % (self.metadata['labelRecNum'][index].strip(),
+                                                            self.metadata['frameIndex'][index].strip()))
+        imEyeLPath = os.path.join('%s/appleLeftEye/%s.jpg' % (self.metadata['labelRecNum'][index].strip(),
+                                                                self.metadata['frameIndex'][index].strip()))
+        imEyeRPath = os.path.join('%s/appleRightEye/%s.jpg' % (self.metadata['labelRecNum'][index].strip(),
+                                                                self.metadata['frameIndex'][index].strip()))
         imFace = self.loadImage(imFacePath)
         imEyeL = self.loadImage(imEyeLPath)
         imEyeR = self.loadImage(imEyeRPath)
@@ -140,6 +136,8 @@ class ITrackerData(data.Dataset):
         imEyeR = self.normalize_image(imEyeR)
 
         gaze = np.array([self.metadata['labelDotXCam'][index], self.metadata['labelDotYCam'][index]], np.float32)
+        # TODO: with new changes this becomes an array of string and makes dataloader grumpy
+        # fix it in a way that works with the dataloader
         frame = np.array([self.metadata['labelRecNum'][index], self.metadata['frameIndex'][index]])
 
         faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][index, :])
@@ -149,7 +147,8 @@ class ITrackerData(data.Dataset):
         faceGrid = torch.FloatTensor(faceGrid)
         gaze = torch.FloatTensor(gaze)
 
-        return row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, real_index
+        return row, imFace, imEyeL, imEyeR, faceGrid, gaze, real_index
+
 
     def __len__(self):
         return len(self.indices)

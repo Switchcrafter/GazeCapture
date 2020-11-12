@@ -345,7 +345,9 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
     lrs = []
 
     # load data samples and train
-    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(loader):
+    # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(loader):
+    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, indices) in enumerate(loader):
+        print(i)
         batchNum = i + 1
         actual_batch_size = imFace.size(0)
         num_samples += actual_batch_size
@@ -469,7 +471,8 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
 
     results = []
 
-    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(dataset.loader):
+    # for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, frame, indices) in enumerate(dataset.loader):
+    for i, (row, imFace, imEyeL, imEyeR, faceGrid, gaze, indices) in enumerate(dataset.loader):
         batchNum = i + 1
         actual_batch_size = imFace.size(0)
         num_samples += actual_batch_size
@@ -494,13 +497,15 @@ def evaluate(dataset, model, criterion, epoch, checkpointsPath, batch_size, devi
 
         # Combine the tensor results together into a collated list so that we have the gazePoint and gazePrediction
         # for each frame
-        f1 = frame.cpu().numpy().tolist()
+        # f1 = frame.cpu().numpy().tolist()
+        f1 = row.cpu().numpy().tolist()
         g1 = gaze.cpu().numpy().tolist()
         o1 = output.cpu().numpy().tolist()
         r1 = [list(r) for r in zip(f1, g1, o1)]
 
         def convertResult(result):
-            return {'frame': result[0], 'gazePoint': result[1], 'gazePrediction': result[2]}
+            # return {'frame': result[0], 'gazePoint': result[1], 'gazePrediction': result[2]}
+            return {'row': result[0], 'gazePoint': result[1], 'gazePrediction': result[2]}
 
         results += list(map(convertResult, r1))
         loss = criterion(output, gaze)
