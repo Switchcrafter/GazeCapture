@@ -74,7 +74,7 @@ class ExternalSourcePipeline(Pipeline):
         self.imEyeRBatch = ops.ExternalSource()
         self.imFaceGridBatch = ops.ExternalSource()
         self.gazeBatch = ops.ExternalSource()
-        self.frameBatch = ops.ExternalSource()
+        # self.frameBatch = ops.ExternalSource()
         self.indexBatch = ops.ExternalSource()
 
         mean = None
@@ -131,7 +131,7 @@ class ExternalSourcePipeline(Pipeline):
         self.imEyeR = self.imEyeRBatch()
         self.imFaceGrid = self.imFaceGridBatch()
         self.gaze = self.gazeBatch()
-        self.frame = self.frameBatch()
+        # self.frame = self.frameBatch()
         self.index = self.indexBatch()
         sat, con, bri, hue = self.dSaturation(), self.dContrast(), self.dBright(), self.dHue()
 
@@ -154,14 +154,26 @@ class ExternalSourcePipeline(Pipeline):
         imEyeLD = stream(self.imEyeL)
         imEyeRD = stream(self.imEyeR)
         imFaceGridD = stream(self.imFaceGrid, False)
-        return (self.row, imFaceD, imEyeLD, imEyeRD, imFaceGridD, self.gaze, self.frame, self.index)
+        # return (self.row, imFaceD, imEyeLD, imEyeRD, imFaceGridD, self.gaze, self.frame, self.index)
+        return (self.row, imFaceD, imEyeLD, imEyeRD, imFaceGridD, self.gaze, self.index)
 
     @property
     def size(self):
         return len(self.sourceIterator)
 
+    # def iter_setup(self):
+    #     (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch, frameBatch,
+    #      indexBatch) = self.sourceIterator.next()
+    #     self.feed_input(self.row, rowBatch)
+    #     self.feed_input(self.imFace, imFaceBatch)
+    #     self.feed_input(self.imEyeL, imEyeLBatch)
+    #     self.feed_input(self.imEyeR, imEyeRBatch)
+    #     self.feed_input(self.imFaceGrid, imFaceGridBatch)
+    #     self.feed_input(self.gaze, gazeBatch)
+    #     self.feed_input(self.frame, frameBatch)
+    #     self.feed_input(self.index, indexBatch)
     def iter_setup(self):
-        (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch, frameBatch,
+        (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch,
          indexBatch) = self.sourceIterator.next()
         self.feed_input(self.row, rowBatch)
         self.feed_input(self.imFace, imFaceBatch)
@@ -169,7 +181,6 @@ class ExternalSourcePipeline(Pipeline):
         self.feed_input(self.imEyeR, imEyeRBatch)
         self.feed_input(self.imFaceGrid, imFaceGridBatch)
         self.feed_input(self.gaze, gazeBatch)
-        self.feed_input(self.frame, frameBatch)
         self.feed_input(self.index, indexBatch)
 
 
@@ -214,7 +225,8 @@ class ITrackerData(object):
                  color_space='YCbCr',
                  data_loader='cpu',
                  shard_id=0,
-                 num_shards=1):
+                 num_shards=1,
+                 data_format='V2'):
         self.dataPath = dataPath
         self.metadata = metadata
         self.batch_size = batch_size
@@ -224,6 +236,7 @@ class ITrackerData(object):
         self.data_loader = data_loader
         self.index = 0
         self.split = split
+        self.data_format = data_format
 
         # ======= Sharding configuration variables  ========
         if num_shards > 0:
@@ -249,6 +262,7 @@ class ITrackerData(object):
             raise Exception('split should be test, val or train. The value of split was: {}'.format(self.split))
 
         self.indices = np.argwhere(mask)[:, 0]
+        # print(self.metadata['labelRecNum'])
 
         if not silent:
             print('Loaded iTracker dataset split "%s" with %d records.' % (self.split, len(self.indices)))
@@ -275,36 +289,33 @@ class ITrackerData(object):
         index = self.shard_id * self.__len__() + shard_index
         
         rowIndex = self.indices[index]
-        # TODO: Enable this for new format data
-        # imFacePath = os.path.join(self.dataPath,
-        #                           '%s/appleFace/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
-        #                                                        self.metadata['frameIndex'][rowIndex]))
-        # imEyeLPath = os.path.join(self.dataPath,
-        #                           '%s/appleLeftEye/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
-        #                                                           self.metadata['frameIndex'][rowIndex]))
-        # imEyeRPath = os.path.join(self.dataPath,
-        #                           '%s/appleRightEye/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
-        #                                                            self.metadata['frameIndex'][rowIndex]))
-        # imFaceGridPath = os.path.join(self.dataPath,
-        #                           '%s/faceGrid/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
-        #                                                            self.metadata['frameIndex'][rowIndex]))
-        
-        # XXX Experimental: for old format data
-        imFacePath = os.path.join(self.dataPath,
-                                  '%05d/appleFace/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
-                                                               self.metadata['frameIndex'][rowIndex]))
-        imEyeLPath = os.path.join(self.dataPath,
-                                  '%05d/appleLeftEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
-                                                                  self.metadata['frameIndex'][rowIndex]))
-        imEyeRPath = os.path.join(self.dataPath,
-                                  '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
-                                                                   self.metadata['frameIndex'][rowIndex]))
-        imFaceGridPath = os.path.join(self.dataPath,
-                                  '%05d/faceGrid/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
-                                                                   self.metadata['frameIndex'][rowIndex]))
+        if self.data_format == "V1":
+            imFacePath = os.path.join(self.dataPath,
+                                    '%05d/appleFace/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                                                self.metadata['frameIndex'][rowIndex]))
+            imEyeLPath = os.path.join(self.dataPath,
+                                    '%05d/appleLeftEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                                                    self.metadata['frameIndex'][rowIndex]))
+            imEyeRPath = os.path.join(self.dataPath,
+                                    '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                                                    self.metadata['frameIndex'][rowIndex]))
+            imFaceGridPath = os.path.join(self.dataPath,
+                                    '%05d/faceGrid/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
+                                                                    self.metadata['frameIndex'][rowIndex]))
+        else:
+            # For new V2 format data
+            # print("####",self.metadata['labelRecNum'][rowIndex]+"#####")
+            recordingNum = self.metadata['labelRecNum'][rowIndex].strip()
+            frameIndex = self.metadata['frameIndex'][rowIndex].strip()
+            imFacePath = os.path.join(self.dataPath, '%s/appleFace/%s.jpg' % (recordingNum, frameIndex))
+            imEyeLPath = os.path.join(self.dataPath, '%s/appleLeftEye/%s.jpg' % (recordingNum, frameIndex))
+            imEyeRPath = os.path.join(self.dataPath, '%s/appleRightEye/%s.jpg' % (recordingNum, frameIndex))
+            imFaceGridPath = os.path.join(self.dataPath, '%s/faceGrid/%s.jpg' % (recordingNum, frameIndex))
 
         # Note: Converted from double (float64) to float (float32) as pipeline output is float in MSE calculation
         gaze = np.array([self.metadata['labelDotXCam'][rowIndex], self.metadata['labelDotYCam'][rowIndex]], np.float32)
+        # TODO: with new changes this becomes an array of string and makes dataloader grumpy
+        # fix it in a way that works with the dataloader
         frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]])
         # faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][rowIndex, :])
         row = np.array([int(rowIndex)])
@@ -337,11 +348,13 @@ class ITrackerData(object):
             # faceGrid = torch.FloatTensor(faceGrid)
             gaze = torch.FloatTensor(gaze)
 
-            return row, imFace, imEyeL, imEyeR, imfaceGrid, gaze, frame, index
+            # return row, imFace, imEyeL, imEyeR, imfaceGrid, gaze, frame, index
+            return row, imFace, imEyeL, imEyeR, imfaceGrid, gaze, index
         else:
             # image loading, transformation and normalization happen in ExternalDataPipeline
             # we just pass imagePaths
-            return row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, frame, index
+            # return row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, frame, index
+            return row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, index
 
     # TODO: Not in use anymore due to RC. Should eventually be removed
     def makeGrid(self, params):
@@ -418,7 +431,8 @@ def load_data(split,
               color_space,
               data_loader,
               eval_boost,
-              mode):
+              mode,
+              data_format):
     
     shuffle = True if split == 'train' else False
     
@@ -441,7 +455,8 @@ def load_data(split,
                         color_space=color_space,
                         data_loader=data_loader,
                         shard_id=shard_id,
-                        num_shards=num_shards)
+                        num_shards=num_shards,
+                        data_format=data_format)
     size = len(data)
 
     # DALI implementation would do a cross-shard shuffle
@@ -468,8 +483,13 @@ def load_data(split,
         # DALI automatically allocates Pinned memory whereever possible
         # auto_reset=True resets the iterator after each epoch
         # DALIGenericIterator has inbuilt build for all pipelines
+        # loader = DALIGenericIterator(pipes,
+        #                             ['row', 'imFace', 'imEyeL', 'imEyeR', 'imFaceGrid', 'gaze', 'frame', 'indices'],
+        #                             size=len(data),
+        #                             fill_last_batch=False,
+        #                             last_batch_padded=True, auto_reset=True)
         loader = DALIGenericIterator(pipes,
-                                    ['row', 'imFace', 'imEyeL', 'imEyeR', 'imFaceGrid', 'gaze', 'frame', 'indices'],
+                                    ['row', 'imFace', 'imEyeL', 'imEyeR', 'imFaceGrid', 'gaze', 'indices'],
                                     size=len(data),
                                     fill_last_batch=False,
                                     last_batch_padded=True, auto_reset=True)
@@ -489,7 +509,8 @@ def load_all_data(path,
                   color_space='YCbCr',
                   data_loader='cpu',
                   eval_boost=False,
-                  mode='none'):
+                  mode='none',
+                  data_format='V2'):
     print(centered_text('Loading Data'))
     metadata = ITrackerMetadata(path, silent=not verbose).metadata
     splits = ['train', 'val', 'test']
@@ -506,6 +527,7 @@ def load_all_data(path,
                          color_space,
                          data_loader,
                          eval_boost,
-                         mode)
+                         mode,
+                         data_format)
         for split in splits}
     return all_data
