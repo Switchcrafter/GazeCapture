@@ -160,3 +160,6 @@ def getDeviceMetrics(deviceName):
         return None
 
     return devices[deviceName]
+
+def isSupportedDevice(deviceName):
+    return True if deviceName in devices else False
