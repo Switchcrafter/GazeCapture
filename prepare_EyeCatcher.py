@@ -3,7 +3,7 @@ import os
 import json
 import shutil
 
-from utility_functions.cam2screen import screen2cam
+from utility_functions.cam2screen import screen2cam, isSupportedDevice
 from utility_functions.face_utilities import faceEyeRectsToFaceInfoDict, newFaceInfoDict, find_face_dlib, \
     landmarksToRects, generate_face_grid_rect
 from PIL import Image as PILImage  # Pillow
@@ -65,6 +65,12 @@ def main():
         total_captures = len(captures)
 
         info_data = loadJsonData(os.path.join(data_directory, directory, "info.json"))
+        if not isSupportedDevice(info_data["DeviceName"]):
+            # If the device is not supported in device_metrics_sku.json skip it
+            # print('%s, %s, %s'%(directory_idx, directory, 'Unsupported SKU'))
+            multi_progress_bar.addSubProcess(index=directory_idx, max_value=0)
+            continue
+
         screen_data = loadJsonData(os.path.join(data_directory, directory, "screen.json"))
 
         # dotinfo.json - { "DotNum": [ 0, 0, ... ],
@@ -133,75 +139,78 @@ def main():
             capture_json_path = os.path.join(data_directory, directory, "frames", capture + ".json")
             capture_jpg_path = os.path.join(data_directory, directory, "frames", capture + ".jpg")
 
-            if os.path.isfile(capture_json_path) and os.path.isfile(capture_jpg_path):
-                capture_data = loadJsonData(capture_json_path)
+            try:
+                if os.path.isfile(capture_json_path) and os.path.isfile(capture_jpg_path):
+                    capture_data = loadJsonData(capture_json_path)
 
-                capture_image = PILImage.open(capture_jpg_path)
-                capture_image_np = np.array(capture_image)  # dlib wants images in numpy array format
+                    capture_image = PILImage.open(capture_jpg_path)
+                    capture_image_np = np.array(capture_image)  # dlib wants images in numpy array format
 
-                shape_np, isValid = find_face_dlib(capture_image_np)
+                    shape_np, isValid = find_face_dlib(capture_image_np)
 
-                info["NumFaceDetections"] = info["NumFaceDetections"] + 1
+                    info["NumFaceDetections"] = info["NumFaceDetections"] + 1
 
-                face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
+                    face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
 
-                # facegrid.json - { "X": [ 6, 6, ... ], "Y": [ 10, 10, ... ], "W": [ 13, 13, ... ], "H": [ 13, 13, ... ], "IsValid": [ 1, 1, ... ] }
-                if isValid:
-                    faceGridX, faceGridY, faceGridW, faceGridH = generate_face_grid_rect(face_rect, capture_image.width,
-                                                                                         capture_image.height)
+                    # facegrid.json - { "X": [ 6, 6, ... ], "Y": [ 10, 10, ... ], "W": [ 13, 13, ... ], "H": [ 13, 13, ... ], "IsValid": [ 1, 1, ... ] }
+                    if isValid:
+                        faceGridX, faceGridY, faceGridW, faceGridH = generate_face_grid_rect(face_rect, capture_image.width,
+                                                                                            capture_image.height)
+                    else:
+                        faceGridX = 0
+                        faceGridY = 0
+                        faceGridW = 0
+                        faceGridH = 0
+
+                    facegrid["X"].append(faceGridX)
+                    facegrid["Y"].append(faceGridY)
+                    facegrid["W"].append(faceGridW)
+                    facegrid["H"].append(faceGridH)
+                    facegrid["IsValid"].append(isValid)
+
+                    faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
+                                                                        right_eye_rect, isValid)
+                    info["NumEyeDetections"] = info["NumEyeDetections"] + 1
+
+                    # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
+                    screen["H"].append(screen_data['H'][capture_idx])
+                    screen["W"].append(screen_data['W'][capture_idx])
+                    screen["Orientation"].append(screen_data['Orientation'][capture_idx])
+
+                    # dotinfo.json - { "DotNum": [ 0, 0, ... ],
+                    #                  "XPts": [ 160, 160, ... ],
+                    #                  "YPts": [ 284, 284, ... ],
+                    #                  "XCam": [ 1.064, 1.064, ... ],
+                    #                  "YCam": [ -6.0055, -6.0055, ... ],
+                    #                  "Confidence": [ 59.3, 94.2, ... ],
+                    #                  "Time": [ 0.205642, 0.288975, ... ] }
+                    #
+                    # PositionIndex == DotNum
+                    # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
+                    x_raw = capture_data["XRaw"]
+                    y_raw = capture_data["YRaw"]
+                    x_cam, y_cam = screen2cam(x_raw,
+                                            y_raw,
+                                            screen_data['Orientation'][capture_idx],
+                                            screen_data["W"][capture_idx],
+                                            screen_data["H"][capture_idx],
+                                            info_data["DeviceName"])
+                    confidence = capture_data["Confidence"]
+
+                    dotinfo["DotNum"].append(capture_idx)
+                    dotinfo["XPts"].append(x_raw)
+                    dotinfo["YPts"].append(y_raw)
+                    dotinfo["XCam"].append(x_cam)
+                    dotinfo["YCam"].append(y_cam)
+                    dotinfo["Confidence"].append(confidence)
+                    dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
+
+                    frame_name = str(f"{capture}.jpg")
+                    frames.append(frame_name)
                 else:
-                    faceGridX = 0
-                    faceGridY = 0
-                    faceGridW = 0
-                    faceGridH = 0
-
-                facegrid["X"].append(faceGridX)
-                facegrid["Y"].append(faceGridY)
-                facegrid["W"].append(faceGridW)
-                facegrid["H"].append(faceGridH)
-                facegrid["IsValid"].append(isValid)
-
-                faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
-                                                                       right_eye_rect, isValid)
-                info["NumEyeDetections"] = info["NumEyeDetections"] + 1
-
-                # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
-                screen["H"].append(screen_data['H'][capture_idx])
-                screen["W"].append(screen_data['W'][capture_idx])
-                screen["Orientation"].append(screen_data['Orientation'][capture_idx])
-
-                # dotinfo.json - { "DotNum": [ 0, 0, ... ],
-                #                  "XPts": [ 160, 160, ... ],
-                #                  "YPts": [ 284, 284, ... ],
-                #                  "XCam": [ 1.064, 1.064, ... ],
-                #                  "YCam": [ -6.0055, -6.0055, ... ],
-                #                  "Confidence": [ 59.3, 94.2, ... ],
-                #                  "Time": [ 0.205642, 0.288975, ... ] }
-                #
-                # PositionIndex == DotNum
-                # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
-                x_raw = capture_data["XRaw"]
-                y_raw = capture_data["YRaw"]
-                x_cam, y_cam = screen2cam(x_raw,
-                                          y_raw,
-                                          screen_data['Orientation'][capture_idx],
-                                          screen_data["W"][capture_idx],
-                                          screen_data["H"][capture_idx],
-                                          info_data["DeviceName"])
-                confidence = capture_data["Confidence"]
-
-                dotinfo["DotNum"].append(capture_idx)
-                dotinfo["XPts"].append(x_raw)
-                dotinfo["YPts"].append(y_raw)
-                dotinfo["XCam"].append(x_cam)
-                dotinfo["YCam"].append(y_cam)
-                dotinfo["Confidence"].append(confidence)
-                dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
-
-                frame_name = str(f"{capture}.jpg")
-                frames.append(frame_name)
-            else:
-                print(f"Error processing capture {capture}")
+                    print(f"Error file doesn't exists: {directory}/{capture}")
+            except json.decoder.JSONDecodeError:
+                print(f"Error processing file: {directory}/{capture}")
 
             multi_progress_bar.update(index=directory_idx, value=capture_idx+1)
 
