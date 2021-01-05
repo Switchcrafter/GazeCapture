@@ -159,4 +159,4 @@ If you use the Enhanced iTracker architecture or any other work presented in the
 
 ## Contact
 
-Please email any questions or comments concerning the paper [“Towards Hardware-Agnostic Gaze-Trackers”](https://arxiv.org/abs/2010.05123) to [the authors](mailto:jatin.sharma@microsoft.com).
+Please email any questions or comments concerning the paper [“Towards Hardware-Agnostic Gaze-Trackers”](https://arxiv.org/abs/2010.05123) to the authors.
