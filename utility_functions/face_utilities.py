@@ -175,6 +175,25 @@ def getRect(data):
 
     return int(center[0]), int(center[1]), int(size[0]), int(size[1]), int(angle)
 
+def calibrate(data):
+    # get the parameter of the small rectangle
+    center, size, angle = data[0], data[1], data[2]
+
+    # The function minAreaRect seems to give angles ranging in (-90, 0].
+    # This is based on the long edge of the rectangle
+    if angle < -45:
+        angle = 90 + angle
+        size = (size[1], size[0])
+
+    return int(center[0]), int(center[1]), int(size[0]), int(size[1]), int(angle)
+
+def makeSquare(size):
+    length = max(size[0], size[1])
+    return (length, length)
+
+def getSquareBoundingRect(shape_vector):
+    boundingRect = cv2.minAreaRect(shape_vector)
+    return boundingRect[0], makeSquare(boundingRect[1]), boundingRect[2]
 
 def rc_landmarksToRects(shape_np, isValid):
     face_rect = (0, 0, 0, 0, 0)
@@ -188,9 +207,17 @@ def rc_landmarksToRects(shape_np, isValid):
         left_eye_shape_np = shape_np[leftEyeLandmarksStart:leftEyeLandmarksEnd]
         right_eye_shape_np = shape_np[rightEyeLandmarksStart:rightEyeLandmarksEnd]
 
-        face_rect = getRect(cv2.minAreaRect(shape_np))
-        left_eye_rect = getRect(cv2.minAreaRect(left_eye_shape_np))
-        right_eye_rect = getRect(cv2.minAreaRect(right_eye_shape_np))
+        # face_rect = getRect(cv2.minAreaRect(shape_np))
+        # left_eye_rect = getRect(cv2.minAreaRect(left_eye_shape_np))
+        # right_eye_rect = getRect(cv2.minAreaRect(right_eye_shape_np))
+
+        face_rect = getSquareBoundingRect(shape_np)
+        left_eye_rect = cv2.minAreaRect(left_eye_shape_np)
+        right_eye_rect = cv2.minAreaRect(right_eye_shape_np)
+
+        face_rect = calibrate(face_rect)
+        left_eye_rect = calibrate(left_eye_rect)
+        right_eye_rect = calibrate(right_eye_rect)
 
         # ToDo enable negative coordinate check. Last value is theta which can be negative.
         isValid = check_negative_coordinates(face_rect[:-1]) and \
@@ -237,7 +264,10 @@ def crop_rect(img, rect):
 
     center, size = tuple(map(int, center)), tuple(map(int, size))
     # get a square crop of the detected region with 10px padding
-    size = (max(size) + 10, max(size) + 10)
+    # size = (max(size) + 10, max(size) + 10)
+    
+    # get a square crop of the detected region
+    size = makeSquare(size)
 
     # get row and col num in img
     height, width = img.shape[0], img.shape[1]
