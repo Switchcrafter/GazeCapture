@@ -277,7 +277,7 @@ def main():
         print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif args.phase == 'ExportONNX':
         # export the model for use in other frameworks
-        export_onnx_model(model, args.device, args.verbose)
+        export_onnx_model(model, args.device, args.output_path, args.verbose)
 
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
@@ -476,17 +476,10 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
     # load data samples and train
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "cpu":
-            # (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) = data
+            # (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices), frame = data
             (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices) = data
         else:  # dali modes
             batch_data = data[0]
-            # batch_data = data
-            # row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"], \
-            #                                                               batch_data["imEyeL"], batch_data["imEyeR"], \
-            #                                                               batch_data["imFaceGrid"], \
-            #                                                               batch_data["gaze"], batch_data["frame"], \
-            #                                                               batch_data["indices"]
-
             row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices = batch_data["row"], batch_data["imFace"], \
                                                                         batch_data["imEyeL"], batch_data["imEyeR"], \
                                                                         batch_data["imFaceGrid"], \
@@ -630,18 +623,10 @@ def evaluate(dataset,
 
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "cpu":
-            # (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) = data
+            # (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices), frame = data
             (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices) = data
         else:  # dali modes
             batch_data = data[0]
-            # row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices = batch_data["row"], \
-            #                                                               batch_data["imFace"], \
-            #                                                               batch_data["imEyeL"], \
-            #                                                               batch_data["imEyeR"], \
-            #                                                               batch_data["imFaceGrid"], \
-            #                                                               batch_data["gaze"], \
-            #                                                               batch_data["frame"], \
-            #                                                               batch_data["indices"]
             row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices = batch_data["row"], \
                                                                         batch_data["imFace"], \
                                                                         batch_data["imEyeL"], \
@@ -720,8 +705,7 @@ def evaluate(dataset,
 
     return MSELosses.avg, RMSErrors.avg
 
-
-def export_onnx_model(model, device, verbose):
+def export_onnx_model(model, device, output_path, verbose):
     # switch to evaluate mode
     model.eval()
 
@@ -740,22 +724,22 @@ def export_onnx_model(model, device, verbose):
     in_names = ["face", "eyesLeft", "eyesRight", "imFaceGrid"]
     out_names = ["data"]
 
+    onnxModelPath = os.path.join(output_path, 'best_checkpoint.onnx')
     try:
         torch.onnx.export(model.module,
                           dummy_in,
-                          "itracker.onnx",
+                          onnxModelPath,
                           input_names=in_names,
                           output_names=out_names,
                           verbose=verbose)
     except AttributeError:
         torch.onnx.export(model,
                           dummy_in,
-                          "itracker.onnx",
+                          onnxModelPath,
                           input_names=in_names,
                           output_names=out_names,
                           verbose=verbose)
-
-
+                          
 if __name__ == "__main__":
     main()
     print('')

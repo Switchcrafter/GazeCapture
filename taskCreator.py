@@ -20,6 +20,10 @@ from utility_functions.face_utilities import *
 import dateutil.parser
 from utility_functions.cam2screen import screen2cam, isSupportedDevice
 from utility_functions.Utilities import MultiProgressBar
+from ITrackerModel import ITrackerModel
+from utility_functions.checkpoint_manager import remove_module_from_state
+import onnxruntime as ort
+import numpy
 
 
 ################################################################################
@@ -1275,6 +1279,115 @@ def checkpointInfoTask(filepath):
         print('\'Best_RMS_Errors\': {0}'.format(best_rms_errors))
     return
 
+def loadImage(path):
+    try:
+        im = Image.open(path).convert('YCbCr')
+        im = im.resize((224,224))
+    except OSError:
+        raise RuntimeError('Could not read image: ' + path)
+    return im
+
+
+def imageToPyTorchTensor(img):
+    # W x H x C -> C x W x H
+    img = np.asarray(img).transpose(2, 0, 1) 
+    img = torch.from_numpy(np.asarray(img)).float() # create the image tensor
+    return img.unsqueeze(0)
+
+def imageToOnnxTensor(im):
+    # W x H x C -> C x W x H
+    im = np.asarray(im).transpose(2, 0, 1)
+    im = np.array(im, np.float)
+    return im.reshape(1,3,224,224)
+
+def getROIs(input_dir, frame):
+        # XXX Experimental: for old format data
+        filename = '%05d.jpg' % frame
+        imFacePath = os.path.join(input_dir, 'appleFace', filename)
+        imEyeLPath = os.path.join(input_dir, 'appleLeftEye', filename)
+        imEyeRPath = os.path.join(input_dir, 'appleRightEye', filename)
+        imFaceGridPath = os.path.join(input_dir, 'faceGrid', filename)
+
+        # Image loading, transformation and normalization happen here
+        imFace = loadImage(imFacePath)
+        imEyeL = loadImage(imEyeLPath)
+        imEyeR = loadImage(imEyeRPath)
+        imFaceGrid = loadImage(imFaceGridPath)
+        return imFace, imEyeL, imEyeR, imFaceGrid
+
+def modelParityTask(input_dir):
+    checkpoint_dirpath = 'utility_functions/demo_models/MSR_0_9171'
+    # Create model
+    device = torch.device('cpu')
+    color_space = 'YCbCr'
+    model_type = 'resNet'
+    model = ITrackerModel(color_space, model_type).to(device=device)
+
+    # load the checkpoint and apply state to the model
+    filepath = os.path.join(checkpoint_dirpath, 'best_checkpoint.pth.tar')
+    if not os.path.isfile(filepath):
+        print('The following file does not exist: ', filepath)
+        return None
+
+    saved = torch.load(filepath, map_location='cpu')
+    if saved:
+        best_rms_error = saved.get('best_RMSError', None)
+        print('\'Best_RMS_Error\': {0},'.format(best_rms_error))
+        try:
+            state = saved['state_dict']
+            model.load_state_dict(state)
+        except RuntimeError:
+            # The most likely cause of a failure to load is that there is a leading "module." from training. This is
+            # normal for models trained with DataParallel. If not using DataParallel, then the "module." needs to be
+            # removed.
+            state = remove_module_from_state(saved)
+            model.load_state_dict(state)
+
+    # switch to evaluate mode
+    model.eval()
+
+    # OnnxRuntime
+    filepath = os.path.join(checkpoint_dirpath, 'best_checkpoint.onnx')
+    sess = ort.InferenceSession(filepath)
+    inputs = sess.get_inputs()
+    output_name = sess.get_outputs()[0].name
+
+    dotInfo = json_read(os.path.join(input_dir, 'dotInfo.json'))
+    frames = json_read(os.path.join(input_dir, 'frames.json'))
+    # screen = json_read(os.path.join(input_dir, 'screen.json'))
+    frames = np.array([int(re.match('(\d{5})\.jpg$', x).group(1)) for x in frames])
+
+    for j, frame in enumerate(frames):
+        imFace, imEyeL, imEyeR, imFaceGrid = getROIs(input_dir, frame)
+        gaze = np.array([dotInfo['XCam'][j], dotInfo['YCam'][j]], np.float32)
+        print(gaze)
+
+        # Run PyTorch Inference
+        with torch.no_grad():
+            imFacePy = imageToPyTorchTensor(imFace)
+            imEyeLPy = imageToPyTorchTensor(imEyeL)
+            imEyeRPy = imageToPyTorchTensor(imEyeR)
+            imFaceGridPy = imageToPyTorchTensor(imFaceGrid)
+            output = model(imFacePy, imEyeLPy, imEyeRPy, imFaceGridPy)
+            output = output.data[0].numpy()
+            print(output)
+
+        # Run ONNXRuntime Inference
+        imFaceOnnx = imageToOnnxTensor(imFace)
+        imEyeLOnnx = imageToOnnxTensor(imEyeL)
+        imEyeROnnx = imageToOnnxTensor(imEyeR)
+        imFaceGridOnnx = imageToOnnxTensor(imFaceGrid)
+        pred_onx = sess.run([output_name], {
+            inputs[0].name : imFaceOnnx.astype(numpy.float32),
+            inputs[1].name : imEyeLOnnx.astype(numpy.float32),
+            inputs[2].name : imEyeROnnx.astype(numpy.float32),
+            inputs[3].name : imFaceGridOnnx.astype(numpy.float32)
+        })
+        pred_onx = pred_onx[0][0]
+        print(pred_onx)
+        # print(output - pred_onx)
+
+    return
 
 # all tasks are handled here
 if __name__ == '__main__':
@@ -1434,6 +1547,10 @@ if __name__ == '__main__':
         dataLoader = None
     elif args.task == "checkpointInfoTask":
         taskFunction = checkpointInfoTask
+        taskData = args.input
+        dataLoader = None
+    elif args.task == "modelParityTask":
+        taskFunction = modelParityTask
         taskData = args.input
         dataLoader = None
 
