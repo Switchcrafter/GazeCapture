@@ -1316,32 +1316,38 @@ def getROIs(input_dir, frame):
         return imFace, imEyeL, imEyeR, imFaceGrid
 
 def modelParityTask(input_dir):
-    checkpoint_dirpath = 'utility_functions/demo_models/MSR_0_9171'
-    # Create model
+    # e.g. 'utility_functions/demo_models/MSR_0_9171'
+    checkpoint_dirpath = args.model_dir
     device = torch.device('cpu')
     color_space = 'YCbCr'
     model_type = 'resNet'
-    model = ITrackerModel(color_space, model_type).to(device=device)
+    loadFromState = False
 
-    # load the checkpoint and apply state to the model
-    filepath = os.path.join(checkpoint_dirpath, 'best_checkpoint.pth.tar')
-    if not os.path.isfile(filepath):
-        print('The following file does not exist: ', filepath)
-        return None
+    if loadFromState:
+        # Create model
+        model = ITrackerModel(color_space, model_type).to(device=device)
+        
+        # load the checkpoint and apply state to the model
+        filepath = os.path.join(checkpoint_dirpath, 'best_checkpoint.pth')
+        if not os.path.isfile(filepath):
+            print('The following file does not exist: ', filepath)
+            return None
 
-    saved = torch.load(filepath, map_location='cpu')
-    if saved:
-        best_rms_error = saved.get('best_RMSError', None)
-        print('\'Best_RMS_Error\': {0},'.format(best_rms_error))
-        try:
-            state = saved['state_dict']
-            model.load_state_dict(state)
-        except RuntimeError:
-            # The most likely cause of a failure to load is that there is a leading "module." from training. This is
-            # normal for models trained with DataParallel. If not using DataParallel, then the "module." needs to be
-            # removed.
-            state = remove_module_from_state(saved)
-            model.load_state_dict(state)
+        saved = torch.load(filepath, map_location='cpu')
+        if saved:
+            best_rms_error = saved.get('best_RMSError', None)
+            print('\'Best_RMS_Error\': {0},'.format(best_rms_error))
+            try:
+                state = saved['state_dict']
+                model.load_state_dict(state)
+            except RuntimeError:
+                # The most likely cause of a failure to load is that there is a leading "module." from training. This is
+                # normal for models trained with DataParallel. If not using DataParallel, then the "module." needs to be
+                # removed.
+                state = remove_module_from_state(saved)
+                model.load_state_dict(state)
+    else:
+        model = torch.load(os.path.join(checkpoint_dirpath, 'best_model.pth')).to(device=device)
 
     # switch to evaluate mode
     model.eval()
@@ -1409,6 +1415,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_type', default="resNet", help='resNet, deepEyeNet')
     parser.add_argument('--color_space', default="YCbCr", help='color_space, RGB')
     parser.add_argument('--data_format', default="V2", help='V2, V1')
+    parser.add_argument('--model_dir', default="", help="path to checkpoint directory")
     args = parser.parse_args()
 
     if args.task == "":

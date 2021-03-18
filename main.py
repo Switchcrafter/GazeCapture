@@ -278,6 +278,8 @@ def main():
     elif args.phase == 'ExportONNX':
         # export the model for use in other frameworks
         export_onnx_model(model, args.device, args.output_path, args.verbose)
+        # Save a full model
+        export_torch_model(model, args.device, args.output_path, args.verbose)
 
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
@@ -704,6 +706,11 @@ def evaluate(dataset,
         json.dump(results, outfile)
 
     return MSELosses.avg, RMSErrors.avg
+
+
+def export_torch_model(model, device, output_path, verbose):
+    torchModelPath = os.path.join(output_path, 'best_model.pth')
+    torch.save(model, torchModelPath)
 
 def export_onnx_model(model, device, output_path, verbose):
     # switch to evaluate mode
