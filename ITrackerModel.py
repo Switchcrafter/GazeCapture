@@ -24,6 +24,8 @@ Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}
 }
 '''
 
+# Global Dropout value
+DRPVAL = 0.1
 
 class ItrackerImageModel(nn.Module):
     # Used for both eyes (with shared weights) and the face (with unique weights)
@@ -70,13 +72,13 @@ class FaceImageModel(nn.Module):
         self.fc = nn.Sequential(
             # FC-F1
             # 25088
-            nn.Dropout(0.4),
+            nn.Dropout(DRPVAL),
             nn.Linear(25088, 128),
             # 128
             nn.ReLU(inplace=True),
 
             # FC-F2
-            nn.Dropout(0.4),
+            nn.Dropout(DRPVAL),
             nn.Linear(128, 64),
             # 64
             nn.ReLU(inplace=True),
@@ -98,13 +100,13 @@ class FaceGridRCModel(nn.Module):
         self.fc = nn.Sequential(
             # FC-F1
             # 25088
-            nn.Dropout(0.4),
+            nn.Dropout(DRPVAL),
             nn.Linear(25088, 256),
             # 256
             nn.ReLU(inplace=True),
 
             # FC-F2
-            nn.Dropout(0.4),
+            nn.Dropout(DRPVAL),
             nn.Linear(256, 128),
             # 128
             nn.ReLU(inplace=True),
@@ -133,7 +135,7 @@ class FaceGridModel(nn.Module):
 
             # FC-FG2
             # 256
-            nn.Dropout(0.4),
+            nn.Dropout(DRPVAL),
             nn.Linear(256, 128),
             # 128
             nn.ReLU(inplace=True),
@@ -162,7 +164,7 @@ class ITrackerModel(nn.Module):
         # Joining both eyes
         self.eyesFC = nn.Sequential(
             # FC-E1
-            nn.Dropout(0.4),
+            nn.Dropout(DRPVAL),
             # 50176
             nn.Linear(2 * 25088, 128),
             # 128
@@ -173,7 +175,7 @@ class ITrackerModel(nn.Module):
         # Joining everything
         self.fc = nn.Sequential(
             # FC1
-            nn.Dropout(0.4),
+            nn.Dropout(DRPVAL),
             # 384 FC-E1 (128) + FC-F2(64) + FC-FG2(128)
             nn.Linear(128 + 64 + 128, 128),
             # 128
@@ -182,7 +184,7 @@ class ITrackerModel(nn.Module):
 
             # FC2
             # 128
-            nn.Dropout(0.4),
+            nn.Dropout(DRPVAL),
             nn.Linear(128, 2),
             # 2
         )
