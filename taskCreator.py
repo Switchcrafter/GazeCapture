@@ -1292,13 +1292,15 @@ def imageToPyTorchTensor(img):
     # W x H x C -> C x W x H
     img = np.asarray(img).transpose(2, 0, 1) 
     img = torch.from_numpy(np.asarray(img)).float() # create the image tensor
+    img = img/255.0
     return img.unsqueeze(0)
 
-def imageToOnnxTensor(im):
+def imageToOnnxTensor(img):
     # W x H x C -> C x W x H
-    im = np.asarray(im).transpose(2, 0, 1)
-    im = np.array(im, np.float)
-    return im.reshape(1,3,224,224)
+    img = np.asarray(img).transpose(2, 0, 1)
+    img = np.array(img, np.float)
+    img = img/255.0
+    return img.reshape(1,3,224,224)
 
 def getROIs(input_dir, frame):
         # XXX Experimental: for old format data
@@ -1350,7 +1352,8 @@ def modelParityTask(input_dir):
         model = torch.load(os.path.join(checkpoint_dirpath, 'best_model.pth')).to(device=device)
 
     # switch to evaluate mode
-    model.eval()
+    model.eval() # Makes batchnorm and dropout to work in eval mode
+    torch.no_grad() # Stops computing gradients
 
     # OnnxRuntime
     filepath = os.path.join(checkpoint_dirpath, 'best_checkpoint.onnx')
@@ -1369,14 +1372,13 @@ def modelParityTask(input_dir):
         print(gaze)
 
         # Run PyTorch Inference
-        with torch.no_grad():
-            imFacePy = imageToPyTorchTensor(imFace)
-            imEyeLPy = imageToPyTorchTensor(imEyeL)
-            imEyeRPy = imageToPyTorchTensor(imEyeR)
-            imFaceGridPy = imageToPyTorchTensor(imFaceGrid)
-            output = model(imFacePy, imEyeLPy, imEyeRPy, imFaceGridPy)
-            output = output.data[0].numpy()
-            print(output)
+        imFacePy = imageToPyTorchTensor(imFace)
+        imEyeLPy = imageToPyTorchTensor(imEyeL)
+        imEyeRPy = imageToPyTorchTensor(imEyeR)
+        imFaceGridPy = imageToPyTorchTensor(imFaceGrid)
+        output = model(imFacePy, imEyeLPy, imEyeRPy, imFaceGridPy)
+        output = output.data[0].numpy()
+        print(output)
 
         # Run ONNXRuntime Inference
         imFaceOnnx = imageToOnnxTensor(imFace)
