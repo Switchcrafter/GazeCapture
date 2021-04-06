@@ -34,6 +34,8 @@ def parse_commandline_arguments():
                         help='Just validate and terminate.')
     parser.add_argument('--info', action='store_true', default=False,
                         help='Just print info and terminate.')
+    parser.add_argument('--finetune', action='store_true', default=False,
+                        help='Finetune existing model for different dataset')
     parser.add_argument('--dataset_limit', type=int, default=0, 
                         help='Limits the dataset size, useful for debugging')
     parser.add_argument('--exportONNX', action='store_true', default=False)
@@ -131,6 +133,8 @@ def parse_commandline_arguments():
         args.phase = 'ExportONNX'
     elif args.info:
         args.phase = 'Info'
+    elif args.finetune:
+        args.phase = 'Finetune'
 
     if args.verbose:
         print('Number of arguments:', len(sys.argv), 'arguments.')

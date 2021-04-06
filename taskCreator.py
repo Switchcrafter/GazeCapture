@@ -207,6 +207,10 @@ def getCaptureSessionDirList(path):
 
 # used by prepareEyeCatcherTask
 def getCaptureSessionFileList(path):
+    # Check whether it is a valid data/frame directory or not
+    if not os.path.isdir(os.path.join(path, "frames")):
+        return list()
+
     if args.data_format == 'V1':
         files = [os.path.splitext(f)[0] for f in os.listdir(os.path.join(path, "frames")) if f.endswith('.json') and not f == "session.json"]
     else:
@@ -261,9 +265,14 @@ def CaptureDataDistributionTask(directory, directory_idx, progressbar):
     return meta
 
 # Equivalent: prepare_EyeCatcher
+# Prepapres data from V1 format
 def prepareEyeCatcherTask(directory, directory_idx, progressbar):
+    # print(directory)
     captures = sorted(getCaptureSessionFileList(os.path.join(args.input, directory)), key=str)
     total_captures = len(captures)
+    # print(captures)
+    # if total_captures == 0:
+    #     return
 
     # Read directory level json
     deviceMetrics_data = json_read(os.path.join(args.input, directory, "deviceMetrics.json"))
@@ -610,6 +619,10 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
 def prepareEyeCatcherNewTask(directory, directory_idx, progressbar):
     captures = sorted(getCaptureSessionFileList(os.path.join(args.input, directory)), key=str)
     total_captures = len(captures)
+    # print(directory, total_captures)
+    # For directories with no frames folder exit
+    if total_captures == 0:
+        return
 
     # Read directory level json
     info_data = json_read(os.path.join(args.input, directory, "info.json"))
@@ -766,8 +779,11 @@ def prepareEyeCatcherNewTask(directory, directory_idx, progressbar):
                 frames.append(frame_name)
 
                 shutil.copyfile(capture_jpg_path, os.path.join(output_frame_path, frame_name))
-        except:
-            print(f"UnknownError: Something went wrong: {directory}/{capture}")
+        except Exception as e:
+            print(f"{directory}/frames/{capture}")
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            print(exc_type, e, fname, exc_tb.tb_lineno)
 
     # write json files
     json_write(os.path.join(output_path, 'frames.json'), frames)
@@ -1397,6 +1413,69 @@ def modelParityTask(input_dir):
 
     return
 
+# import matplotlib.pyplot as plt
+def userCalibrationTask(filepath):
+    mr = 88
+    mc = 68
+
+    xx = np.arange(mr-1, -1, -1)
+    yy = np.arange(0, mc, 1)
+    [Y, X] = np.meshgrid(xx, yy)
+    ms = np.transpose(np.asarray([X.flatten('F'), Y.flatten('F')]), (1,0))
+
+    perturbed_mesh = ms
+    nv = np.random.randint(20) - 1
+    for k in range(nv):
+        #Choosing one vertex randomly
+        vidx = np.random.randint(np.shape(ms)[0])
+        vtex = ms[vidx, :]
+        #Vector between all vertices and the selected one
+        xv  = perturbed_mesh - vtex
+        #Random movement 
+        mv = (np.random.rand(1,2) - 0.5)*20
+        hxv = np.zeros((np.shape(xv)[0], np.shape(xv)[1] +1) )
+        hxv[:, :-1] = xv
+        hmv = np.tile(np.append(mv, 0), (np.shape(xv)[0],1))
+        d = np.cross(hxv, hmv)
+        d = np.absolute(d[:, 2])
+        d = d / (np.linalg.norm(mv, ord=2))
+        wt = d
+        
+        curve_type = np.random.rand(1)
+        if curve_type > 0.3:
+            alpha = np.random.rand(1) * 50 + 50
+            wt = alpha / (wt + alpha)
+        else:
+            alpha = np.random.rand(1) + 1
+            wt = 1 - (wt / 100 )**alpha
+        msmv = mv * np.expand_dims(wt, axis=1)
+        perturbed_mesh = perturbed_mesh + msmv
+
+    # plt.scatter(perturbed_mesh[:, 0], perturbed_mesh[:, 1], c=np.arange(0, mr*mc))
+    # plt.show()
+
+    fname = "receipt.jpg"
+    img = cv2.imread(fname)
+    nh, nw = img.shape[:2]
+    dh, dw = nh//2, nw//2
+    img = cv2.copyMakeBorder(img, dh, dh, dw, dw, borderType=cv2.BORDER_CONSTANT, value=(0,0,0))
+    
+
+    PI = 3.141592653589793
+    phase = -0.8 * PI
+    omega = 2.0 * PI / nw
+    amp = 15
+
+    xs, ys = perturbed_mesh[:, 0], perturbed_mesh[:, 1]
+    # xs, ys = np.meshgrid(np.arange(0, nw), np.arange(0, nh))
+    # ys = np.sin(phase+xs*omega)*amp + ys
+    xs = np.float32(xs)
+    ys = np.float32(ys)
+
+    dst= cv2.remap(img, xs, ys, cv2.INTER_CUBIC)
+    cv2.imwrite("dst.png", dst)
+
+
 # all tasks are handled here
 if __name__ == '__main__':
     # Argument parser
@@ -1560,6 +1639,10 @@ if __name__ == '__main__':
         dataLoader = None
     elif args.task == "modelParityTask":
         taskFunction = modelParityTask
+        taskData = args.input
+        dataLoader = None
+    elif args.task == "userCalibrationTask":
+        taskFunction = userCalibrationTask
         taskData = args.input
         dataLoader = None
 

@@ -96,7 +96,7 @@ def main():
 
     criterion, optimizer, scheduler = initialize_hyper_parameters(args, epoch, datasets, model)
 
-    if args.phase == 'Train':
+    if args.phase == 'Train' or args.phase == 'Finetune':
         # resize variables to epochs size
         resize(learning_rates, args.epochs)
         resize(best_RMSErrors, args.epochs)
@@ -236,6 +236,12 @@ def main():
                 is_best,
                 args.output_path,
                 args.save_checkpoints)
+            
+            if is_best:
+                # After all the epochs are complete export the model
+                export_onnx_model(model, args.device, args.output_path, args.verbose)
+                # Save a full model
+                export_torch_model(model, args.device, args.output_path, args.verbose)
 
             print('')
             print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
@@ -524,7 +530,10 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
             batch_loss = error.detach().cpu().div_(10.0)
             # batch_loss = error.detach().cpu().div_(best_MSELoss*2)
             batch_loss[batch_loss > 1.0] = 1.0
-            args.multinomial_weights.scatter_(0, indices, batch_loss.type_as(torch.DoubleTensor()))
+            # print(args.multinomial_weights.size())
+            # print(indices.size())
+            # print(indices.flatten())
+            args.multinomial_weights.scatter_(0, indices.flatten(), batch_loss.type_as(torch.DoubleTensor()))
 
         # average over the batch
         error = torch.mean(error)
