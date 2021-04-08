@@ -25,6 +25,7 @@ def parse_commandline_arguments():
                         help="resNet, mobileNet, deepEyeNet")
     parser.add_argument('--data_format', default="V2",
                         help="V1, V2")
+    parser.add_argument('--freeze', type=int, default=-1, help="Freeze til given layer index")
     #---------- Testing & Debugging ------------
     parser.add_argument('--force_test', action='store_true', default=False,
                         help='Force test every epoch during training')
