@@ -64,6 +64,21 @@ def landmarksToRects(shape_np, isValid):
     return face_rect, left_eye_rect_relative, right_eye_rect_relative, isValid
 
 
+def resizeRotatedRect(rotatedRect, srcSize, dstSize):
+    srcW, srcH = srcSize
+    dstW, dstH = dstSize
+
+    src_vertices = np.float32([[0,srcH], [0,0], [srcW,0]])
+    dst_vertices = np.float32([[0,dstH], [0,0], [dstW,0]])
+    M = cv2.getAffineTransform(src_vertices, dst_vertices)
+
+    vertices = cv2.boxPoints(getBox(rotatedRect))
+    vertices_transformed = cv2.transform(np.array([vertices]), M)[0]
+    # # Using the 3-pt constructor fails occasionally when transformed rectangle 
+    # # is not exactly right-angled. We use minAreaRect instead.
+    newRotatedRect = cv2.minAreaRect(vertices_transformed)
+    return list(getRectFloat(newRotatedRect))
+
 def check_negative_coordinates(tup):
     isValid = True
     for idx in range(0, len(tup)):
@@ -162,6 +177,18 @@ def getEyeRectRelative(face_rect, eye_rect):
 
     return eye_rect_relative
 
+
+def getRectFloat(data):
+    # get the parameter of the small rectangle
+    center, size, angle = data[0], data[1], data[2]
+
+    # The function minAreaRect seems to give angles ranging in (-90, 0].
+    # This is based on the long edge of the rectangle
+    if angle < -45:
+        angle = 90 + angle
+        size = (size[1], size[0])
+
+    return center[0], center[1], size[0], size[1], angle
 
 def getRect(data):
     # get the parameter of the small rectangle

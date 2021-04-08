@@ -76,6 +76,7 @@ class ExternalSourcePipeline(Pipeline):
         self.imFaceGridBatch = ops.ExternalSource()
         self.gazeBatch = ops.ExternalSource()
         self.indexBatch = ops.ExternalSource()
+        self.faceBboxBatch = ops.ExternalSource()
 
         mean = None
         std = None
@@ -132,6 +133,7 @@ class ExternalSourcePipeline(Pipeline):
         self.imFaceGrid = self.imFaceGridBatch()
         self.gaze = self.gazeBatch()
         self.index = self.indexBatch()
+        self.faceBbox = self.faceBboxBatch()
         sat, con, bri, hue = self.dSaturation(), self.dContrast(), self.dBright(), self.dHue()
 
         def stream(image, augment=True):
@@ -153,7 +155,7 @@ class ExternalSourcePipeline(Pipeline):
         imEyeLD = stream(self.imEyeL)
         imEyeRD = stream(self.imEyeR)
         imFaceGridD = stream(self.imFaceGrid, False)
-        return (self.row, imFaceD, imEyeLD, imEyeRD, imFaceGridD, self.gaze, self.index)
+        return (self.row, imFaceD, imEyeLD, imEyeRD, imFaceGridD, self.gaze, self.index, self.faceBbox)
 
     @property
     def size(self):
@@ -161,7 +163,7 @@ class ExternalSourcePipeline(Pipeline):
 
     def iter_setup(self):
         (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch,
-         indexBatch) = self.sourceIterator.next()
+         indexBatch, faceBboxBatch) = self.sourceIterator.next()
         self.feed_input(self.row, rowBatch)
         self.feed_input(self.imFace, imFaceBatch)
         self.feed_input(self.imEyeL, imEyeLBatch)
@@ -169,6 +171,7 @@ class ExternalSourcePipeline(Pipeline):
         self.feed_input(self.imFaceGrid, imFaceGridBatch)
         self.feed_input(self.gaze, gazeBatch)
         self.feed_input(self.index, indexBatch)
+        self.feed_input(self.faceBbox, faceBboxBatch)
 
 # class ExternalSourcePipeline(Pipeline):
 #     def __init__(self, data, batch_size, image_size, split, silent, num_threads, device_id, data_loader, color_space, shuffle=False):
@@ -607,6 +610,9 @@ class ITrackerData(object):
         # frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]])
         # frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]], np.object)
         # faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][rowIndex, :])
+        faceBbox = np.array(self.metadata['faceBbox'][rowIndex, :]/1000, np.float32)
+        # leftEyeBbox = np.array(self.metadata['leftEyeBbox'][rowIndex, :], np.float32)
+        # rightEyeBbox = np.array(self.metadata['rightEyeBbox'][rowIndex, :], np.float32)
         row = np.array([int(rowIndex)])
         index = np.array([int(index)])
 
@@ -637,11 +643,11 @@ class ITrackerData(object):
             # faceGrid = torch.FloatTensor(faceGrid)
             gaze = torch.FloatTensor(gaze)
 
-            return row, imFace, imEyeL, imEyeR, imfaceGrid, gaze, index
+            return row, imFace, imEyeL, imEyeR, imfaceGrid, gaze, index, faceBbox
         else:
             # image loading, transformation and normalization happen in ExternalDataPipeline
             # we just pass imagePaths
-            return row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, index
+            return row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, index, faceBbox
 
     # TODO: Not in use anymore due to RC. Should eventually be removed
     def makeGrid(self, params):
@@ -673,9 +679,10 @@ class ITrackerData(object):
         imFaceGridBatch = []
         gazeBatch = []
         indexBatch = []
+        faceBboxBatch = []
 
         for local_index in range(self.batch_size):
-            row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, index = self.__getitem__(self.index)
+            row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, index, faceBbox = self.__getitem__(self.index)
             self.index = (self.index + 1) % self.__len__()
 
             imFace = open(imFacePath, 'rb')
@@ -690,13 +697,14 @@ class ITrackerData(object):
             imFaceGridBatch.append(np.frombuffer(imFaceGrid.read(), dtype=np.uint8))
             gazeBatch.append(gaze)
             indexBatch.append(index)
+            faceBboxBatch.append(faceBbox)
 
             imFace.close()
             imEyeL.close()
             imEyeR.close()
             imFaceGrid.close()
         
-        return rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch, indexBatch
+        return rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch, indexBatch, faceBboxBatch
 
     # For compatibiity with Python 2
     def next(self):

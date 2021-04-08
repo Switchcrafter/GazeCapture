@@ -149,6 +149,33 @@ class FaceGridModel(nn.Module):
         # 128
         return x
 
+class PoseVectorModel(nn.Module):
+    # Model for the face grid pathway
+    def __init__(self, poseVector=5):
+        super(PoseVectorModel, self).__init__()
+        self.fc = nn.Sequential(
+            # FC-FG1
+            # 5
+            nn.Linear(poseVector, 256),
+            # 256
+            nn.ReLU(inplace=True),
+            # 256
+
+            # FC-FG2
+            # 256
+            nn.Dropout(DRPVAL),
+            nn.Linear(256, 128),
+            # 128
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, x):
+        # 5
+        x = x.view(x.size(0), -1)
+        # 128
+        x = self.fc(x)
+        # 128
+        return x
 
 class ITrackerModel(nn.Module):
     def __init__(self, color_space, model_type):
@@ -159,6 +186,8 @@ class ITrackerModel(nn.Module):
         self.faceModel = FaceImageModel(color_space, model_type)
         # 1Cx25Hx25W --> 128
         self.gridModel = FaceGridRCModel(color_space, model_type)
+        # 5 --> 128
+        self.poseVectorModel = PoseVectorModel()
 
 
         # Joining both eyes
@@ -189,7 +218,7 @@ class ITrackerModel(nn.Module):
             # 2
         )
 
-    def forward(self, faces, eyesLeft, eyesRight, faceGrids):
+    def forward(self, faces, eyesLeft, eyesRight, faceGrids, faceBbox):
         # Eye nets
         xEyeL = self.eyeModel(eyesLeft)  # CONV-E1 -> ... -> CONV-E4
         xEyeR = self.eyeModel(eyesRight)  # CONV-E1 -> ... -> CONV-E4
@@ -200,7 +229,14 @@ class ITrackerModel(nn.Module):
 
         # Face net
         xFace = self.faceModel(faces)  # CONV-F1 -> ... -> CONV-E4 -> FC-F1 -> FC-F2
-        xGrid = self.gridModel(faceGrids)  # FC-FG1 -> FC-FG2
+
+        # # Face Grid 
+        # xGrid = self.gridModel(faceGrids)  # FC-FG1 -> FC-FG2
+
+        # Face Pose
+        # print(faceBbox)
+        xGrid = self.poseVectorModel(faceBbox) # FC-FG1 -> FC-FG2
+        # print(xGrid)
 
         # Cat all
         x = torch.cat((xEyes, xFace, xGrid), 1)

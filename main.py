@@ -104,7 +104,6 @@ def main():
         resize(val_RMSErrors, args.epochs)
         resize(test_RMSErrors, args.epochs)
         
-
         if args.hsm:
             args.multinomial_weights = torch.ones(datasets['train'].size, dtype=torch.double)
             if not args.verbose:
@@ -485,14 +484,15 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "cpu":
             # (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices), frame = data
-            (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices) = data
+            (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices, faceBbox) = data
         else:  # dali modes
             batch_data = data[0]
-            row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices = batch_data["row"], batch_data["imFace"], \
+            row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices, faceBbox = batch_data["row"], batch_data["imFace"], \
                                                                         batch_data["imEyeL"], batch_data["imEyeR"], \
                                                                         batch_data["imFaceGrid"], \
                                                                         batch_data["gaze"], \
-                                                                        batch_data["indices"]
+                                                                        batch_data["indices"], \
+                                                                        batch_data["faceBbox"]
         # # XXX: sharding debug code
         # rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
         # print(rank, torch.cuda.current_device(), indices.data.cpu().numpy()[0][0], len(indices), row.data.cpu().numpy()[0][0], len(row)) 
@@ -510,16 +510,19 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
         imEyeL = imEyeL.to(device=device)
         imEyeR = imEyeR.to(device=device)
         imFaceGrid = imFaceGrid.to(device=device)
+        faceBbox = faceBbox.to(device=device)
         gaze = gaze.to(device=device)
-
+        
         imFace = torch.autograd.Variable(imFace, requires_grad=True)
         imEyeL = torch.autograd.Variable(imEyeL, requires_grad=True)
         imEyeR = torch.autograd.Variable(imEyeR, requires_grad=True)
         imFaceGrid = torch.autograd.Variable(imFaceGrid, requires_grad=True)
+        faceBbox = torch.autograd.Variable(faceBbox, requires_grad=True)
         gaze = torch.autograd.Variable(gaze, requires_grad=False)
-
+        
+        # print(faceBbox)
         # compute output
-        output = model(imFace, imEyeL, imEyeR, imFaceGrid)
+        output = model(imFace, imEyeL, imEyeR, imFaceGrid, faceBbox)
 
         loss = criterion(output, gaze)
         error = euclidean_batch_error(output, gaze)
@@ -635,16 +638,15 @@ def evaluate(dataset,
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "cpu":
             # (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices), frame = data
-            (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices) = data
+            (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices, faceBbox) = data
         else:  # dali modes
             batch_data = data[0]
-            row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices = batch_data["row"], \
-                                                                        batch_data["imFace"], \
-                                                                        batch_data["imEyeL"], \
-                                                                        batch_data["imEyeR"], \
+            row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices, faceBbox = batch_data["row"], batch_data["imFace"], \
+                                                                        batch_data["imEyeL"], batch_data["imEyeR"], \
                                                                         batch_data["imFaceGrid"], \
                                                                         batch_data["gaze"], \
-                                                                        batch_data["indices"]
+                                                                        batch_data["indices"], \
+                                                                        batch_data["faceBbox"]
 
         args.vis.plotGazePoints("GazePoints", dataset.split, "GazePoints", gaze, visible=args.debug)
         args.vis.plotImages("imEyeR-imFace-imEyeL", dataset.split, "imEyeR-imFace-imEyeL", torch.cat((imEyeR[:1], imFace[:1], imEyeL[:1]),0), visible=args.debug)
@@ -659,11 +661,12 @@ def evaluate(dataset,
         imEyeL = imEyeL.to(device=device)
         imEyeR = imEyeR.to(device=device)
         imFaceGrid = imFaceGrid.to(device=device)
+        faceBbox = faceBbox.to(device=device)
         gaze = gaze.to(device=device)
 
         # compute output
         with torch.no_grad():
-            output = model(imFace, imEyeL, imEyeR, imFaceGrid)
+            output = model(imFace, imEyeL, imEyeR, imFaceGrid, faceBbox)
 
         # Combine the tensor results together into a collated list so that we have the gazePoint and gazePrediction
         # for each frame
@@ -733,11 +736,12 @@ def export_onnx_model(model, device, output_path, verbose):
     imEyeL = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
     imEyeR = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
     imFaceGrid = torch.randn(batch_size, color_depth, IMAGE_WIDTH, IMAGE_HEIGHT).to(device=device).float()
+    faceBbox = torch.randn(batch_size, 5).to(device=device).float()
     ## faceGrid = torch.zeros((batch_size, face_grid_size)).to(device=device).float()
 
-    dummy_in = (imFace, imEyeL, imEyeR, imFaceGrid)
+    dummy_in = (imFace, imEyeL, imEyeR, imFaceGrid, faceBbox)
 
-    in_names = ["face", "eyesLeft", "eyesRight", "imFaceGrid"]
+    in_names = ["face", "eyesLeft", "eyesRight", "imFaceGrid", "faceBbox"]
     out_names = ["data"]
 
     onnxModelPath = os.path.join(output_path, 'best_checkpoint.onnx')

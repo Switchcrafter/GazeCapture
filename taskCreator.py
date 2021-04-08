@@ -479,6 +479,7 @@ def ROIDetectionTask(directory, directory_idx, progressbar):
     json_write(os.path.join(output_path, 'dlibRightEye.json'), faceInfoDict["RightEye"])
     return
 
+
 # Equivalent: prepareDataset_dlib
 def ROIExtractionTask(directory, directory_idx, progressbar):
 
@@ -494,7 +495,11 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         'labelFaceGrid': [],
         'labelTrain': [],
         'labelVal': [],
-        'labelTest': []
+        'labelTest': [],
+        'faceBbox': [],
+        'leftEyeBbox': [],
+        'rightEyeBbox': [],
+        'frameSize': []
     }
 
     if args.type == "circa":
@@ -549,6 +554,7 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         rightEyeBbox[:, :2] += faceBbox[:, :2]
         faceGridBbox = bboxFromJson(faceGrid)
 
+    frameSize = []
     progressbar.addSubProcess(directory_idx, len(frames))
     for j, frame in enumerate(frames):
         progressbar.update(directory_idx, j+1)
@@ -568,6 +574,8 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
             logError('Warning: Could not read image file %s!' % imgFile)
             continue
         img = PILImage.open(imgFile)
+        # Retrieve Frame size for normalization
+        currentFrameSize = list(img.size)
         if img is None:
             logError('Warning: Could not read image file %s!' % imgFile)
             continue
@@ -601,6 +609,15 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         meta['labelDotXCam'] += [dotInfo['XCam'][j]]
         meta['labelDotYCam'] += [dotInfo['YCam'][j]]
         meta['labelFaceGrid'] += [faceGridBbox[j, :]]
+        meta['frameSize'] += [currentFrameSize]
+
+        faceBbox_normalized = resizeRotatedRect(faceBbox[j, :], currentFrameSize, [1.0,1.0])
+        leftEyeBbox_normalized = resizeRotatedRect(leftEyeBbox[j, :], currentFrameSize, [1.0,1.0])
+        rightEyeBbox_normalized = resizeRotatedRect(rightEyeBbox[j, :], currentFrameSize, [1.0,1.0])
+        meta['faceBbox'] += [faceBbox_normalized]
+        meta['leftEyeBbox'] += [leftEyeBbox_normalized]
+        meta['rightEyeBbox'] += [rightEyeBbox_normalized]
+        
         
         # Use provided target distribution 
         if args.info != "":
@@ -812,7 +829,10 @@ def ROIExtractionNewTask(directory, directory_idx, progressbar):
         'labelFaceGrid': [],
         'labelTrain': [],
         'labelVal': [],
-        'labelTest': []
+        'labelTest': [],
+        'faceBbox': [],
+        'leftEyeBbox': [],
+        'rightEyeBbox': []
     }
 
     # Read metadata JSONs from metapath
@@ -906,6 +926,9 @@ def ROIExtractionNewTask(directory, directory_idx, progressbar):
         meta['labelDotXCam'] += [dotInfo['XCam'][frame_idx]]
         meta['labelDotYCam'] += [dotInfo['YCam'][frame_idx]]
         meta['labelFaceGrid'] += [faceGridBbox[frame_idx, :]]
+        meta['faceBbox'] += [faceBbox[frame_idx, :]]
+        meta['leftEyeBbox'] += [leftEyeBbox[frame_idx, :]]
+        meta['rightEyeBbox'] += [rightEyeBbox[frame_idx, :]]
         
         split = info["Dataset"] 
         meta['labelTrain'] += [split == "train"]
@@ -1670,7 +1693,10 @@ if __name__ == '__main__':
             'labelFaceGrid': [],
             'labelTrain': [],
             'labelVal': [],
-            'labelTest': []
+            'labelTest': [],
+            'faceBbox': [],
+            'leftEyeBbox': [],
+            'rightEyeBbox': []
         }
         # Combine results from various workers
         for m in output:
@@ -1682,6 +1708,12 @@ if __name__ == '__main__':
             meta['labelTrain'] += m['labelTrain']
             meta['labelVal'] += m['labelVal']
             meta['labelTest'] += m['labelTest']
+            meta['faceBbox'] += m['faceBbox']
+            meta['leftEyeBbox'] += m['leftEyeBbox']
+            meta['rightEyeBbox'] += m['rightEyeBbox']
+
+        # print("###### merged from m #######")
+        # print(meta['faceBbox'])
 
         # Integrate
         if args.data_format == "V1":
@@ -1690,6 +1722,16 @@ if __name__ == '__main__':
             meta['labelDotXCam'] = np.stack(meta['labelDotXCam'], axis=0)
             meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
             meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
+
+            meta['labelTrain'] = np.stack(meta['labelTrain'], axis=0)
+            meta['labelVal'] = np.stack(meta['labelVal'], axis=0)
+            meta['labelTest'] = np.stack(meta['labelTest'], axis=0)
+            meta['faceBbox'] = np.stack(meta['faceBbox'], axis=0)
+            meta['leftEyeBbox'] = np.stack(meta['leftEyeBbox'], axis=0)
+            meta['rightEyeBbox'] = np.stack(meta['rightEyeBbox'], axis=0)
+
+            # print("###### stacked from meta #######")
+            # print(meta['faceBbox'])
         else:
             # Using astype(object) for string data so that they are loaded as 
             # strings and not padded char arrays
@@ -1698,6 +1740,13 @@ if __name__ == '__main__':
             meta['labelDotXCam'] = np.stack(meta['labelDotXCam'], axis=0)
             meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
             meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
+
+            meta['labelTrain'] = np.stack(meta['labelTrain'], axis=0)
+            meta['labelVal'] = np.stack(meta['labelVal'], axis=0)
+            meta['labelTest'] = np.stack(meta['labelTest'], axis=0)
+            meta['faceBbox'] = np.stack(meta['faceBbox'], axis=0)
+            meta['leftEyeBbox'] = np.stack(meta['leftEyeBbox'], axis=0)
+            meta['rightEyeBbox'] = np.stack(meta['rightEyeBbox'], axis=0)
         # print(meta)
         compareTask(meta)
     elif args.task == "countFilesTaskParallel":
