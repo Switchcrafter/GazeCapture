@@ -26,36 +26,40 @@ from utility_functions.face_utilities import find_face_dlib, \
 
 
 class InferenceEngine:
-    def __init__(self, mode, color_space, model_type):
-        self.mode = mode
+    def __init__(self, model_format, color_space, model_type, model_path):
+        self.model_format = model_format
         self.color_space = color_space
         self.model_type = model_type
-        if self.mode == "torch":
+        if self.model_format == "torch":
             if self.model_type == 'deepEyeNet':
                 self.modelSession = DeepEyeModel().to(device='cpu')
-                saved = torch.load('utility_functions/demo_models/demo_0.85/best_checkpoint.pth.tar', map_location='cpu')
+                # saved = torch.load('utility_functions/demo_models/demo_DEN_0_99/best_checkpoint.pth.tar', map_location='cpu')
+                saved = torch.load(model_path, map_location='cpu')
             else:
                 self.modelSession = ITrackerModel(self.color_space, self.model_type).to(device='cpu')
-                saved = torch.load('utility_functions/demo_models/MSR_0_9171/best_checkpoint.pth.tar', map_location='cpu')
+                # saved = torch.load('utility_functions/demo_models/demo_resNet_0_78/best_checkpoint.pth.tar', map_location='cpu')
+                saved = torch.load(model_path, map_location='cpu')
             self.modelSession.load_state_dict(saved['state_dict'])
             self.modelSession.eval()
-        elif self.mode == "onnx":
-            self.modelSession = onnxruntime.InferenceSession('itracker.onnx')
+        elif self.model_format == "onnx":
+            self.modelSession = onnxruntime.InferenceSession(model_path)
 
     def run_inference(self, normalize_image, image_face, image_eye_left, image_eye_right, image_face_grid):
         # compute output
-        if self.mode == "torch":
+        if self.model_format == "torch":
             with torch.no_grad():
                 output = self.modelSession(image_face, image_eye_left, image_eye_right, image_face_grid)
                 gaze_prediction_np = output.numpy()[0]
-        elif self.mode == "onnx":
+        elif self.model_format == "onnx":
             # compute output
             output = self.modelSession.run(None,
                                 {"face": image_face.numpy(),
                                 "eyesLeft": image_eye_left.numpy(),
                                 "eyesRight": image_eye_right.numpy(),
-                                "faceGrid": image_face_grid.numpy()})
+                                "imFaceGrid": image_face_grid.numpy()})
             gaze_prediction_np = (output[0])[0]
+        else:
+            print('Error: Invalid mode: ', self.mode)
 
         return gaze_prediction_np
 
@@ -92,11 +96,14 @@ def live_demo(data):
     color_space = data['color_space']
     model_type = data['model_type']
     device_name = data['device_name']
+    model_format = data['model_format']
+    model_path = data['model_path']
+
     mode = 'rc'
     print('DEVICE NAME : ', device_name)
 
     # initialize inference engine - torch or onnx
-    inferenceEngine = InferenceEngine("torch", color_space, model_type)
+    inferenceEngine = InferenceEngine(model_format, color_space, model_type, model_path)
 
     # get screen monitor and video capture stream
     monitor = get_monitors()[0]
