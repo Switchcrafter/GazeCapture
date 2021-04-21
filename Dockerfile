@@ -1,4 +1,4 @@
-FROM nvidia/cuda
+FROM nvidia/cuda:11.2.2-devel-ubuntu20.04
 FROM python:3.7
 
 Maintainer MSREnable
