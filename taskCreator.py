@@ -267,7 +267,6 @@ def CaptureDataDistributionTask(directory, directory_idx, progressbar):
 # Equivalent: prepare_EyeCatcher
 # Prepapres data from V1 -> V2 format and from V2 (dlib) --> V2 (rc)
 def prepareEyeCatcherTask(directory, directory_idx, progressbar):
-    # print(directory)
     captures = sorted(getCaptureSessionFileList(os.path.join(args.input, directory)), key=str)
     total_captures = len(captures)
     # print(captures)
@@ -624,8 +623,14 @@ def ROIDetectionNewTask(directory, directory_idx, progressbar):
     if total_captures == 0:
         return
 
-    # Read directory level json
-    info_data = json_read(os.path.join(args.input, directory, "info.json"))
+    # read info if info.json exists
+    if os.path.isfile(os.path.join(args.input, directory, "info.json")):
+        # Read directory level json
+        info_data = json_read(os.path.join(args.input, directory, "info.json"))
+    else:
+        info_data = {"DeviceName" : "Missing Device Name"}
+        print("The file %s/%s/%s doesn't exists. This is uncommon. Please investigate."%(args.input, directory, "info.json"))
+
     if not isSupportedDevice(info_data["DeviceName"]):
             # If the device is not supported in device_metrics_sku.json skip it
             # print('%s, %s, %s'%(directory_idx, directory, 'Unsupported SKU'))
@@ -803,6 +808,18 @@ def ROIExtractionNewTask(directory, directory_idx, progressbar):
     recDir = os.path.join(args.input, directory)
     recDirOut = os.path.join(args.output, directory)
 
+    # # read info if info.json exists
+    # if os.path.isfile(os.path.join(args.input, directory, "info.json")):
+    #     # Read directory level json
+    #     info_data = json_read(os.path.join(args.input, directory, "info.json"))
+    #     if not isSupportedDevice(info_data["DeviceName"]):
+    #         progressbar.addSubProcess(index=directory_idx, max_value=0)
+    #         return
+    # else:
+    #     progressbar.addSubProcess(index=directory_idx, max_value=0)
+    #     return
+
+
     # Output structure
     meta = {
         'labelRecNum': [],
@@ -828,11 +845,17 @@ def ROIExtractionNewTask(directory, directory_idx, progressbar):
 
     # directory, frame, dotInfo, faceGridBbox, info
     # Read input JSONs from inputpath
-    dotInfo = json_read(os.path.join(recDir, 'dotInfo.json'))
-    faceGrid = json_read(os.path.join(recDir, 'faceGrid.json'))
-    frames = json_read(os.path.join(recDir, 'frames.json'))
-    screen = json_read(os.path.join(recDir, 'screen.json'))
-    info = json_read(os.path.join(recDir, 'info.json'))
+    # dotInfo = json_read(os.path.join(recDir, 'dotInfo.json'))
+    # faceGrid = json_read(os.path.join(recDir, 'faceGrid.json'))
+    # frames = json_read(os.path.join(recDir, 'frames.json'))
+    # screen = json_read(os.path.join(recDir, 'screen.json'))
+    # info = json_read(os.path.join(recDir, 'info.json'))
+
+    dotInfo = json_read(os.path.join(dlibDir, 'dotInfo.json'))
+    faceGrid = json_read(os.path.join(dlibDir, 'faceGrid.json'))
+    frames = json_read(os.path.join(dlibDir, 'frames.json'))
+    screen = json_read(os.path.join(dlibDir, 'screen.json'))
+    info = json_read(os.path.join(dlibDir, 'info.json'))
 
     # Preprocess
     allValid = np.logical_and(np.logical_and(appleFace['IsValid'], appleLeftEye['IsValid']),
@@ -1565,7 +1588,8 @@ if __name__ == '__main__':
             taskData = getDirList(args.input, '([0-9]){5}')
         else:
             taskFunction = ROIExtractionNewTask
-            taskData = getRecordingsList(args.input)
+            # taskData = getRecordingsList(args.input)
+            taskData = getRecordingsList(args.metapath)
         dataLoader = ListLoader
     ######### Data Visualization Tasks #########
     elif args.task == "plotErrorTask":
