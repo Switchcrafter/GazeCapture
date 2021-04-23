@@ -89,9 +89,7 @@ TARGETS = [(-10., -3.),
            (10., -15.),
            ]
 
-
 # various command-based actions
-
 def live_demo(data):
     color_space = data['color_space']
     model_type = data['model_type']
@@ -228,13 +226,11 @@ def live_demo(data):
     cv2.destroyAllWindows()
     cap.release()
 
-
 def generate_baseline_display_data(display, screenOffsetX, screenOffsetY, monitor, webcam_image):
     display = draw_overlay(display, screenOffsetX, screenOffsetY, webcam_image)
     # draw reference grid
     draw_reference_grid(display, monitor.height, monitor.width)
     return display
-
 
 def draw_landmarks(im, shape_np, anchor_indices):
     # loop over the (x, y)-coordinates for the facial landmarks
@@ -245,7 +241,6 @@ def draw_landmarks(im, shape_np, anchor_indices):
         if idx in anchor_indices:
             draw_text(im, x, y, str(idx), scale=0.3, fill=(255, 255, 255), thickness=1)
         cv2.circle(im, (x, y), 1, (255, 255, 255), -1)
-
 
 def draw_landmarks2(im, shape_np, anchor_indices):
     im2 = cv2.flip(im, 1)
@@ -262,7 +257,6 @@ def draw_landmarks2(im, shape_np, anchor_indices):
     draw_landmarks(im, shape_np, anchor_indices)
     im = cv2.add(im, im2)
     return im
-
 
 def generate_display_data(display, face_grid_image, face_image, gaze_prediction_np, left_eye_image, monitor,
                           right_eye_image, time_elapsed, target, device_name):
@@ -366,7 +360,6 @@ def generate_display_data(display, face_grid_image, face_image, gaze_prediction_
                         f' {predictionY:.4f})',
                         fill=(255, 255, 255))
     return display
-
 
 def prepare_image_tensors(color_space, image_face, image_eye_left, image_eye_right, face_grid, normalize_image):
     # Convert to the desired color space
@@ -531,7 +524,6 @@ def perspectiveCorrection(im, shape_np):
 
     return im2, homography_indices
 
-
 # Check if a point is inside a rectangle
 def rect_contains(rect, point):
     if point[0] < rect[0]:
@@ -543,7 +535,6 @@ def rect_contains(rect, point):
     elif point[1] > rect[3]:
         return False
     return True
-
 
 # Draw delaunay triangles
 def draw_delaunay(img, landmarks, delaunay_color=(255, 255, 255)):

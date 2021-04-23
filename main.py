@@ -97,13 +97,30 @@ def main():
     criterion, optimizer, scheduler = initialize_hyper_parameters(args, epoch, datasets, model)
 
     if args.phase == 'Train' or args.phase == 'Finetune':
+        # For finetuning training for additional args.epochs
+        if args.phase == 'Finetune':
+            args.epochs = args.epochs + epoch
+            
         # resize variables to epochs size
         resize(learning_rates, args.epochs)
         resize(best_RMSErrors, args.epochs)
         resize(train_RMSErrors, args.epochs)
         resize(val_RMSErrors, args.epochs)
         resize(test_RMSErrors, args.epochs)
-        
+
+        # Layer Freezing (freeze layers till the freeze index)
+        if args.freeze >= 0:
+            print("#######################################")
+            layers = list(model.children())
+            assert args.freeze < len(layers), "args.freeze cannot exeed number of layers in the model" 
+            for i in range(0, len(layers)):
+                if i <= args.freeze:
+                    print("Layer-", i, "Frozen   ", type(layers[i]))
+                    for param in layers[i].parameters():
+                        param.requires_grad = False
+                else:
+                    print("Layer-", i, "Trainable", type(layers[i]))
+            print("#######################################")
 
         if args.hsm:
             args.multinomial_weights = torch.ones(datasets['train'].size, dtype=torch.double)
