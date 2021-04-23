@@ -188,7 +188,7 @@ def getRecordingsList(path):
     return recordingDirs
 
 # used by prepareEyeCatcherTask
-# input path is to the folder containing data from various devices 
+# input path is to the folder containing data from various devices
 # V1: e.g. /data/Source/EyeCapture/200407/
 # V2: e.g. Surface_Pro_4/someuser/00000
 def getCaptureSessionDirList(path):
@@ -257,7 +257,7 @@ def CaptureDataDistributionTask(directory, directory_idx, progressbar):
     progressbar.addSubProcess(directory_idx, 1)
     # Read original distribution info and create a distribution info file
     info = json_read(os.path.join(recDir, 'info.json'))
-    
+
     # Collect metadata
     meta = [directory, str(info["Dataset"])]
     progressbar.update(directory_idx, 1)
@@ -524,7 +524,7 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
     if args.info != "":
         info = json_read(args.info)
     else:
-        info = json_read(os.path.join(recDir, 'info.json'))    
+        info = json_read(os.path.join(recDir, 'info.json'))
 
     # Preprocess
     allValid = np.logical_and(np.logical_and(appleFace['IsValid'], appleLeftEye['IsValid']),
@@ -601,12 +601,12 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         meta['labelDotXCam'] += [dotInfo['XCam'][j]]
         meta['labelDotYCam'] += [dotInfo['YCam'][j]]
         meta['labelFaceGrid'] += [faceGridBbox[j, :]]
-        
-        # Use provided target distribution 
+
+        # Use provided target distribution
         if args.info != "":
             split = info[directory]
         else: # use original distribution
-            split = info["Dataset"] 
+            split = info["Dataset"]
 
         meta['labelTrain'] += [split == "train"]
         meta['labelVal'] += [split == "val"]
@@ -707,7 +707,7 @@ def ROIDetectionNewTask(directory, directory_idx, progressbar):
         capture_data = json_read(capture_json_path)
         # Returns None if image is corrupt or missing
         capture_image = image_read(capture_jpg_path)
-        
+
         try:
             if capture_data and capture_image:
                 capture_image = PILImage.open(capture_jpg_path)
@@ -799,7 +799,7 @@ def ROIDetectionNewTask(directory, directory_idx, progressbar):
 
 # Equivalent: prepareDataset_dlib
 def ROIExtractionNewTask(directory, directory_idx, progressbar):
-    
+
     recDir = os.path.join(args.input, directory)
     recDirOut = os.path.join(args.output, directory)
 
@@ -832,7 +832,7 @@ def ROIExtractionNewTask(directory, directory_idx, progressbar):
     faceGrid = json_read(os.path.join(recDir, 'faceGrid.json'))
     frames = json_read(os.path.join(recDir, 'frames.json'))
     screen = json_read(os.path.join(recDir, 'screen.json'))
-    info = json_read(os.path.join(recDir, 'info.json'))  
+    info = json_read(os.path.join(recDir, 'info.json'))
 
     # Preprocess
     allValid = np.logical_and(np.logical_and(appleFace['IsValid'], appleLeftEye['IsValid']),
@@ -906,8 +906,8 @@ def ROIExtractionNewTask(directory, directory_idx, progressbar):
         meta['labelDotXCam'] += [dotInfo['XCam'][frame_idx]]
         meta['labelDotYCam'] += [dotInfo['YCam'][frame_idx]]
         meta['labelFaceGrid'] += [faceGridBbox[frame_idx, :]]
-        
-        split = info["Dataset"] 
+
+        split = info["Dataset"]
         meta['labelTrain'] += [split == "train"]
         meta['labelVal'] += [split == "val"]
         meta['labelTest'] += [split == "test"]
@@ -1306,7 +1306,7 @@ def loadImage(path):
 
 def imageToPyTorchTensor(img):
     # W x H x C -> C x W x H
-    img = np.asarray(img).transpose(2, 0, 1) 
+    img = np.asarray(img).transpose(2, 0, 1)
     img = torch.from_numpy(np.asarray(img)).float() # create the image tensor
     img = img/255.0
     return img.unsqueeze(0)
@@ -1344,7 +1344,7 @@ def modelParityTask(input_dir):
     if loadFromState:
         # Create model
         model = ITrackerModel(color_space, model_type).to(device=device)
-        
+
         # load the checkpoint and apply state to the model
         filepath = os.path.join(checkpoint_dirpath, 'best_checkpoint.pth')
         if not os.path.isfile(filepath):
@@ -1431,7 +1431,7 @@ def userCalibrationTask(filepath):
         vtex = ms[vidx, :]
         #Vector between all vertices and the selected one
         xv  = perturbed_mesh - vtex
-        #Random movement 
+        #Random movement
         mv = (np.random.rand(1,2) - 0.5)*20
         hxv = np.zeros((np.shape(xv)[0], np.shape(xv)[1] +1) )
         hxv[:, :-1] = xv
@@ -1440,7 +1440,7 @@ def userCalibrationTask(filepath):
         d = np.absolute(d[:, 2])
         d = d / (np.linalg.norm(mv, ord=2))
         wt = d
-        
+
         curve_type = np.random.rand(1)
         if curve_type > 0.3:
             alpha = np.random.rand(1) * 50 + 50
@@ -1459,7 +1459,7 @@ def userCalibrationTask(filepath):
     nh, nw = img.shape[:2]
     dh, dw = nh//2, nw//2
     img = cv2.copyMakeBorder(img, dh, dh, dw, dw, borderType=cv2.BORDER_CONSTANT, value=(0,0,0))
-    
+
 
     PI = 3.141592653589793
     phase = -0.8 * PI
@@ -1497,6 +1497,7 @@ if __name__ == '__main__':
     parser.add_argument('--color_space', default="YCbCr", help='color_space, RGB')
     parser.add_argument('--data_format', default="V2", help='V2, V1')
     parser.add_argument('--model_dir', default="", help="path to checkpoint directory")
+    parser.add_argument('--model_path', default="", help="path to model file")
     args = parser.parse_args()
 
     if args.task == "":
@@ -1605,7 +1606,11 @@ if __name__ == '__main__':
     elif args.task == "demoTask":
         sys.path.append(".")
         from iTrackerGUITool import live_demo
-        taskData = {'model_type': args.model_type, 'color_space': args.color_space, 'device_name': args.device_name}
+        taskData = {'model_format': 'onnx',
+        'model_type': args.model_type,
+        'color_space': args.color_space,
+        'device_name': args.device_name,
+        'model_path': args.model_path}
         dataLoader = None
         taskFunction = live_demo
     ######### Data Statistics Tasks #########
@@ -1659,7 +1664,7 @@ if __name__ == '__main__':
         # Combine results from various workers
         for dir, split in output:
             meta.update({dir : split})
-        
+
         # Write out combined distribution info
         preparePath(args.output)
         json_write(os.path.join(args.output, 'distribution_info.json'), meta)
@@ -1695,7 +1700,7 @@ if __name__ == '__main__':
             meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
             meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
         else:
-            # Using astype(object) for string data so that they are loaded as 
+            # Using astype(object) for string data so that they are loaded as
             # strings and not padded char arrays
             meta['labelRecNum'] = np.stack(meta['labelRecNum'], axis=0).astype(object)
             meta['frameIndex'] = np.stack(meta['frameIndex'], axis=0).astype(object)
