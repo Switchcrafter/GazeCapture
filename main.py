@@ -97,6 +97,10 @@ def main():
     criterion, optimizer, scheduler = initialize_hyper_parameters(args, epoch, datasets, model)
 
     if args.phase == 'Train' or args.phase == 'Finetune':
+        # For finetuning training for additional args.epochs
+        if args.phase == 'Finetune':
+            args.epochs = args.epochs + epoch
+            
         # resize variables to epochs size
         resize(learning_rates, args.epochs)
         resize(best_RMSErrors, args.epochs)
