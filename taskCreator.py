@@ -265,7 +265,7 @@ def CaptureDataDistributionTask(directory, directory_idx, progressbar):
     return meta
 
 # Equivalent: prepare_EyeCatcher
-# Prepapres data from V1 format
+# Prepapres data from V1 -> V2 format and from V2 (dlib) --> V2 (rc)
 def prepareEyeCatcherTask(directory, directory_idx, progressbar):
     # print(directory)
     captures = sorted(getCaptureSessionFileList(os.path.join(args.input, directory)), key=str)
@@ -616,7 +616,7 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
 
 
 # Equivalent: prepare_EyeCatcher
-def prepareEyeCatcherNewTask(directory, directory_idx, progressbar):
+def ROIDetectionNewTask(directory, directory_idx, progressbar):
     captures = sorted(getCaptureSessionFileList(os.path.join(args.input, directory)), key=str)
     total_captures = len(captures)
     # print(directory, total_captures)
@@ -1541,7 +1541,7 @@ if __name__ == '__main__':
             taskFunction = prepareEyeCatcherTask
             taskData = getCaptureSessionDirList(args.input)
         else:
-            taskFunction = prepareEyeCatcherNewTask
+            taskFunction = ROIDetectionNewTask
             taskData = getCaptureSessionDirList(args.input)
         dataLoader = ListLoader
     elif args.task == "CaptureDataDistributionTask":
@@ -1550,9 +1550,13 @@ if __name__ == '__main__':
         taskData = getDirList(args.input, sessionRegex)
         dataLoader = ListLoader
     elif args.task == "ROIDetectionTask":
-        taskFunction = ROIDetectionTask
-        sessionRegex = '([0-9]){5}'
-        taskData = getDirList(args.input, sessionRegex)
+        if args.data_format == "V1":
+            taskFunction = ROIDetectionTask
+            sessionRegex = '([0-9]){5}'
+            taskData = getDirList(args.input, sessionRegex)
+        else:
+            taskFunction = ROIDetectionNewTask
+            taskData = getCaptureSessionDirList(args.input)
         dataLoader = ListLoader
     elif args.task == "ROIExtractionTask":
         if args.data_format == "V1":
