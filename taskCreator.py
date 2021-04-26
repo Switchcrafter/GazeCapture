@@ -629,7 +629,7 @@ def ROIDetectionNewTask(directory, directory_idx, progressbar):
         info_data = json_read(os.path.join(args.input, directory, "info.json"))
     else:
         info_data = {"DeviceName" : "Missing Device Name"}
-        print("The file %s/%s/%s doesn't exists. This is uncommon. Please investigate."%(args.input, directory, "info.json"))
+        print("Error: The file %s/%s/%s doesn't exist. Please investigate."%(args.input, directory, "info.json"))
 
     if not isSupportedDevice(info_data["DeviceName"]):
             # If the device is not supported in device_metrics_sku.json skip it
