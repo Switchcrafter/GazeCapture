@@ -10,6 +10,7 @@ from random import random, shuffle
 from PIL import Image
 import torchvision.transforms as transforms
 from utility_functions.Utilities import centered_text
+from torch.utils.data.dataloader import default_collate 
 
 try:
     # GPU data loader
@@ -74,7 +75,6 @@ class ExternalSourcePipeline(Pipeline):
         self.imEyeRBatch = ops.ExternalSource()
         self.imFaceGridBatch = ops.ExternalSource()
         self.gazeBatch = ops.ExternalSource()
-        self.frameBatch = ops.ExternalSource()
         self.indexBatch = ops.ExternalSource()
 
         mean = None
@@ -131,7 +131,6 @@ class ExternalSourcePipeline(Pipeline):
         self.imEyeR = self.imEyeRBatch()
         self.imFaceGrid = self.imFaceGridBatch()
         self.gaze = self.gazeBatch()
-        self.frame = self.frameBatch()
         self.index = self.indexBatch()
         sat, con, bri, hue = self.dSaturation(), self.dContrast(), self.dBright(), self.dHue()
 
@@ -154,14 +153,14 @@ class ExternalSourcePipeline(Pipeline):
         imEyeLD = stream(self.imEyeL)
         imEyeRD = stream(self.imEyeR)
         imFaceGridD = stream(self.imFaceGrid, False)
-        return (self.row, imFaceD, imEyeLD, imEyeRD, imFaceGridD, self.gaze, self.frame, self.index)
+        return (self.row, imFaceD, imEyeLD, imEyeRD, imFaceGridD, self.gaze, self.index)
 
     @property
     def size(self):
         return len(self.sourceIterator)
 
     def iter_setup(self):
-        (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch, frameBatch,
+        (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch,
          indexBatch) = self.sourceIterator.next()
         self.feed_input(self.row, rowBatch)
         self.feed_input(self.imFace, imFaceBatch)
@@ -169,8 +168,123 @@ class ExternalSourcePipeline(Pipeline):
         self.feed_input(self.imEyeR, imEyeRBatch)
         self.feed_input(self.imFaceGrid, imFaceGridBatch)
         self.feed_input(self.gaze, gazeBatch)
-        self.feed_input(self.frame, frameBatch)
         self.feed_input(self.index, indexBatch)
+
+# class ExternalSourcePipeline(Pipeline):
+#     def __init__(self, data, batch_size, image_size, split, silent, num_threads, device_id, data_loader, color_space, shuffle=False):
+#         super(ExternalSourcePipeline, self).__init__(batch_size,
+#                                                      num_threads,
+#                                                      device_id)
+
+#         self.split = split
+#         self.color_space = color_space
+#         self.data_loader = data_loader
+#         if shuffle:
+#             data.shuffle()
+#         self.sourceIterator = iter(data)
+#         self.rowBatch = ops.ExternalSource()
+#         self.imFaceBatch = ops.ExternalSource()
+#         self.imEyeLBatch = ops.ExternalSource()
+#         self.imEyeRBatch = ops.ExternalSource()
+#         self.imFaceGridBatch = ops.ExternalSource()
+#         self.gazeBatch = ops.ExternalSource()
+#         self.indexBatch = ops.ExternalSource()
+#         self.frameBatch = ops.ExternalSource()
+
+#         mean = None
+#         std = None
+#         if color_space == 'RGB':
+#             output_type = types.RGB
+#             mean=[0.485 * 255, 0.456 * 255, 0.406 * 255]
+#             std=[0.229 * 255, 0.224 * 255, 0.225 * 255]
+#         elif color_space == 'YCbCr':
+#             output_type = types.YCbCr
+#         elif color_space == 'L':
+#             output_type = types.GRAY
+#         elif color_space == 'BGR':
+#             output_type = types.BGR
+#         else:
+#             print("Unsupported color_space:", color_space)
+
+#         # Variation range for Saturation, Contrast, Brightness and Hue
+#         self.dSaturation = ops.Uniform(range=[0.9, 1.1])
+#         self.dContrast = ops.Uniform(range=[0.9, 1.1])
+#         self.dBright = ops.Uniform(range=[0.9, 1.1])
+#         self.dHue = ops.Uniform(range=[-0.1, 0.1])
+
+#         if data_loader == "cpu":
+#             print("Error: cpu data loader shouldn't be handled by DALI")
+#         else:
+#             # ---------- Decoding Operations --------- #
+#             # ImageDecoder in mixed mode doesn't support YCbCr 
+#             # Ref: https://github.com/NVIDIA/DALI/pull/582/files
+#             self.decode = ops.ImageDecoder(device="cpu", output_type=output_type)
+
+#             # ---------- Augmentation Operations --------- #
+#             # execute rest of the operations on the target device based upon the mode
+#             device = "cpu" if data_loader == "dali_cpu" else "gpu"
+#             self.resize_big = ops.Resize(device=device, resize_x=240, resize_y=240)
+#             # depreciated replace with HSV and ops.BrightnessContrast soon
+#             self.color_jitter = ops.ColorTwist(device=device, image_type=output_type)
+#             # random area 0.93-1.0 corresponds to croping randomly from an image of size between (224-240)
+#             self.crop = ops.RandomResizedCrop(device=device, random_area=[0.93, 0.93], size=image_size)
+
+#             # ---------- Normalization Operations --------- #
+#             self.resize = ops.Resize(device=device, resize_x=image_size[0], resize_y=image_size[1])
+#             self.norm = ops.CropMirrorNormalize(device=device,
+#                                                 output_dtype=types.FLOAT,
+#                                                 output_layout='CHW',
+#                                                 image_type=output_type,
+#                                                 mean=mean,
+#                                                 std=std)
+            
+#     def define_graph(self):
+#         self.row = self.rowBatch()
+#         self.imFace = self.imFaceBatch()
+#         self.imEyeL = self.imEyeLBatch()
+#         self.imEyeR = self.imEyeRBatch()
+#         self.imFaceGrid = self.imFaceGridBatch()
+#         self.gaze = self.gazeBatch()
+#         self.index = self.indexBatch()
+#         self.frame = self.frameBatch()
+#         sat, con, bri, hue = self.dSaturation(), self.dContrast(), self.dBright(), self.dHue()
+
+#         def stream(image, augment=True):
+#             # Decoding
+#             image = self.decode(image)
+#             if self.data_loader == "dali_gpu":
+#                 image = image.gpu()
+#             # Augmentations (for training only)
+#             if self.split == 'train' and augment:
+#                 image = self.resize_big(image)
+#                 image = self.color_jitter(image, saturation=sat, contrast=con, brightness=bri, hue=hue)
+#             # Normalize
+#             image = self.resize(image)
+#             image = self.norm(image)
+#             return image
+    
+#         # pass the input through dali stream
+#         imFaceD = stream(self.imFace)
+#         imEyeLD = stream(self.imEyeL)
+#         imEyeRD = stream(self.imEyeR)
+#         imFaceGridD = stream(self.imFaceGrid, False)
+#         return (self.row, imFaceD, imEyeLD, imEyeRD, imFaceGridD, self.gaze, self.index, self.frame)
+
+#     @property
+#     def size(self):
+#         return len(self.sourceIterator)
+
+#     def iter_setup(self):
+#         (rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch,
+#          indexBatch, frameBatch) = self.sourceIterator.next()
+#         self.feed_input(self.row, rowBatch)
+#         self.feed_input(self.imFace, imFaceBatch)
+#         self.feed_input(self.imEyeL, imEyeLBatch)
+#         self.feed_input(self.imEyeR, imEyeRBatch)
+#         self.feed_input(self.imFaceGrid, imFaceGridBatch)
+#         self.feed_input(self.gaze, gazeBatch)
+#         self.feed_input(self.index, indexBatch)
+#         self.feed_input(self.frame, frameBatch)
 
 
 class ITrackerMetadata(object):
@@ -201,6 +315,203 @@ class Dataset:
         self.loader = loader
 
 
+# class ITrackerData(object):
+#     def __init__(self,
+#                  dataPath,
+#                  metadata,
+#                  batch_size,
+#                  imSize,
+#                  gridSize,
+#                  split,
+#                  silent=True,
+#                  jitter=True,
+#                  color_space='YCbCr',
+#                  data_loader='cpu',
+#                  shard_id=0,
+#                  num_shards=1,
+#                  data_format='V2'):
+#         self.dataPath = dataPath
+#         self.metadata = metadata
+#         self.batch_size = batch_size
+#         self.imSize = imSize
+#         self.gridSize = gridSize
+#         self.color_space = color_space
+#         self.data_loader = data_loader
+#         self.index = 0
+#         self.split = split
+#         self.data_format = data_format
+
+#         # ======= Sharding configuration variables  ========
+#         if num_shards > 0:
+#             self.num_shards = num_shards
+#         else:
+#             raise ValueError("num_shards cannot be negative")
+
+#         if shard_id >= 0 and shard_id < self.num_shards: 
+#             self.shard_id = shard_id
+#         else:
+#             raise ValueError(f"shard_id should be between 0 and %d i.e. 0 <= shard_id < num_shards."%(num_shards))
+#         # ====================================================
+
+#         if self.split == 'test':
+#             mask = self.metadata['labelTest']
+#         elif self.split == 'val':
+#             mask = self.metadata['labelVal']
+#         elif self.split == 'train':
+#             mask = self.metadata['labelTrain']
+#         elif self.split == 'all':
+#             mask = np.ones[len(self.metadata)]
+#         else:
+#             raise Exception('split should be test, val or train. The value of split was: {}'.format(self.split))
+
+#         self.indices = np.argwhere(mask)[:, 0]
+
+#         if not silent:
+#             print('Loaded iTracker dataset split "%s" with %d records.' % (self.split, len(self.indices)))
+
+#         if self.data_loader == 'cpu':
+#             self.normalize_image = normalize_image_transform(image_size=self.imSize, jitter=jitter, split=self.split, color_space=self.color_space)
+#             self.resize_transform = resize_image_transform(image_size=self.imSize)
+#             self.mirror_transform = transforms.RandomHorizontalFlip(p=1.0)
+#             self.mirrorCoordinates = np.array([-1.0, 1.0])
+            
+
+#     def __len__(self):
+#         return math.floor(len(self.indices)/self.num_shards)
+
+#     def loadImage(self, path):
+#         try:
+#             im = Image.open(path).convert(self.color_space)
+#         except OSError:
+#             raise RuntimeError('Could not read image: ' + path)
+#         return im
+
+#     def __getitem__(self, shard_index):
+#         # mapping for shards: shard index to absolute index
+#         index = self.shard_id * self.__len__() + shard_index
+        
+#         rowIndex = self.indices[index]
+#         recordingNum = self.metadata['labelRecNum'][rowIndex]
+#         frameIndex = self.metadata['frameIndex'][rowIndex]
+#         if self.data_format == "V1":
+#             imFacePath = os.path.join(self.dataPath, '%05d/appleFace/%05d.jpg' % (recordingNum, frameIndex))
+#             imEyeLPath = os.path.join(self.dataPath, '%05d/appleLeftEye/%05d.jpg' % (recordingNum, frameIndex))
+#             imEyeRPath = os.path.join(self.dataPath, '%05d/appleRightEye/%05d.jpg' % (recordingNum, frameIndex))
+#             imFaceGridPath = os.path.join(self.dataPath, '%05d/faceGrid/%05d.jpg' % (recordingNum, frameIndex))
+#         else:
+#             # For new V2 format data
+#             imFacePath = os.path.join(self.dataPath, '%s/appleFace/%s.jpg' % (recordingNum, frameIndex))
+#             imEyeLPath = os.path.join(self.dataPath, '%s/appleLeftEye/%s.jpg' % (recordingNum, frameIndex))
+#             imEyeRPath = os.path.join(self.dataPath, '%s/appleRightEye/%s.jpg' % (recordingNum, frameIndex))
+#             imFaceGridPath = os.path.join(self.dataPath, '%s/faceGrid/%s.jpg' % (recordingNum, frameIndex))
+
+#         # Note: Converted from double (float64) to float (float32) as pipeline output is float in MSE calculation
+#         gaze = np.array([self.metadata['labelDotXCam'][rowIndex], self.metadata['labelDotYCam'][rowIndex]], np.float32)
+#         # V1
+#         # frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]])
+#         # TODO: with new changes this becomes an array of string and makes dataloader grumpy because 
+#         # default_collate metthod only supports primitive datatypes. To Pass strings to dataloader
+#         # use custom `frame_collate` method
+#         frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]])
+
+#         # faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][rowIndex, :])
+#         row = np.array([int(rowIndex)])
+#         index = np.array([int(index)])
+
+#         if self.data_loader == 'cpu':
+#             # Image loading, transformation and normalization happen here
+#             imFace = self.loadImage(imFacePath)
+#             imEyeL = self.loadImage(imEyeLPath)
+#             imEyeR = self.loadImage(imEyeRPath)
+#             imfaceGrid = self.loadImage(imFaceGridPath)
+
+#             # Data Augmentation: Mirroring
+#             # mirror data with 50% probablity
+#             if self.split == 'train' and random() >= 0.5:
+#                 imFace = transforms.functional.hflip(imFace)
+#                 imEyeR, imEyeL = transforms.functional.hflip(imEyeL), transforms.functional.hflip(imEyeR)
+#                 imfaceGrid = transforms.functional.hflip(imfaceGrid)
+#                 gaze = self.mirrorCoordinates * gaze
+            
+#             # Data Augmentation: Random Crop, Color Jitter
+#             # faceGrid mustn't have these augmentations
+#             imFace = self.normalize_image(imFace)
+#             imEyeL = self.normalize_image(imEyeL)
+#             imEyeR = self.normalize_image(imEyeR)
+#             imfaceGrid = self.resize_transform(imfaceGrid)
+
+#             # to tensor
+#             row = torch.LongTensor([int(index)])
+#             # faceGrid = torch.FloatTensor(faceGrid)
+#             gaze = torch.FloatTensor(gaze)
+
+#             return row, imFace, imEyeL, imEyeR, imfaceGrid, gaze, index, frame
+#         else:
+#             # image loading, transformation and normalization happen in ExternalDataPipeline
+#             # we just pass imagePaths
+#             return row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, index, frame
+
+#     # TODO: Not in use anymore due to RC. Should eventually be removed
+#     def makeGrid(self, params):
+#         gridLen = self.gridSize[0] * self.gridSize[1]
+#         grid = np.zeros([gridLen, ], np.float32)
+
+#         indsY = np.array([i // self.gridSize[0] for i in range(gridLen)])
+#         indsX = np.array([i % self.gridSize[0] for i in range(gridLen)])
+#         condX = np.logical_and(indsX >= params[0], indsX < params[0] + params[2])
+#         condY = np.logical_and(indsY >= params[1], indsY < params[1] + params[3])
+#         cond = np.logical_and(condX, condY)
+
+#         grid[cond] = 1
+#         return grid
+
+#     # used by dali
+#     def __iter__(self):
+#         self.size = self.__len__()
+#         return self
+
+#     def shuffle(self):
+#         shuffle(self.indices)
+
+#     def __next__(self):
+#         rowBatch = []
+#         imFaceBatch = []
+#         imEyeLBatch = []
+#         imEyeRBatch = []
+#         imFaceGridBatch = []
+#         gazeBatch = []
+#         indexBatch = []
+#         frameBatch = []
+
+#         for local_index in range(self.batch_size):
+#             row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, index, frame = self.__getitem__(self.index)
+#             self.index = (self.index + 1) % self.__len__()
+
+#             imFace = open(imFacePath, 'rb')
+#             imEyeL = open(imEyeLPath, 'rb')
+#             imEyeR = open(imEyeRPath, 'rb')
+#             imFaceGrid = open(imFaceGridPath, 'rb')
+
+#             rowBatch.append(row)
+#             imFaceBatch.append(np.frombuffer(imFace.read(), dtype=np.uint8))
+#             imEyeLBatch.append(np.frombuffer(imEyeL.read(), dtype=np.uint8))
+#             imEyeRBatch.append(np.frombuffer(imEyeR.read(), dtype=np.uint8))
+#             imFaceGridBatch.append(np.frombuffer(imFaceGrid.read(), dtype=np.uint8))
+#             gazeBatch.append(gaze)
+#             indexBatch.append(index)
+#             frameBatch.append(frame)
+
+#             imFace.close()
+#             imEyeL.close()
+#             imEyeR.close()
+#             imFaceGrid.close()
+        
+#         return rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch, indexBatch, frameBatch
+
+#     # For compatibiity with Python 2
+#     def next(self):
+#         return self.__next__()
+
 class ITrackerData(object):
     def __init__(self,
                  dataPath,
@@ -214,7 +525,8 @@ class ITrackerData(object):
                  color_space='YCbCr',
                  data_loader='cpu',
                  shard_id=0,
-                 num_shards=1):
+                 num_shards=1,
+                 data_format='V2'):
         self.dataPath = dataPath
         self.metadata = metadata
         self.batch_size = batch_size
@@ -224,6 +536,7 @@ class ITrackerData(object):
         self.data_loader = data_loader
         self.index = 0
         self.split = split
+        self.data_format = data_format
 
         # ======= Sharding configuration variables  ========
         if num_shards > 0:
@@ -275,37 +588,24 @@ class ITrackerData(object):
         index = self.shard_id * self.__len__() + shard_index
         
         rowIndex = self.indices[index]
-        # TODO: Enable this for new format data
-        # imFacePath = os.path.join(self.dataPath,
-        #                           '%s/appleFace/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
-        #                                                        self.metadata['frameIndex'][rowIndex]))
-        # imEyeLPath = os.path.join(self.dataPath,
-        #                           '%s/appleLeftEye/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
-        #                                                           self.metadata['frameIndex'][rowIndex]))
-        # imEyeRPath = os.path.join(self.dataPath,
-        #                           '%s/appleRightEye/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
-        #                                                            self.metadata['frameIndex'][rowIndex]))
-        # imFaceGridPath = os.path.join(self.dataPath,
-        #                           '%s/faceGrid/%s.jpg' % (self.metadata['labelRecNum'][rowIndex],
-        #                                                            self.metadata['frameIndex'][rowIndex]))
-        
-        # XXX Experimental: for old format data
-        imFacePath = os.path.join(self.dataPath,
-                                  '%05d/appleFace/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
-                                                               self.metadata['frameIndex'][rowIndex]))
-        imEyeLPath = os.path.join(self.dataPath,
-                                  '%05d/appleLeftEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
-                                                                  self.metadata['frameIndex'][rowIndex]))
-        imEyeRPath = os.path.join(self.dataPath,
-                                  '%05d/appleRightEye/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
-                                                                   self.metadata['frameIndex'][rowIndex]))
-        imFaceGridPath = os.path.join(self.dataPath,
-                                  '%05d/faceGrid/%05d.jpg' % (self.metadata['labelRecNum'][rowIndex],
-                                                                   self.metadata['frameIndex'][rowIndex]))
+        recordingNum = self.metadata['labelRecNum'][rowIndex]
+        frameIndex = self.metadata['frameIndex'][rowIndex]
+        if self.data_format == "V1":
+            imFacePath = os.path.join(self.dataPath, '%05d/appleFace/%05d.jpg' % (recordingNum, frameIndex))
+            imEyeLPath = os.path.join(self.dataPath, '%05d/appleLeftEye/%05d.jpg' % (recordingNum, frameIndex))
+            imEyeRPath = os.path.join(self.dataPath, '%05d/appleRightEye/%05d.jpg' % (recordingNum, frameIndex))
+            imFaceGridPath = os.path.join(self.dataPath, '%05d/faceGrid/%05d.jpg' % (recordingNum, frameIndex))
+        else:
+            # For new V2 format data
+            imFacePath = os.path.join(self.dataPath, '%s/appleFace/%s.jpg' % (recordingNum, frameIndex))
+            imEyeLPath = os.path.join(self.dataPath, '%s/appleLeftEye/%s.jpg' % (recordingNum, frameIndex))
+            imEyeRPath = os.path.join(self.dataPath, '%s/appleRightEye/%s.jpg' % (recordingNum, frameIndex))
+            imFaceGridPath = os.path.join(self.dataPath, '%s/faceGrid/%s.jpg' % (recordingNum, frameIndex))
 
         # Note: Converted from double (float64) to float (float32) as pipeline output is float in MSE calculation
         gaze = np.array([self.metadata['labelDotXCam'][rowIndex], self.metadata['labelDotYCam'][rowIndex]], np.float32)
-        frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]])
+        # frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]])
+        # frame = np.array([self.metadata['labelRecNum'][rowIndex], self.metadata['frameIndex'][rowIndex]], np.object)
         # faceGrid = self.makeGrid(self.metadata['labelFaceGrid'][rowIndex, :])
         row = np.array([int(rowIndex)])
         index = np.array([int(index)])
@@ -337,11 +637,11 @@ class ITrackerData(object):
             # faceGrid = torch.FloatTensor(faceGrid)
             gaze = torch.FloatTensor(gaze)
 
-            return row, imFace, imEyeL, imEyeR, imfaceGrid, gaze, frame, index
+            return row, imFace, imEyeL, imEyeR, imfaceGrid, gaze, index
         else:
             # image loading, transformation and normalization happen in ExternalDataPipeline
             # we just pass imagePaths
-            return row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, frame, index
+            return row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, index
 
     # TODO: Not in use anymore due to RC. Should eventually be removed
     def makeGrid(self, params):
@@ -372,12 +672,10 @@ class ITrackerData(object):
         imEyeRBatch = []
         imFaceGridBatch = []
         gazeBatch = []
-        frameBatch = []
         indexBatch = []
-        labels = []
 
         for local_index in range(self.batch_size):
-            row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, frame, index = self.__getitem__(self.index)
+            row, imFacePath, imEyeLPath, imEyeRPath, imFaceGridPath, gaze, index = self.__getitem__(self.index)
             self.index = (self.index + 1) % self.__len__()
 
             imFace = open(imFacePath, 'rb')
@@ -391,7 +689,6 @@ class ITrackerData(object):
             imEyeRBatch.append(np.frombuffer(imEyeR.read(), dtype=np.uint8))
             imFaceGridBatch.append(np.frombuffer(imFaceGrid.read(), dtype=np.uint8))
             gazeBatch.append(gaze)
-            frameBatch.append(frame)
             indexBatch.append(index)
 
             imFace.close()
@@ -399,7 +696,7 @@ class ITrackerData(object):
             imEyeR.close()
             imFaceGrid.close()
         
-        return rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch, frameBatch, indexBatch
+        return rowBatch, imFaceBatch, imEyeLBatch, imEyeRBatch, imFaceGridBatch, gazeBatch, indexBatch
 
     # For compatibiity with Python 2
     def next(self):
@@ -418,7 +715,8 @@ def load_data(split,
               color_space,
               data_loader,
               eval_boost,
-              mode):
+              mode,
+              data_format):
     
     shuffle = True if split == 'train' else False
     
@@ -441,7 +739,8 @@ def load_data(split,
                         color_space=color_space,
                         data_loader=data_loader,
                         shard_id=shard_id,
-                        num_shards=num_shards)
+                        num_shards=num_shards,
+                        data_format=data_format)
     size = len(data)
 
     # DALI implementation would do a cross-shard shuffle
@@ -452,7 +751,8 @@ def load_data(split,
             batch_size=batch_size,
             shuffle=True,
             num_workers=workers,
-            pin_memory=True) 
+            pin_memory=True,
+            collate_fn = custom_collate)
     elif data_loader == "dali_gpu" or data_loader == "dali_cpu":
         pipes = [ExternalSourcePipeline(data,
                                         batch_size=batch_size,
@@ -473,11 +773,27 @@ def load_data(split,
                                     size=len(data),
                                     fill_last_batch=False,
                                     last_batch_padded=True, auto_reset=True)
+        # loader = DALIGenericIterator(pipes,
+        #                             ['row', 'imFace', 'imEyeL', 'imEyeR', 'imFaceGrid', 'gaze', 'indices'],
+        #                             size=len(data),
+        #                             fill_last_batch=False,
+        #                             last_batch_padded=True, auto_reset=True)
     else:
         raise ValueError(f"Invalid data_loader mode: %s"%(data_loader))
 
     return Dataset(split, data, size, loader)
 
+# Define the custom collate strategy for dataloader
+def custom_collate(batch):
+    return default_collate(batch)
+
+# def custom_collate(batch):
+#     new_batch = []
+#     frames = []
+#     for _batch in batch:
+#         new_batch.append(_batch[:-1])
+#         frames.append(_batch[-1])
+#     return default_collate(new_batch), frames
 
 def load_all_data(path,
                   image_size,
@@ -489,7 +805,8 @@ def load_all_data(path,
                   color_space='YCbCr',
                   data_loader='cpu',
                   eval_boost=False,
-                  mode='none'):
+                  mode='none',
+                  data_format='V2'):
     print(centered_text('Loading Data'))
     metadata = ITrackerMetadata(path, silent=not verbose).metadata
     splits = ['train', 'val', 'test']
@@ -506,6 +823,7 @@ def load_all_data(path,
                          color_space,
                          data_loader,
                          eval_boost,
-                         mode)
+                         mode,
+                         data_format)
         for split in splits}
     return all_data

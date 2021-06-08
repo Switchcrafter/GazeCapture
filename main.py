@@ -91,18 +91,36 @@ def main():
                              args.color_space,
                              args.data_loader,
                              not args.disable_boost,
-                             args.mode)
+                             args.mode,
+                             args.data_format)
 
     criterion, optimizer, scheduler = initialize_hyper_parameters(args, epoch, datasets, model)
 
-    if args.phase == 'Train':
+    if args.phase == 'Train' or args.phase == 'Finetune':
+        # For finetuning training for additional args.epochs
+        if args.phase == 'Finetune':
+            args.epochs = args.epochs + epoch
+            
         # resize variables to epochs size
         resize(learning_rates, args.epochs)
         resize(best_RMSErrors, args.epochs)
         resize(train_RMSErrors, args.epochs)
         resize(val_RMSErrors, args.epochs)
         resize(test_RMSErrors, args.epochs)
-        
+
+        # Layer Freezing (freeze layers till the freeze index)
+        if args.freeze >= 0:
+            print("#######################################")
+            layers = list(model.children())
+            assert args.freeze < len(layers), "args.freeze cannot exeed number of layers in the model" 
+            for i in range(0, len(layers)):
+                if i <= args.freeze:
+                    print("Layer-", i, "Frozen   ", type(layers[i]))
+                    for param in layers[i].parameters():
+                        param.requires_grad = False
+                else:
+                    print("Layer-", i, "Trainable", type(layers[i]))
+            print("#######################################")
 
         if args.hsm:
             args.multinomial_weights = torch.ones(datasets['train'].size, dtype=torch.double)
@@ -235,6 +253,12 @@ def main():
                 is_best,
                 args.output_path,
                 args.save_checkpoints)
+            
+            if is_best:
+                # After all the epochs are complete export the model
+                export_onnx_model(model, args.device, args.output_path, args.verbose)
+                # Save a full model
+                export_torch_model(model, args.device, args.output_path, args.verbose)
 
             print('')
             print('Epoch {epoch:5d} with RMSError {rms_error:.5f}'.format(epoch=epoch, rms_error=best_RMSError))
@@ -276,7 +300,9 @@ def main():
         print('Validation Time elapsed(hh:mm:ss.ms) {}'.format(time_elapsed))
     elif args.phase == 'ExportONNX':
         # export the model for use in other frameworks
-        export_onnx_model(model, args.device, args.verbose)
+        export_onnx_model(model, args.device, args.output_path, args.verbose)
+        # Save a full model
+        export_torch_model(model, args.device, args.output_path, args.verbose)
 
     totaltime_elapsed = datetime.now() - totalstart_time
     print('Total Time elapsed(hh:mm:ss.ms) {}'.format(totaltime_elapsed))
@@ -475,15 +501,15 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
     # load data samples and train
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "cpu":
-            (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) = data
+            # (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices), frame = data
+            (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices) = data
         else:  # dali modes
             batch_data = data[0]
-            # batch_data = data
-            row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices = batch_data["row"], batch_data["imFace"], \
-                                                                          batch_data["imEyeL"], batch_data["imEyeR"], \
-                                                                          batch_data["imFaceGrid"], \
-                                                                          batch_data["gaze"], batch_data["frame"], \
-                                                                          batch_data["indices"]
+            row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices = batch_data["row"], batch_data["imFace"], \
+                                                                        batch_data["imEyeL"], batch_data["imEyeR"], \
+                                                                        batch_data["imFaceGrid"], \
+                                                                        batch_data["gaze"], \
+                                                                        batch_data["indices"]
         # # XXX: sharding debug code
         # rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
         # print(rank, torch.cuda.current_device(), indices.data.cpu().numpy()[0][0], len(indices), row.data.cpu().numpy()[0][0], len(row)) 
@@ -521,7 +547,10 @@ def train(dataset, model, criterion, optimizer, scheduler, epoch, batch_size, de
             batch_loss = error.detach().cpu().div_(10.0)
             # batch_loss = error.detach().cpu().div_(best_MSELoss*2)
             batch_loss[batch_loss > 1.0] = 1.0
-            args.multinomial_weights.scatter_(0, indices, batch_loss.type_as(torch.DoubleTensor()))
+            # print(args.multinomial_weights.size())
+            # print(indices.size())
+            # print(indices.flatten())
+            args.multinomial_weights.scatter_(0, indices.flatten(), batch_loss.type_as(torch.DoubleTensor()))
 
         # average over the batch
         error = torch.mean(error)
@@ -620,20 +649,19 @@ def evaluate(dataset,
 
     results = []
 
-    # for i, (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) in enumerate(dataset.loader):
     for i, data in enumerate(dataset.loader):
         if args.data_loader == "cpu":
-            (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices) = data
+            # (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices), frame = data
+            (row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices) = data
         else:  # dali modes
             batch_data = data[0]
-            row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, frame, indices = batch_data["row"], \
-                                                                          batch_data["imFace"], \
-                                                                          batch_data["imEyeL"], \
-                                                                          batch_data["imEyeR"], \
-                                                                          batch_data["imFaceGrid"], \
-                                                                          batch_data["gaze"], \
-                                                                          batch_data["frame"], \
-                                                                          batch_data["indices"]
+            row, imFace, imEyeL, imEyeR, imFaceGrid, gaze, indices = batch_data["row"], \
+                                                                        batch_data["imFace"], \
+                                                                        batch_data["imEyeL"], \
+                                                                        batch_data["imEyeR"], \
+                                                                        batch_data["imFaceGrid"], \
+                                                                        batch_data["gaze"], \
+                                                                        batch_data["indices"]
 
         args.vis.plotGazePoints("GazePoints", dataset.split, "GazePoints", gaze, visible=args.debug)
         args.vis.plotImages("imEyeR-imFace-imEyeL", dataset.split, "imEyeR-imFace-imEyeL", torch.cat((imEyeR[:1], imFace[:1], imEyeL[:1]),0), visible=args.debug)
@@ -656,13 +684,15 @@ def evaluate(dataset,
 
         # Combine the tensor results together into a collated list so that we have the gazePoint and gazePrediction
         # for each frame
-        f1 = frame.cpu().numpy().tolist()
+        # f1 = frame.cpu().numpy().tolist()
+        f1 = row.cpu().numpy().tolist()
         g1 = gaze.cpu().numpy().tolist()
         o1 = output.cpu().numpy().tolist()
         r1 = [list(r) for r in zip(f1, g1, o1)]
 
         def convertResult(result):
-            return {'frame': result[0], 'gazePoint': result[1], 'gazePrediction': result[2]}
+            # return {'frame': result[0], 'gazePoint': result[1], 'gazePrediction': result[2]}
+            return {'row': result[0], 'gazePoint': result[1], 'gazePrediction': result[2]}
 
         results += list(map(convertResult, r1))
         loss = criterion(output, gaze)
@@ -704,7 +734,11 @@ def evaluate(dataset,
     return MSELosses.avg, RMSErrors.avg
 
 
-def export_onnx_model(model, device, verbose):
+def export_torch_model(model, device, output_path, verbose):
+    torchModelPath = os.path.join(output_path, 'best_model.pth')
+    torch.save(model, torchModelPath)
+
+def export_onnx_model(model, device, output_path, verbose):
     # switch to evaluate mode
     model.eval()
 
@@ -723,22 +757,22 @@ def export_onnx_model(model, device, verbose):
     in_names = ["face", "eyesLeft", "eyesRight", "imFaceGrid"]
     out_names = ["data"]
 
+    onnxModelPath = os.path.join(output_path, 'best_checkpoint.onnx')
     try:
         torch.onnx.export(model.module,
                           dummy_in,
-                          "itracker.onnx",
+                          onnxModelPath,
                           input_names=in_names,
                           output_names=out_names,
                           verbose=verbose)
     except AttributeError:
         torch.onnx.export(model,
                           dummy_in,
-                          "itracker.onnx",
+                          onnxModelPath,
                           input_names=in_names,
                           output_names=out_names,
                           verbose=verbose)
-
-
+                          
 if __name__ == "__main__":
     main()
     print('')

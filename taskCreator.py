@@ -18,8 +18,12 @@ import matplotlib.cm as cmx
 import matplotlib.colors as colors
 from utility_functions.face_utilities import *
 import dateutil.parser
-from utility_functions.cam2screen import screen2cam
+from utility_functions.cam2screen import screen2cam, isSupportedDevice
 from utility_functions.Utilities import MultiProgressBar
+from ITrackerModel import ITrackerModel
+from utility_functions.checkpoint_manager import remove_module_from_state
+import onnxruntime as ort
+import numpy
 
 
 ################################################################################
@@ -82,6 +86,22 @@ def json_read(filename):
 def json_write(filename, data):
     with open(filename, "w") as write_file:
         json.dump(data, write_file)
+
+def image_read(filename):
+    if not os.path.isfile(filename):
+        logError('Warning: No such file %s!' % filename)
+        return None
+
+    try:
+        data = PILImage.open(filename)
+    except:
+        data = None
+
+    if data is None:
+        logError('Warning: Could not read file %s!' % filename)
+        return None
+
+    return data
 
 def cropImage(img, bbox):
     bbox = np.array(bbox, int)
@@ -156,12 +176,28 @@ def getDirList(path, regexString):
     folders = [dirName for dirName in os.listdir(path) if nameFormat.match(dirName)]
     return sorted(folders)
 
+def getRecordingsList(path):
+    # list recordings
+    # TODO: Modify to do a recursive search, finding any subdirectory which contains a file "dotInfo.json"
+    #   Store the recording directory path for later use
+    recordingDirs = []
+    for (root, dirs, files) in os.walk(path):
+        if (os.path.isfile(os.path.join(root, "dotInfo.json"))):
+            # Add path relative to the input directory as recording
+            recordingDirs.append(os.path.relpath(root,path))
+    return recordingDirs
+
 # used by prepareEyeCatcherTask
-# input path is to the folder containing data from various devices e.g. /data/Source/EyeCapture/200407/
+# input path is to the folder containing data from various devices
+# V1: e.g. /data/Source/EyeCapture/200407/
+# V2: e.g. Surface_Pro_4/someuser/00000
 def getCaptureSessionDirList(path):
     session_paths = []
     devices = os.listdir(path)
     for device in devices:
+        # TODO: Probably the following check is never needed
+        if not os.path.isdir(os.path.join(path, device)):
+            continue
         users = os.listdir(os.path.join(path, device))
         for user in users:
             sessions = sorted(os.listdir(os.path.join(path, device, user)), key=str)
@@ -171,7 +207,14 @@ def getCaptureSessionDirList(path):
 
 # used by prepareEyeCatcherTask
 def getCaptureSessionFileList(path):
-    files = [os.path.splitext(f)[0] for f in os.listdir(os.path.join(path, "frames")) if f.endswith('.json') and not f == "session.json"]
+    # Check whether it is a valid data/frame directory or not
+    if not os.path.isdir(os.path.join(path, "frames")):
+        return list()
+
+    if args.data_format == 'V1':
+        files = [os.path.splitext(f)[0] for f in os.listdir(os.path.join(path, "frames")) if f.endswith('.json') and not f == "session.json"]
+    else:
+        files = [os.path.splitext(f)[0] for f in os.listdir(os.path.join(path, "frames")) if f.endswith('.jpg')]
     return files
 ################################################################################
 ## Dataloaders
@@ -214,7 +257,7 @@ def CaptureDataDistributionTask(directory, directory_idx, progressbar):
     progressbar.addSubProcess(directory_idx, 1)
     # Read original distribution info and create a distribution info file
     info = json_read(os.path.join(recDir, 'info.json'))
-    
+
     # Collect metadata
     meta = [directory, str(info["Dataset"])]
     progressbar.update(directory_idx, 1)
@@ -222,9 +265,13 @@ def CaptureDataDistributionTask(directory, directory_idx, progressbar):
     return meta
 
 # Equivalent: prepare_EyeCatcher
+# Prepapres data from V1 -> V2 format and from V2 (dlib) --> V2 (rc)
 def prepareEyeCatcherTask(directory, directory_idx, progressbar):
     captures = sorted(getCaptureSessionFileList(os.path.join(args.input, directory)), key=str)
     total_captures = len(captures)
+    # print(captures)
+    # if total_captures == 0:
+    #     return
 
     # Read directory level json
     deviceMetrics_data = json_read(os.path.join(args.input, directory, "deviceMetrics.json"))
@@ -370,13 +417,12 @@ def prepareEyeCatcherTask(directory, directory_idx, progressbar):
             dotinfo["Confidence"].append(confidence)
             dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
 
-            # Convert image from PNG to JPG
             frame_name = str(f"{capture_idx:05d}.jpg")
             frames.append(frame_name)
 
             shutil.copyfile(capture_jpg_path, os.path.join(output_frame_path, frame_name))
         else:
-            print(f"Error processing capture {capture}")
+            print(f"Error File does not exists: {directory}/{capture}")
 
     # write json files
     json_write(os.path.join(output_path, 'frames.json'), frames)
@@ -477,7 +523,7 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
     if args.info != "":
         info = json_read(args.info)
     else:
-        info = json_read(os.path.join(recDir, 'info.json'))    
+        info = json_read(os.path.join(recDir, 'info.json'))
 
     # Preprocess
     allValid = np.logical_and(np.logical_and(appleFace['IsValid'], appleLeftEye['IsValid']),
@@ -554,13 +600,337 @@ def ROIExtractionTask(directory, directory_idx, progressbar):
         meta['labelDotXCam'] += [dotInfo['XCam'][j]]
         meta['labelDotYCam'] += [dotInfo['YCam'][j]]
         meta['labelFaceGrid'] += [faceGridBbox[j, :]]
-        
-        # Use provided target distribution 
+
+        # Use provided target distribution
         if args.info != "":
             split = info[directory]
         else: # use original distribution
-            split = info["Dataset"] 
+            split = info["Dataset"]
 
+        meta['labelTrain'] += [split == "train"]
+        meta['labelVal'] += [split == "val"]
+        meta['labelTest'] += [split == "test"]
+
+    return meta
+
+
+# Equivalent: prepare_EyeCatcher
+def ROIDetectionNewTask(directory, directory_idx, progressbar):
+    captures = sorted(getCaptureSessionFileList(os.path.join(args.input, directory)), key=str)
+    total_captures = len(captures)
+    # print(directory, total_captures)
+    # For directories with no frames folder exit
+    if total_captures == 0:
+        return
+
+    # read info if info.json exists
+    if os.path.isfile(os.path.join(args.input, directory, "info.json")):
+        # Read directory level json
+        info_data = json_read(os.path.join(args.input, directory, "info.json"))
+    else:
+        info_data = {"DeviceName" : "Missing Device Name"}
+        print("Error: The file %s/%s/%s doesn't exist. Please investigate."%(args.input, directory, "info.json"))
+
+    if not isSupportedDevice(info_data["DeviceName"]):
+            # If the device is not supported in device_metrics_sku.json skip it
+            # print('%s, %s, %s'%(directory_idx, directory, 'Unsupported SKU'))
+            progressbar.addSubProcess(index=directory_idx, max_value=0)
+            return
+    screen_data = json_read(os.path.join(args.input, directory, "screen.json"))
+
+    # dotinfo.json - { "DotNum": [ 0, 0, ... ],
+    #                  "XPts": [ 160, 160, ... ],
+    #                  "YPts": [ 284, 284, ... ],
+    #                  "XCam": [ 1.064, 1.064, ... ],
+    #                  "YCam": [ -6.0055, -6.0055, ... ],
+    #                  "Confidence": [ 59.3, 94.2, ... ],
+    #                  "Time": [ 0.205642, 0.288975, ... ] }
+    #
+    # PositionIndex == DotNum
+    # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
+    dotinfo = {
+        "DotNum": [],
+        "XPts": [],
+        "YPts": [],
+        "XCam": [],
+        "YCam": [],
+        "Confidence": [],
+        "Time": []
+    }
+
+    output_path = os.path.join(args.output, directory)
+    output_frame_path = os.path.join(output_path, "frames")
+
+    faceInfoDict = newFaceInfoDict()
+
+    # frames.json - ["00000.jpg","00001.jpg"]
+    frames = []
+
+    facegrid = {
+        "X": [],
+        "Y": [],
+        "W": [],
+        "H": [],
+        "IsValid": []
+    }
+
+    if directory_idx % 10 < 8:
+        dataset_split = "train"
+    elif directory_idx % 10 < 9:
+        dataset_split = "val"
+    else:
+        dataset_split = "test"
+
+    # info.json - {"TotalFrames":99,"NumFaceDetections":97,"NumEyeDetections":56,"Dataset":"train","DeviceName":"iPhone 6"}
+    info = {
+        "TotalFrames": total_captures,
+        "NumFaceDetections": 0,
+        "NumEyeDetections": 0,
+        "Dataset": dataset_split,
+        "DeviceName": info_data["DeviceName"]
+    }
+
+    # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
+    screen = {
+        "H": [],
+        "W": [],
+        "Orientation": []
+    }
+
+    # ensure the output directories exist
+    preparePath(args.output)
+    preparePath(output_path)
+    preparePath(output_frame_path)
+
+    progressbar.addSubProcess(directory_idx, len(captures))
+    for capture_idx, capture in enumerate(captures):
+        progressbar.update(directory_idx, capture_idx+1)
+
+        capture_json_path = os.path.join(args.input, directory, "frames", capture + ".json")
+        capture_jpg_path = os.path.join(args.input, directory, "frames", capture + ".jpg")
+        # Returns None if json is corrupt or missing
+        capture_data = json_read(capture_json_path)
+        # Returns None if image is corrupt or missing
+        capture_image = image_read(capture_jpg_path)
+
+        try:
+            if capture_data and capture_image:
+                capture_image = PILImage.open(capture_jpg_path)
+                capture_image_np = np.array(capture_image)  # dlib wants images in numpy array format
+
+                shape_np, isValid = find_face_dlib(capture_image_np)
+                info["NumFaceDetections"] = info["NumFaceDetections"] + 1
+                if args.type == "rc":
+                    face_rect, left_eye_rect, right_eye_rect, isValid = rc_landmarksToRects(shape_np, isValid)
+                    faceInfoDict, faceInfoIdx = rc_faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
+                                                                            right_eye_rect, isValid)
+                else:
+                    face_rect, left_eye_rect, right_eye_rect, isValid = landmarksToRects(shape_np, isValid)
+                    faceInfoDict, faceInfoIdx = faceEyeRectsToFaceInfoDict(faceInfoDict, face_rect, left_eye_rect,
+                                                                            right_eye_rect, isValid)
+
+                # facegrid.json - { "X": [ 6, 6, ... ], "Y": [ 10, 10, ... ], "W": [ 13, 13, ... ], "H": [ 13, 13, ... ], "IsValid": [ 1, 1, ... ] }
+                if isValid:
+                    faceGridX, faceGridY, faceGridW, faceGridH = generate_face_grid_rect(face_rect, capture_image.width,
+                                                                                            capture_image.height)
+                else:
+                    faceGridX = 0
+                    faceGridY = 0
+                    faceGridW = 0
+                    faceGridH = 0
+
+                facegrid["X"].append(faceGridX)
+                facegrid["Y"].append(faceGridY)
+                facegrid["W"].append(faceGridW)
+                facegrid["H"].append(faceGridH)
+                facegrid["IsValid"].append(isValid)
+
+
+                info["NumEyeDetections"] = info["NumEyeDetections"] + 1
+                # screen.json - { "H": [ 568, 568, ... ], "W": [ 320, 320, ... ], "Orientation": [ 1, 1, ... ] }
+                screen["H"].append(screen_data['H'][capture_idx])
+                screen["W"].append(screen_data['W'][capture_idx])
+                screen["Orientation"].append(screen_data['Orientation'][capture_idx])
+
+                # dotinfo.json - { "DotNum": [ 0, 0, ... ],
+                #                  "XPts": [ 160, 160, ... ],
+                #                  "YPts": [ 284, 284, ... ],
+                #                  "XCam": [ 1.064, 1.064, ... ],
+                #                  "YCam": [ -6.0055, -6.0055, ... ],
+                #                  "Confidence": [ 59.3, 94.2, ... ],
+                #                  "Time": [ 0.205642, 0.288975, ... ] }
+                #
+                # PositionIndex == DotNum
+                # Timestamp == Time, but no guarantee on order. Unclear if that is an issue or not
+                x_raw = capture_data["XRaw"]
+                y_raw = capture_data["YRaw"]
+                x_cam, y_cam = screen2cam(x_raw,  # xScreenInPoints
+                                        y_raw,  # yScreenInPoints
+                                        screen_data['Orientation'][capture_idx],  # orientation,
+                                        screen_data["W"][capture_idx],  # widthScreenInPoints
+                                        screen_data["H"][capture_idx],  # heightScreenInPoints
+                                        info_data["DeviceName"])
+                confidence = capture_data["Confidence"]
+
+                dotinfo["DotNum"].append(capture_idx)
+                dotinfo["XPts"].append(x_raw)
+                dotinfo["YPts"].append(y_raw)
+                dotinfo["XCam"].append(x_cam)
+                dotinfo["YCam"].append(y_cam)
+                dotinfo["Confidence"].append(confidence)
+                dotinfo["Time"].append(0)  # TODO replace with timestamp as needed
+
+                frame_name = str(f"{capture}.jpg")
+                frames.append(frame_name)
+
+                shutil.copyfile(capture_jpg_path, os.path.join(output_frame_path, frame_name))
+        except Exception as e:
+            print(f"{directory}/frames/{capture}")
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            print(exc_type, e, fname, exc_tb.tb_lineno)
+
+    # write json files
+    json_write(os.path.join(output_path, 'frames.json'), frames)
+    json_write(os.path.join(output_path, 'screen.json'), screen)
+    json_write(os.path.join(output_path, 'info.json'), info)
+    json_write(os.path.join(output_path, 'dotInfo.json'), dotinfo)
+    json_write(os.path.join(output_path, 'faceGrid.json'), facegrid)
+    # write the Face, LeftEye and RightEye
+    json_write(os.path.join(output_path, 'dlibFace.json'), faceInfoDict["Face"])
+    json_write(os.path.join(output_path, 'dlibLeftEye.json'), faceInfoDict["LeftEye"])
+    json_write(os.path.join(output_path, 'dlibRightEye.json'), faceInfoDict["RightEye"])
+    return
+
+# Equivalent: prepareDataset_dlib
+def ROIExtractionNewTask(directory, directory_idx, progressbar):
+
+    recDir = os.path.join(args.input, directory)
+    recDirOut = os.path.join(args.output, directory)
+
+    # # read info if info.json exists
+    # if os.path.isfile(os.path.join(args.input, directory, "info.json")):
+    #     # Read directory level json
+    #     info_data = json_read(os.path.join(args.input, directory, "info.json"))
+    #     if not isSupportedDevice(info_data["DeviceName"]):
+    #         progressbar.addSubProcess(index=directory_idx, max_value=0)
+    #         return
+    # else:
+    #     progressbar.addSubProcess(index=directory_idx, max_value=0)
+    #     return
+
+
+    # Output structure
+    meta = {
+        'labelRecNum': [],
+        'frameIndex': [],
+        'labelDotXCam': [],
+        'labelDotYCam': [],
+        'labelFaceGrid': [],
+        'labelTrain': [],
+        'labelVal': [],
+        'labelTest': []
+    }
+
+    # Read metadata JSONs from metapath
+    dlibDir = os.path.join(args.metapath, directory)
+    appleFace = json_read(os.path.join(dlibDir, 'dlibFace.json'))
+    appleLeftEye = json_read(os.path.join(dlibDir, 'dlibLeftEye.json'))
+    appleRightEye = json_read(os.path.join(dlibDir, 'dlibRightEye.json'))
+
+    # prepape output paths
+    facePath = preparePath(os.path.join(recDirOut, 'appleFace'))
+    leftEyePath = preparePath(os.path.join(recDirOut, 'appleLeftEye'))
+    rightEyePath = preparePath(os.path.join(recDirOut, 'appleRightEye'))
+
+    # directory, frame, dotInfo, faceGridBbox, info
+    # Read input JSONs from inputpath
+    # dotInfo = json_read(os.path.join(recDir, 'dotInfo.json'))
+    # faceGrid = json_read(os.path.join(recDir, 'faceGrid.json'))
+    # frames = json_read(os.path.join(recDir, 'frames.json'))
+    # screen = json_read(os.path.join(recDir, 'screen.json'))
+    # info = json_read(os.path.join(recDir, 'info.json'))
+
+    dotInfo = json_read(os.path.join(dlibDir, 'dotInfo.json'))
+    faceGrid = json_read(os.path.join(dlibDir, 'faceGrid.json'))
+    frames = json_read(os.path.join(dlibDir, 'frames.json'))
+    screen = json_read(os.path.join(dlibDir, 'screen.json'))
+    info = json_read(os.path.join(dlibDir, 'info.json'))
+
+    # Preprocess
+    allValid = np.logical_and(np.logical_and(appleFace['IsValid'], appleLeftEye['IsValid']),
+                                np.logical_and(appleRightEye['IsValid'], faceGrid['IsValid']))
+
+    frames = np.array([re.match('(.+)\.jpg$', x).group(1) for x in frames])
+
+    if args.type == "rc":
+        bboxFromJson = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H'], data['Theta']), axis=1).astype(int)
+        # handle original face_grid data separately
+        bboxFromJsonFaceGrid = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H']), axis=1).astype(int)
+        faceBbox = bboxFromJson(appleFace) + [-1, -1, 1, 1, 0]  # for compatibility with matlab code
+        leftEyeBbox = bboxFromJson(appleLeftEye) + [0, -1, 0, 0, 0]
+        rightEyeBbox = bboxFromJson(appleRightEye) + [0, -1, 0, 0, 0]
+        faceGridBbox = bboxFromJsonFaceGrid(faceGrid)
+    else:#dlib
+        bboxFromJson = lambda data: np.stack((data['X'], data['Y'], data['W'], data['H']), axis=1).astype(int)
+        faceBbox = bboxFromJson(appleFace) + [-1, -1, 1, 1]  # for compatibility with matlab code
+        leftEyeBbox = bboxFromJson(appleLeftEye) + [0, -1, 0, 0]
+        rightEyeBbox = bboxFromJson(appleRightEye) + [0, -1, 0, 0]
+        leftEyeBbox[:, :2] += faceBbox[:, :2]  # relative to face
+        rightEyeBbox[:, :2] += faceBbox[:, :2]
+        faceGridBbox = bboxFromJson(faceGrid)
+
+    progressbar.addSubProcess(directory_idx, len(frames))
+    for frame_idx, frame in enumerate(frames):
+        progressbar.update(directory_idx, frame_idx+1)
+
+        # Can we use it?
+        if not allValid[frame_idx]:
+            continue
+
+        if args.portraitOnly:
+            # Is upright data?
+            if screen['Orientation'][frame_idx] != 1:
+                continue
+
+        # Load image
+        imgFile = os.path.join(recDir, 'frames', '%s.jpg' % frame)
+        img = image_read(imgFile)
+        if not img:
+            continue
+        img = np.array(img.convert('RGB'))
+
+        # Crop images
+        imFace = cropImage(img, faceBbox[frame_idx, :])
+        imEyeL = cropImage(img, leftEyeBbox[frame_idx, :])
+        imEyeR = cropImage(img, rightEyeBbox[frame_idx, :])
+
+        # Rotation Correction FaceGrid
+        if args.type == "rc":
+            faceGridPath = preparePath(os.path.join(recDirOut, 'faceGrid'))
+            imFaceGrid = generate_grid2(faceBbox[frame_idx, :], img)
+
+            imFace = cv2.resize(imFace, (256, 256), cv2.INTER_AREA)
+            imEyeL = cv2.resize(imEyeL, (256, 256), cv2.INTER_AREA)
+            imEyeR = cv2.resize(imEyeR, (256, 256), cv2.INTER_AREA)
+            imFaceGrid = cv2.resize(imFaceGrid, (256, 256), cv2.INTER_AREA)
+
+        # Save images
+        # print(os.path.join(facePath, '%s.jpg' % frame))
+        PILImage.fromarray(imFace).save(os.path.join(facePath, '%s.jpg' % frame), quality=95)
+        PILImage.fromarray(imEyeL).save(os.path.join(leftEyePath, '%s.jpg' % frame), quality=95)
+        PILImage.fromarray(imEyeR).save(os.path.join(rightEyePath, '%s.jpg' % frame), quality=95)
+        if args.type == "rc":
+            PILImage.fromarray(imFaceGrid).save(os.path.join(faceGridPath, '%s.jpg' % frame), quality=95)
+
+        # Collect metadata
+        meta['labelRecNum'] += [directory]
+        meta['frameIndex'] += [frame]
+        meta['labelDotXCam'] += [dotInfo['XCam'][frame_idx]]
+        meta['labelDotYCam'] += [dotInfo['YCam'][frame_idx]]
+        meta['labelFaceGrid'] += [faceGridBbox[frame_idx, :]]
+
+        split = info["Dataset"]
         meta['labelTrain'] += [split == "train"]
         meta['labelVal'] += [split == "val"]
         meta['labelTest'] += [split == "test"]
@@ -948,6 +1318,186 @@ def checkpointInfoTask(filepath):
         print('\'Best_RMS_Errors\': {0}'.format(best_rms_errors))
     return
 
+def loadImage(path):
+    try:
+        im = Image.open(path).convert('YCbCr')
+        im = im.resize((224,224))
+    except OSError:
+        raise RuntimeError('Could not read image: ' + path)
+    return im
+
+
+def imageToPyTorchTensor(img):
+    # W x H x C -> C x W x H
+    img = np.asarray(img).transpose(2, 0, 1)
+    img = torch.from_numpy(np.asarray(img)).float() # create the image tensor
+    img = img/255.0
+    return img.unsqueeze(0)
+
+def imageToOnnxTensor(img):
+    # W x H x C -> C x W x H
+    img = np.asarray(img).transpose(2, 0, 1)
+    img = np.array(img, np.float)
+    img = img/255.0
+    return img.reshape(1,3,224,224)
+
+def getROIs(input_dir, frame):
+        # XXX Experimental: for old format data
+        filename = '%05d.jpg' % frame
+        imFacePath = os.path.join(input_dir, 'appleFace', filename)
+        imEyeLPath = os.path.join(input_dir, 'appleLeftEye', filename)
+        imEyeRPath = os.path.join(input_dir, 'appleRightEye', filename)
+        imFaceGridPath = os.path.join(input_dir, 'faceGrid', filename)
+
+        # Image loading, transformation and normalization happen here
+        imFace = loadImage(imFacePath)
+        imEyeL = loadImage(imEyeLPath)
+        imEyeR = loadImage(imEyeRPath)
+        imFaceGrid = loadImage(imFaceGridPath)
+        return imFace, imEyeL, imEyeR, imFaceGrid
+
+def modelParityTask(input_dir):
+    # e.g. 'utility_functions/demo_models/MSR_0_9171'
+    checkpoint_dirpath = args.model_dir
+    device = torch.device('cpu')
+    color_space = 'YCbCr'
+    model_type = 'resNet'
+    loadFromState = False
+
+    if loadFromState:
+        # Create model
+        model = ITrackerModel(color_space, model_type).to(device=device)
+
+        # load the checkpoint and apply state to the model
+        filepath = os.path.join(checkpoint_dirpath, 'best_checkpoint.pth')
+        if not os.path.isfile(filepath):
+            print('The following file does not exist: ', filepath)
+            return None
+
+        saved = torch.load(filepath, map_location='cpu')
+        if saved:
+            best_rms_error = saved.get('best_RMSError', None)
+            print('\'Best_RMS_Error\': {0},'.format(best_rms_error))
+            try:
+                state = saved['state_dict']
+                model.load_state_dict(state)
+            except RuntimeError:
+                # The most likely cause of a failure to load is that there is a leading "module." from training. This is
+                # normal for models trained with DataParallel. If not using DataParallel, then the "module." needs to be
+                # removed.
+                state = remove_module_from_state(saved)
+                model.load_state_dict(state)
+    else:
+        model = torch.load(os.path.join(checkpoint_dirpath, 'best_model.pth')).to(device=device)
+
+    # switch to evaluate mode
+    model.eval() # Makes batchnorm and dropout to work in eval mode
+    torch.no_grad() # Stops computing gradients
+
+    # OnnxRuntime
+    filepath = os.path.join(checkpoint_dirpath, 'best_checkpoint.onnx')
+    sess = ort.InferenceSession(filepath)
+    inputs = sess.get_inputs()
+    output_name = sess.get_outputs()[0].name
+
+    dotInfo = json_read(os.path.join(input_dir, 'dotInfo.json'))
+    frames = json_read(os.path.join(input_dir, 'frames.json'))
+    # screen = json_read(os.path.join(input_dir, 'screen.json'))
+    frames = np.array([int(re.match('(\d{5})\.jpg$', x).group(1)) for x in frames])
+
+    for j, frame in enumerate(frames):
+        imFace, imEyeL, imEyeR, imFaceGrid = getROIs(input_dir, frame)
+        gaze = np.array([dotInfo['XCam'][j], dotInfo['YCam'][j]], np.float32)
+        print(gaze)
+
+        # Run PyTorch Inference
+        imFacePy = imageToPyTorchTensor(imFace)
+        imEyeLPy = imageToPyTorchTensor(imEyeL)
+        imEyeRPy = imageToPyTorchTensor(imEyeR)
+        imFaceGridPy = imageToPyTorchTensor(imFaceGrid)
+        output = model(imFacePy, imEyeLPy, imEyeRPy, imFaceGridPy)
+        output = output.data[0].numpy()
+        print(output)
+
+        # Run ONNXRuntime Inference
+        imFaceOnnx = imageToOnnxTensor(imFace)
+        imEyeLOnnx = imageToOnnxTensor(imEyeL)
+        imEyeROnnx = imageToOnnxTensor(imEyeR)
+        imFaceGridOnnx = imageToOnnxTensor(imFaceGrid)
+        pred_onx = sess.run([output_name], {
+            inputs[0].name : imFaceOnnx.astype(numpy.float32),
+            inputs[1].name : imEyeLOnnx.astype(numpy.float32),
+            inputs[2].name : imEyeROnnx.astype(numpy.float32),
+            inputs[3].name : imFaceGridOnnx.astype(numpy.float32)
+        })
+        pred_onx = pred_onx[0][0]
+        print(pred_onx)
+        # print(output - pred_onx)
+
+    return
+
+# import matplotlib.pyplot as plt
+def userCalibrationTask(filepath):
+    mr = 88
+    mc = 68
+
+    xx = np.arange(mr-1, -1, -1)
+    yy = np.arange(0, mc, 1)
+    [Y, X] = np.meshgrid(xx, yy)
+    ms = np.transpose(np.asarray([X.flatten('F'), Y.flatten('F')]), (1,0))
+
+    perturbed_mesh = ms
+    nv = np.random.randint(20) - 1
+    for k in range(nv):
+        #Choosing one vertex randomly
+        vidx = np.random.randint(np.shape(ms)[0])
+        vtex = ms[vidx, :]
+        #Vector between all vertices and the selected one
+        xv  = perturbed_mesh - vtex
+        #Random movement
+        mv = (np.random.rand(1,2) - 0.5)*20
+        hxv = np.zeros((np.shape(xv)[0], np.shape(xv)[1] +1) )
+        hxv[:, :-1] = xv
+        hmv = np.tile(np.append(mv, 0), (np.shape(xv)[0],1))
+        d = np.cross(hxv, hmv)
+        d = np.absolute(d[:, 2])
+        d = d / (np.linalg.norm(mv, ord=2))
+        wt = d
+
+        curve_type = np.random.rand(1)
+        if curve_type > 0.3:
+            alpha = np.random.rand(1) * 50 + 50
+            wt = alpha / (wt + alpha)
+        else:
+            alpha = np.random.rand(1) + 1
+            wt = 1 - (wt / 100 )**alpha
+        msmv = mv * np.expand_dims(wt, axis=1)
+        perturbed_mesh = perturbed_mesh + msmv
+
+    # plt.scatter(perturbed_mesh[:, 0], perturbed_mesh[:, 1], c=np.arange(0, mr*mc))
+    # plt.show()
+
+    fname = "receipt.jpg"
+    img = cv2.imread(fname)
+    nh, nw = img.shape[:2]
+    dh, dw = nh//2, nw//2
+    img = cv2.copyMakeBorder(img, dh, dh, dw, dw, borderType=cv2.BORDER_CONSTANT, value=(0,0,0))
+
+
+    PI = 3.141592653589793
+    phase = -0.8 * PI
+    omega = 2.0 * PI / nw
+    amp = 15
+
+    xs, ys = perturbed_mesh[:, 0], perturbed_mesh[:, 1]
+    # xs, ys = np.meshgrid(np.arange(0, nw), np.arange(0, nh))
+    # ys = np.sin(phase+xs*omega)*amp + ys
+    xs = np.float32(xs)
+    ys = np.float32(ys)
+
+    dst= cv2.remap(img, xs, ys, cv2.INTER_CUBIC)
+    cv2.imwrite("dst.png", dst)
+
 
 # all tasks are handled here
 if __name__ == '__main__':
@@ -968,6 +1518,9 @@ if __name__ == '__main__':
     parser.add_argument('--device_name', default="Alienware 51m", help='from device_metrics.json - Alienware 51m, Surface Pro 6, etc.')
     parser.add_argument('--model_type', default="resNet", help='resNet, deepEyeNet')
     parser.add_argument('--color_space', default="YCbCr", help='color_space, RGB')
+    parser.add_argument('--data_format', default="V2", help='V2, V1')
+    parser.add_argument('--model_dir', default="", help="path to checkpoint directory")
+    parser.add_argument('--model_path', default="", help="path to model file")
     args = parser.parse_args()
 
     if args.task == "":
@@ -1008,8 +1561,12 @@ if __name__ == '__main__':
         dataLoader = ListLoader
     ######### Data Preparation Tasks #########
     elif args.task == "prepareEyeCatcherTask":
-        taskFunction = prepareEyeCatcherTask
-        taskData = getCaptureSessionDirList(args.input)
+        if args.data_format == "V1":
+            taskFunction = prepareEyeCatcherTask
+            taskData = getCaptureSessionDirList(args.input)
+        else:
+            taskFunction = ROIDetectionNewTask
+            taskData = getCaptureSessionDirList(args.input)
         dataLoader = ListLoader
     elif args.task == "CaptureDataDistributionTask":
         taskFunction = CaptureDataDistributionTask
@@ -1017,13 +1574,22 @@ if __name__ == '__main__':
         taskData = getDirList(args.input, sessionRegex)
         dataLoader = ListLoader
     elif args.task == "ROIDetectionTask":
-        taskFunction = ROIDetectionTask
-        sessionRegex = '([0-9]){5}'
-        taskData = getDirList(args.input, sessionRegex)
+        if args.data_format == "V1":
+            taskFunction = ROIDetectionTask
+            sessionRegex = '([0-9]){5}'
+            taskData = getDirList(args.input, sessionRegex)
+        else:
+            taskFunction = ROIDetectionNewTask
+            taskData = getCaptureSessionDirList(args.input)
         dataLoader = ListLoader
     elif args.task == "ROIExtractionTask":
-        taskFunction = ROIExtractionTask
-        taskData = getDirList(args.input, '([0-9]){5}')
+        if args.data_format == "V1":
+            taskFunction = ROIExtractionTask
+            taskData = getDirList(args.input, '([0-9]){5}')
+        else:
+            taskFunction = ROIExtractionNewTask
+            # taskData = getRecordingsList(args.input)
+            taskData = getRecordingsList(args.metapath)
         dataLoader = ListLoader
     ######### Data Visualization Tasks #########
     elif args.task == "plotErrorTask":
@@ -1064,7 +1630,11 @@ if __name__ == '__main__':
     elif args.task == "demoTask":
         sys.path.append(".")
         from iTrackerGUITool import live_demo
-        taskData = {'model_type': args.model_type, 'color_space': args.color_space, 'device_name': args.device_name}
+        taskData = {'model_format': 'onnx',
+        'model_type': args.model_type,
+        'color_space': args.color_space,
+        'device_name': args.device_name,
+        'model_path': args.model_path}
         dataLoader = None
         taskFunction = live_demo
     ######### Data Statistics Tasks #########
@@ -1100,6 +1670,14 @@ if __name__ == '__main__':
         taskFunction = checkpointInfoTask
         taskData = args.input
         dataLoader = None
+    elif args.task == "modelParityTask":
+        taskFunction = modelParityTask
+        taskData = args.input
+        dataLoader = None
+    elif args.task == "userCalibrationTask":
+        taskFunction = userCalibrationTask
+        taskData = args.input
+        dataLoader = None
 
     # run the job
     output = taskManager.job(taskFunction, taskData, dataLoader)
@@ -1110,7 +1688,7 @@ if __name__ == '__main__':
         # Combine results from various workers
         for dir, split in output:
             meta.update({dir : split})
-        
+
         # Write out combined distribution info
         preparePath(args.output)
         json_write(os.path.join(args.output, 'distribution_info.json'), meta)
@@ -1139,13 +1717,22 @@ if __name__ == '__main__':
             meta['labelTest'] += m['labelTest']
 
         # Integrate
-        meta['labelRecNum'] = np.stack(meta['labelRecNum'], axis=0).astype(np.int16)
-        meta['frameIndex'] = np.stack(meta['frameIndex'], axis=0).astype(np.int32)
-        meta['labelDotXCam'] = np.stack(meta['labelDotXCam'], axis=0)
-        meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
-        meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
+        if args.data_format == "V1":
+            meta['labelRecNum'] = np.stack(meta['labelRecNum'], axis=0).astype(np.int16)
+            meta['frameIndex'] = np.stack(meta['frameIndex'], axis=0).astype(np.int32)
+            meta['labelDotXCam'] = np.stack(meta['labelDotXCam'], axis=0)
+            meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
+            meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
+        else:
+            # Using astype(object) for string data so that they are loaded as
+            # strings and not padded char arrays
+            meta['labelRecNum'] = np.stack(meta['labelRecNum'], axis=0).astype(object)
+            meta['frameIndex'] = np.stack(meta['frameIndex'], axis=0).astype(object)
+            meta['labelDotXCam'] = np.stack(meta['labelDotXCam'], axis=0)
+            meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
+            meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
         # print(meta)
-        # compareTask(meta)
+        compareTask(meta)
     elif args.task == "countFilesTaskParallel":
         # Combine results from various workers
         print(sum(output))

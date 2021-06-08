@@ -64,7 +64,8 @@ def main():
     recordingDirs = []
     for (root, dirs, files) in os.walk(args.dataset_path):
         if (os.path.isfile(os.path.join(root, "dotInfo.json"))):
-            recordingDirs.append(root)
+            # Add path relative to the input directory as recording
+            recordingDirs.append(os.path.relpath(root,path))
 
     # recordings = os.listdir(args.dataset_path)
     recordings = np.array(recordingDirs, np.object)
@@ -185,8 +186,10 @@ def main():
             multi_progress_bar.update(index=recording_idx, value=frame_idx+1)
 
     # Integrate
-    meta['labelRecNum'] = np.stack(meta['labelRecNum'], axis=0)
-    meta['frameIndex'] = np.stack(meta['frameIndex'], axis=0)
+    # Using astype(object) for string data so that they are loaded as 
+    # strings and not padded char arrays
+    meta['labelRecNum'] = np.stack(meta['labelRecNum'], axis=0).astype(object)
+    meta['frameIndex'] = np.stack(meta['frameIndex'], axis=0).astype(object)
     meta['labelDotXCam'] = np.stack(meta['labelDotXCam'], axis=0)
     meta['labelDotYCam'] = np.stack(meta['labelDotYCam'], axis=0)
     meta['labelFaceGrid'] = np.stack(meta['labelFaceGrid'], axis=0).astype(np.uint8)
